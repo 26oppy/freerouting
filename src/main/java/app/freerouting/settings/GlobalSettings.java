@@ -66,6 +66,7 @@ public class GlobalSettings implements Serializable {
       "de",
       "zh",
       "zh_TW",
+      "he",
       "hi",
       "es",
       "it",
@@ -624,6 +625,8 @@ public class GlobalSettings implements Serializable {
             currentLocale = Locale.TRADITIONAL_CHINESE;
           } else if (localeString.startsWith("zh")) {
             currentLocale = Locale.SIMPLIFIED_CHINESE;
+          } else if (localeString.startsWith("he")) {
+            currentLocale = Locale.forLanguageTag("he-IL");
           } else if (localeString.startsWith("hi")) {
             currentLocale = Locale.forLanguageTag("hi-IN");
           } else if (localeString.startsWith("es")) {

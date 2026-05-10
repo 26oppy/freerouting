@@ -3,6 +3,7 @@ package app.freerouting.gui;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.management.TextManager;
 import app.freerouting.management.analytics.FRAnalytics;
+import java.awt.ComponentOrientation;
 import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.Window;
@@ -87,6 +88,11 @@ public class WindowBase extends JFrame {
     } else {
       this.tm = new TextManager(this.getClass(), locale);
     }
+    var orientation = ComponentOrientation.getOrientation(locale);
+    this.setComponentOrientation(orientation);
+    this.getContentPane().setComponentOrientation(orientation);
+    this.getRootPane().setComponentOrientation(orientation);
+    this.applyComponentOrientation(orientation);
   }
 
   /**

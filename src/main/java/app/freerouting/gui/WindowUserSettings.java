@@ -7,6 +7,7 @@ import app.freerouting.management.analytics.FRAnalytics;
 import app.freerouting.management.gson.GsonProvider;
 import app.freerouting.settings.GlobalSettings;
 import java.awt.Color;
+import java.awt.ComponentOrientation;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Frame;
@@ -41,13 +42,17 @@ public class WindowUserSettings extends WindowBase {
 
     setLanguage(p_board_frame.get_locale());
 
-    JDialog profileDialog = new JDialog((Frame) null, "User Settings", true);
+    JDialog profileDialog = new JDialog((Frame) null, tm.getText("title"), true);
     profileDialog.setTitle(tm.getText("title"));
     profileDialog.setSize(480, 600);
     profileDialog.setMinimumSize(new Dimension(480, 600));
     profileDialog.setMaximumSize(new Dimension(480, 600));
     profileDialog.setResizable(false);
     profileDialog.setLayout(new GridBagLayout());
+    var orientation = ComponentOrientation.getOrientation(p_board_frame.get_locale());
+    profileDialog.setComponentOrientation(orientation);
+    profileDialog.getContentPane().setComponentOrientation(orientation);
+    profileDialog.applyComponentOrientation(orientation);
     GridBagConstraints gbc = new GridBagConstraints();
     gbc.insets = new Insets(5, 15, 5, 15);
     gbc.fill = GridBagConstraints.HORIZONTAL;
