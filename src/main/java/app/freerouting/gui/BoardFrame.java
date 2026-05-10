@@ -335,7 +335,7 @@ public class BoardFrame extends WindowBase {
       int messageType = filteredLogEntries.getErrorCount() > 0 ? JOptionPane.ERROR_MESSAGE
           : JOptionPane.WARNING_MESSAGE;
 
-      JOptionPane.showMessageDialog(null, scrollPane, tm.getText("logs_window_title"), messageType);
+      JOptionPane.showMessageDialog(this, scrollPane, tm.getText("logs_window_title"), messageType);
     });
 
     // Toolbar for inspected items (e.g. when a component is selected)
@@ -993,7 +993,7 @@ public class BoardFrame extends WindowBase {
         JOptionPane optionPane = new JOptionPane(tm.getText("confirm_cancel"), JOptionPane.WARNING_MESSAGE,
             JOptionPane.YES_NO_OPTION, null, options, options[1] // Default to "No"
         );
-        JDialog dialog = optionPane.createDialog(null, "Warning");
+        JDialog dialog = optionPane.createDialog(BoardFrame.this, "Warning");
         dialog.setVisible(true);
 
         // Check the user's choice

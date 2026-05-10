@@ -1,6 +1,7 @@
 package app.freerouting.gui;
 
 import app.freerouting.management.analytics.FRAnalytics;
+import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -13,6 +14,15 @@ import javax.swing.UIManager;
  * Startup window visible when the program is loading.
  */
 public class WindowMessage extends WindowBase {
+
+  private static Frame getActiveFrame() {
+    for (Frame frame : Frame.getFrames()) {
+      if (frame != null && frame.isShowing() && frame.isActive()) {
+        return frame;
+      }
+    }
+    return null;
+  }
 
   /**
    * Creates a new instance of WindowMessage
@@ -76,7 +86,7 @@ public class WindowMessage extends WindowBase {
         noOption
     };
     JOptionPane optionPane = new JOptionPane(message, JOptionPane.QUESTION_MESSAGE, JOptionPane.YES_NO_OPTION, null, options, options[defaultOption]);
-    optionPane.createDialog(null, "").setVisible(true);
+    optionPane.createDialog(getActiveFrame(), "").setVisible(true);
     String selected_option = (String) optionPane.getValue();
 
     if (selected_option.equals(yesOption)) {
@@ -92,6 +102,6 @@ public class WindowMessage extends WindowBase {
    * Calls a dialog with an ok-button.
    */
   public static void ok(String p_message) {
-    JOptionPane.showMessageDialog(null, p_message);
+    JOptionPane.showMessageDialog(getActiveFrame(), p_message);
   }
 }

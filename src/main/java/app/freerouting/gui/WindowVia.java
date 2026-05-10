@@ -268,7 +268,8 @@ public class WindowVia extends BoardSavableSubWindow {
         layers_selected = true;
       } else {
         Layer[] possible_start_layers = Arrays.copyOf(pcb.layer_structure.arr, pcb.layer_structure.arr.length - 1);
-        Object selected_value = JOptionPane.showInputDialog(null, tm.getText("select_start_layer"), tm.getText("start_layer_selection"), JOptionPane.INFORMATION_MESSAGE, null, possible_start_layers,
+        Object selected_value = JOptionPane.showInputDialog(WindowVia.this, tm.getText("select_start_layer"), tm.getText("start_layer_selection"), JOptionPane.INFORMATION_MESSAGE, null,
+            possible_start_layers,
             possible_start_layers[0]);
         if (selected_value == null) {
           return;
@@ -281,7 +282,8 @@ public class WindowVia extends BoardSavableSubWindow {
       if (!layers_selected) {
         int first_possible_end_layer_no = pcb.layer_structure.get_no(start_layer) + 1;
         Layer[] possible_end_layers = Arrays.copyOfRange(pcb.layer_structure.arr, first_possible_end_layer_no, pcb.layer_structure.arr.length);
-        Object selected_value = JOptionPane.showInputDialog(null, tm.getText("select_end_layer"), tm.getText("end_layer_selection"), JOptionPane.INFORMATION_MESSAGE, null, possible_end_layers,
+        Object selected_value = JOptionPane.showInputDialog(WindowVia.this, tm.getText("select_end_layer"), tm.getText("end_layer_selection"), JOptionPane.INFORMATION_MESSAGE, null,
+            possible_end_layers,
             possible_end_layers[possible_end_layers.length - 1]);
         if (selected_value == null) {
           return;
@@ -377,7 +379,8 @@ public class WindowVia extends BoardSavableSubWindow {
     public void actionPerformed(ActionEvent p_evt) {
       BasicBoard pcb = board_frame.board_panel.board_handling.get_routing_board();
       Padstack[] via_padstacks = pcb.library.get_via_padstacks();
-      Object selected_value = JOptionPane.showInputDialog(null, tm.getText("choose_padstack_to_remove"), tm.getText("remove_via_padstack"), JOptionPane.INFORMATION_MESSAGE, null, via_padstacks,
+      Object selected_value = JOptionPane.showInputDialog(WindowVia.this, tm.getText("choose_padstack_to_remove"), tm.getText("remove_via_padstack"), JOptionPane.INFORMATION_MESSAGE, null,
+          via_padstacks,
           via_padstacks[0]);
       if (selected_value == null) {
         return;

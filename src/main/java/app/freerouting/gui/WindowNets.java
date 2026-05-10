@@ -106,7 +106,7 @@ public class WindowNets extends WindowObjectListWithFilter {
       for (int i = 0; i < class_arr.length; i++) {
         class_arr[i] = net_classes.get(i);
       }
-      Object selected_value = JOptionPane.showInputDialog(null, tm.getText("message_1"), tm.getText("message_2"), JOptionPane.INFORMATION_MESSAGE, null, class_arr, class_arr[0]);
+      Object selected_value = JOptionPane.showInputDialog(WindowNets.this, tm.getText("message_1"), tm.getText("message_2"), JOptionPane.INFORMATION_MESSAGE, null, class_arr, class_arr[0]);
       if (!(selected_value instanceof NetClass selected_class)) {
         return;
       }

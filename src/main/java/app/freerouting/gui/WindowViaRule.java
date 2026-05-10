@@ -146,7 +146,7 @@ public class WindowViaRule extends WindowBase {
         }
       }
       assert (curr_index == possible_values.length);
-      Object selected_value = JOptionPane.showInputDialog(null, tm.getText("choose_via_to_append"), tm.getText("append_via_to_rule"), JOptionPane.INFORMATION_MESSAGE, null, possible_values,
+      Object selected_value = JOptionPane.showInputDialog(WindowViaRule.this, tm.getText("choose_via_to_append"), tm.getText("append_via_to_rule"), JOptionPane.INFORMATION_MESSAGE, null, possible_values,
           possible_values[0]);
       if (selected_value != null) {
         ViaInfo selected_via = (ViaInfo) selected_value;
