@@ -1,0 +1,112 @@
+﻿$root = "c:\Users\oppyu\Downloads\Freerouting\freerouting\src\main\resources"
+$files = Get-ChildItem -Path $root -Recurse -Filter "*_he.properties"
+
+$replacements = [ordered]@{
+  "=File" = "=קובץ"
+  "=Open" = "=פתח"
+  "=Open..." = "=פתח..."
+  "=Save" = "=שמור"
+  "=Save as" = "=שמור כ"
+  "=Save as..." = "=שמור בשם..."
+  "=Close" = "=סגור"
+  "=Cancel" = "=בטל"
+  "=Exit" = "=יציאה"
+  "=Help" = "=עזרה"
+  "=About" = "=אודות"
+  "=Info" = "=מידע"
+  "=Settings" = "=הגדרות"
+  "=Appearance" = "=תצוגה"
+  "=Colors" = "=צבעים"
+  "=Rules" = "=כללים"
+  "=Routing" = "=ניתוב"
+  "=Route" = "=ניתוב"
+  "=Auto-routing" = "=ניתוב אוטומטי"
+  "=Autoroute" = "=ניתוב אוטומטי"
+  "=Optimizer" = "=אופטימייזר"
+  "=Optimization" = "=אופטימיזציה"
+  "=Advanced settings" = "=הגדרות מתקדמות"
+  "=Advanced Auto-router Settings" = "=הגדרות נתב אוטומטי מתקדמות"
+  "=Speed:" = "=מהירות:"
+  "=fast" = "=מהיר"
+  "=slow" = "=איטי"
+  "=Algorithm" = "=אלגוריתם"
+  "=Layer:" = "=שכבה:"
+  "=Layer" = "=שכבה"
+  "=Active:" = "=פעיל:"
+  "=Preferred Direction:" = "=כיוון מועדף:"
+  "=horizontal" = "=אופקי"
+  "=vertical" = "=אנכי"
+  "=Passes:" = "=מספר מעברים:"
+  "=Create" = "=צור"
+  "=Remove" = "=הסר"
+  "=Edit" = "=ערוך"
+  "=Select" = "=בחר"
+  "=Selected" = "=נבחר"
+  "=Yes" = "=כן"
+  "=No" = "=לא"
+  "=on" = "=מופעל"
+  "=off" = "=כבוי"
+  "=none" = "=ללא"
+  "=dynamic" = "=דינמי"
+  "=manual" = "=ידני"
+  "=automatic" = "=אוטומטי"
+  "=Move" = "=הזז"
+  "=Drag" = "=גרירה"
+  "=Inspect" = "=בדיקה"
+  "=Incompletes" = "=חיבורים לא מושלמים"
+  "=Clearance Matrix" = "=מטריצת מרווחים"
+  "=Clearance Violations" = "=הפרות מרווח"
+  "=Length Violations" = "=הפרות אורך"
+  "=Nets" = "=רשתות"
+  "=Net Classes" = "=מחלקות רשת"
+  "=Vias" = "=ויאות"
+  "=Via Rules" = "=כללי ויה"
+  "=Via" = "=ויה"
+  "=Trace" = "=מסלול"
+  "=Trace costs on layer:" = "=עלות מסלול בשכבה:"
+  "=Vias allowed:" = "=ויאות מותרות:"
+  "=Via costs:" = "=עלות ויה:"
+  "=Start pass:" = "=מעבר התחלתי:"
+  "=Unit:" = "=יחידה:"
+  "=Packages" = "=מארזים"
+  "=Padstacks" = "=פדסטאקים"
+  "=Padstack" = "=פדסטאק"
+  "=Board" = "=לוח"
+  "=Component" = "=רכיב"
+  "=Components" = "=רכיבים"
+  "=Pin" = "=פין"
+  "=radius on layer" = "=רדיוס על שכבה"
+  "=Micrometers" = "=מיקרומטרים"
+  "=Millimeters" = "=מילימטרים"
+  "=Thousandths of an inch" = "=אלפיות אינץ'"
+  "=Inches" = "=אינץ'"
+  "=completed" = "=הושלם"
+  "=interrupted" = "=הופסק"
+  "=nothing selected" = "=לא נבחר דבר"
+  "=unable to save design file" = "=לא ניתן לשמור את קובץ התכנון"
+  "=unable to read logfile" = "=לא ניתן לקרוא קובץ יומן"
+  "=writing logfile" = "=כתיבת קובץ יומן"
+  "=failed" = "=נכשל"
+  "=logfile" = "=קובץ יומן"
+}
+
+$tokens = @(
+  "Freerouting","Specctra","Eagle","GUI","CAD","DSN/SES","DSN","SES","BGA","SMD",
+  "Fanout","Postroute","Ripup","Plane","Ratsnest","Enter","push & shove","pull tight",
+  ".dsn",".bin",".ses",".scr",".rules",".FRB","v1.9","mil","mm","um"
+)
+
+foreach ($f in $files) {
+  $text = Get-Content -Raw -Encoding UTF8 -Path $f.FullName
+  foreach ($k in $replacements.Keys) { $text = $text.Replace($k, $replacements[$k]) }
+
+  foreach ($tok in $tokens) {
+    $escaped = [regex]::Escape($tok)
+    $text = [regex]::Replace($text, $escaped, "\\u200E$tok\\u200E")
+  }
+
+  $text = $text -replace "(\\u200E){2,}", "\\u200E"
+  Set-Content -Encoding UTF8 -Path $f.FullName -Value $text
+}
+
+Write-Output "Processed $($files.Count) Hebrew resource files."

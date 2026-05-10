@@ -103,6 +103,7 @@ Below is a comprehensive list of command-line options available in Freerouting, 
     - `en`: English
     - `de`: German
     - `zh`: Simplified Chinese
+    - `he`: Hebrew
   - If unsupported, defaults to the system language or English.
 
 ### Host Integration

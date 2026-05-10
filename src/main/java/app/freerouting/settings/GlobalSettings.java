@@ -75,7 +75,8 @@ public class GlobalSettings implements Serializable {
       "ru",
       "pt",
       "ja",
-      "ko"
+      "ko",
+      "he"
   };
   @SerializedName("version")
   public String version;
@@ -644,6 +645,8 @@ public class GlobalSettings implements Serializable {
             currentLocale = Locale.JAPANESE;
           } else if (localeString.startsWith("ko")) {
             currentLocale = Locale.KOREAN;
+          } else if (localeString.startsWith("he")) {
+            currentLocale = Locale.forLanguageTag("he-IL");
           }
 
         } else if (p_args[i].startsWith("-dl")) {
