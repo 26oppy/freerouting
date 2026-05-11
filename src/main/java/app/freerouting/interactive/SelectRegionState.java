@@ -11,6 +11,9 @@ import java.awt.geom.Point2D;
  */
 public class SelectRegionState extends InteractiveState {
 
+  // Extra pixels to avoid stale anti-aliased edge fragments when repainting transformed rectangles.
+  private static final int REPAINT_MARGIN_PX = 4;
+
   protected FloatPoint corner1;
   protected FloatPoint corner2;
 
@@ -28,10 +31,14 @@ public class SelectRegionState extends InteractiveState {
   }
 
   @Override
+  public InteractiveState mouse_pressed(FloatPoint p_point) {
+    initialize_corner1_if_needed(p_point);
+    return this;
+  }
+
+  @Override
   public InteractiveState mouse_dragged(FloatPoint p_point) {
-    if (corner1 == null) {
-      corner1 = p_point;
-    }
+    initialize_corner1_if_needed(p_point);
     FloatPoint previous_corner2 = corner2;
     corner2 = p_point;
     repaint_selection_region(previous_corner2, corner2);
@@ -59,7 +66,7 @@ public class SelectRegionState extends InteractiveState {
         repaint_rectangle = repaint_rectangle.union(previous_rectangle);
       }
     }
-    repaint_rectangle.grow(4, 4);
+    repaint_rectangle.grow(REPAINT_MARGIN_PX, REPAINT_MARGIN_PX);
     hdlg.repaint(repaint_rectangle);
   }
 
@@ -79,5 +86,11 @@ public class SelectRegionState extends InteractiveState {
     int max_x = (int) Math.ceil(Math.max(screen_corner1.getX(), screen_corner2.getX()));
     int max_y = (int) Math.ceil(Math.max(screen_corner1.getY(), screen_corner2.getY()));
     return new Rectangle(min_x, min_y, Math.max(1, max_x - min_x), Math.max(1, max_y - min_y));
+  }
+
+  private void initialize_corner1_if_needed(FloatPoint p_point) {
+    if (corner1 == null) {
+      corner1 = p_point;
+    }
   }
 }
