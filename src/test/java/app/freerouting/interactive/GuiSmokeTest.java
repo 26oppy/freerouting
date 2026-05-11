@@ -34,13 +34,13 @@ class GuiSmokeTest {
   @AfterEach
   void tearDown() {
     for (Frame frame : Frame.getFrames()) {
-      if (frame != null) {
-        frame.dispose();
-      }
+      frame.dispose();
     }
     try {
       var guiSession = SessionManager.getInstance().getGuiSession();
-      SessionManager.getInstance().removeSession(guiSession.id.toString());
+      if (guiSession != null) {
+        SessionManager.getInstance().removeSession(guiSession.id.toString());
+      }
     } catch (IllegalArgumentException ignored) {
     }
     if (Freerouting.globalSettings != null) {
@@ -62,7 +62,7 @@ class GuiSmokeTest {
     long deadline = System.nanoTime() + timeout.toNanos();
     while (System.nanoTime() < deadline) {
       for (Frame frame : Frame.getFrames()) {
-        if ((frame != null) && frame.isDisplayable() && frame.isShowing()) {
+        if (frame.isDisplayable() && frame.isShowing()) {
           return frame;
         }
       }

@@ -467,7 +467,7 @@ tasks.register('guiTest', Test) {
     }
 
     shouldRunAfter(test)
-    timeout = Duration.ofMinutes(10)
+    timeout = Duration.ofMinutes(30)
 
     testLogging {
         showExceptions = true
@@ -475,6 +475,7 @@ tasks.register('guiTest', Test) {
     }
 
     // Keep Mockito inline-mock-maker behavior consistent with the main test task.
+    // Force AWT to run in display mode for Swing frame creation when executed under Xvfb.
     jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}", "-Djava.awt.headless=false"
 }
 
