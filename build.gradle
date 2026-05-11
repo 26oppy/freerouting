@@ -440,6 +440,10 @@ tasks.register('installLocalGitHook', Copy) {
 }
 
 test {
+    useJUnitPlatform {
+        excludeTags 'gui'
+    }
+
     testLogging {
         showExceptions = true
         showStandardStreams = true
@@ -450,6 +454,26 @@ test {
     // Attach Mockito as a Java agent so that the inline-mock-maker can function
     // on Java 21+ without the JVM's self-attach restriction warning.
     jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
+}
+
+tasks.register('guiTest', Test) {
+    group = 'verification'
+    description = 'Runs GUI smoke tests under a real display context'
+
+    useJUnitPlatform {
+        includeTags 'gui'
+    }
+
+    shouldRunAfter(test)
+    timeout = Duration.ofMinutes(10)
+
+    testLogging {
+        showExceptions = true
+        showStandardStreams = true
+    }
+
+    // Keep Mockito inline-mock-maker behavior consistent with the main test task.
+    jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}", "-Djava.awt.headless=false"
 }
 
 rewrite {

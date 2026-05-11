@@ -44,6 +44,19 @@ gradlew executableJar
 
 All four .jar files will be generated in the `build\libs` subfolder. You would typically run the `freerouting-current-executable.jar` file.
 
+## Automated GUI smoke testing for agents
+
+- Run the regular headless test suite:
+  ```bash
+  ./gradlew test
+  ```
+- Run GUI smoke tests under a virtual display:
+  ```bash
+  xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" ./gradlew guiTest
+  ```
+- The CI workflow `.github/workflows/gui-agent-tests.yml` runs this same command automatically for pull requests.
+- TODO: Add optional vision-based assertions (pixel/image-diff checks) once a stable cross-platform baseline is defined.
+
 ## How to create a new release
 
 Creating a release takes about half an hour if everything goes according to the plan. Usually it doesn't, so free up ~3 hours for this.
