@@ -18,6 +18,7 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFormattedTextField;
@@ -103,6 +104,11 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     // create the layer list
     LayerStructure layer_structure = board_handling.get_routing_board().layer_structure;
     int layer_count = layer_structure.arr.length;
+    RouterSettings routerSettings = board_handling.getCurrentRoutingJob().routerSettings;
+    if (routerSettings.getLayerCount() != layer_count) {
+      routerSettings.setLayerCount(layer_count);
+      routerSettings.applyBoardSpecificOptimizations(board_handling.get_routing_board());
+    }
 
     // every layer is a row in the gridbag and has 3 columns: name, active,
     // preferred direction
@@ -125,7 +131,6 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
       settings_autorouter_layer_active_arr[i].addActionListener(new LayerActiveListener(i));
       settings_autorouter_layer_active_arr[i]
           .addActionListener(_ -> FRAnalytics.buttonClicked("settings_autorouter_layer_active_arr", null));
-      board_handling.getCurrentRoutingJob().routerSettings.set_layer_active(i, curr_layer.is_signal);
       settings_autorouter_layer_active_arr[i].setEnabled(curr_layer.is_signal);
       gridbag.setConstraints(settings_autorouter_layer_active_arr[i], gridbag_constraints);
       main_panel.add(settings_autorouter_layer_active_arr[i]);
@@ -381,6 +386,14 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     gridbag.setConstraints(applyValuesNote, gridbag_constraints);
     main_panel.add(applyValuesNote, gridbag_constraints);
 
+    JButton okButton = new JButton("OK");
+    okButton.addActionListener(_ -> {
+      applyPendingValues();
+      dispose();
+    });
+    gridbag.setConstraints(okButton, gridbag_constraints);
+    main_panel.add(okButton, gridbag_constraints);
+
     this.refresh();
     this.pack();
     this.setResizable(false);
@@ -514,6 +527,126 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
   @Override
   public void parent_deiconified() {
     super.parent_deiconified();
+  }
+
+  private void applyPendingValues() {
+    RouterSettings settings = board_handling.getCurrentRoutingJob().routerSettings;
+    LayerStructure layerStructure = board_handling.get_routing_board().layer_structure;
+
+    for (int i = 0; i < settings_autorouter_layer_active_arr.length; i++) {
+      settings.set_layer_active(i, settings_autorouter_layer_active_arr[i].isSelected());
+    }
+    for (int i = 0; i < settings_autorouter_combo_box_arr.size(); i++) {
+      int currLayerNo = layerStructure.get_layer_no(i);
+      settings.set_preferred_direction_is_horizontal(currLayerNo,
+          settings_autorouter_combo_box_arr.get(i).getSelectedItem() == horizontal);
+    }
+    settings.setViasAllowed(settings_autorouter_vias_allowed.isSelected());
+    settings.setEnabled(settings_autorouter_autoroute_pass_button.isSelected());
+    settings.setOptimizerEnabled(settings_autorouter_postroute_pass_button.isSelected());
+
+    int viaCosts = getParsedInteger(via_cost_field, settings.get_via_costs());
+    settings.set_via_costs(Math.max(viaCosts, 1));
+    via_cost_field.setValue(settings.get_via_costs());
+    via_cost_input_completed = true;
+
+    int planeViaCosts = getParsedInteger(plane_via_cost_field, settings.get_plane_via_costs());
+    settings.set_plane_via_costs(Math.max(planeViaCosts, 1));
+    plane_via_cost_field.setValue(settings.get_plane_via_costs());
+    plane_via_cost_input_completed = true;
+
+    int ripupCosts = getParsedInteger(start_ripup_costs, settings.get_start_ripup_costs());
+    settings.set_start_ripup_costs(Math.max(ripupCosts, 1));
+    start_ripup_costs.setValue(settings.get_start_ripup_costs());
+    start_ripup_cost_input_completed = true;
+
+    int maxPasses = getParsedInteger(max_passes_field, settings.maxPasses);
+    settings.setMaxPasses(Math.max(1, Math.min(maxPasses, 9999)));
+    max_passes_field.setValue(settings.maxPasses);
+    max_passes_input_completed = true;
+
+    String oldTimeout = settings.jobTimeoutString;
+    String timeout = getParsedString(job_timeout_field, oldTimeout);
+    if (!timeout.matches("^(\\d+\\.)?\\d{1,2}:\\d{2}:\\d{2}$")) {
+      timeout = oldTimeout;
+    }
+    settings.setJobTimeoutString(timeout);
+    job_timeout_field.setValue(settings.jobTimeoutString);
+    job_timeout_input_completed = true;
+
+    int maxThreads = getParsedInteger(max_threads_field, settings.maxThreads);
+    int maxAvailable = Runtime.getRuntime().availableProcessors();
+    settings.setMaxThreads(Math.max(1, Math.min(maxThreads, maxAvailable)));
+    max_threads_field.setValue(settings.maxThreads);
+    max_threads_input_completed = true;
+
+    for (int i = 0; i < preferred_direction_trace_cost_arr.length; i++) {
+      int currLayerNo = layerStructure.get_layer_no(i);
+      double oldValue = settings.get_preferred_direction_trace_costs(currLayerNo);
+      double inputValue = getParsedDouble(preferred_direction_trace_cost_arr[i], oldValue);
+      if (inputValue <= 0) {
+        inputValue = oldValue;
+      }
+      settings.set_preferred_direction_trace_costs(currLayerNo, inputValue);
+      preferred_direction_trace_cost_arr[i].setValue(inputValue);
+      preferred_direction_trace_costs_input_completed[i] = true;
+    }
+    for (int i = 0; i < against_preferred_direction_trace_cost_arr.length; i++) {
+      int currLayerNo = layerStructure.get_layer_no(i);
+      double oldValue = settings.get_against_preferred_direction_trace_costs(currLayerNo);
+      double inputValue = getParsedDouble(against_preferred_direction_trace_cost_arr[i], oldValue);
+      if (inputValue <= 0) {
+        inputValue = oldValue;
+      }
+      settings.set_against_preferred_direction_trace_costs(currLayerNo, inputValue);
+      against_preferred_direction_trace_cost_arr[i].setValue(inputValue);
+      against_preferred_direction_trace_costs_input_completed[i] = true;
+    }
+
+    String newAlgorithm = RouterSettings.ALGORITHM_CURRENT;
+    if (settings_autorouter_algorithm_combo_box.getSelectedItem() == algorithm_v19) {
+      newAlgorithm = RouterSettings.ALGORITHM_V19;
+    }
+    settings.setAlgorithm(newAlgorithm);
+  }
+
+  private int getParsedInteger(JFormattedTextField field, int fallback) {
+    try {
+      field.commitEdit();
+    } catch (java.text.ParseException _) {
+      field.setValue(fallback);
+    }
+    Object value = field.getValue();
+    if (value instanceof Number number) {
+      return number.intValue();
+    }
+    return fallback;
+  }
+
+  private String getParsedString(JFormattedTextField field, String fallback) {
+    try {
+      field.commitEdit();
+    } catch (java.text.ParseException _) {
+      field.setValue(fallback);
+    }
+    Object value = field.getValue();
+    if (value instanceof String str) {
+      return str;
+    }
+    return fallback;
+  }
+
+  private double getParsedDouble(JFormattedTextField field, double fallback) {
+    try {
+      field.commitEdit();
+    } catch (java.text.ParseException _) {
+      field.setValue(fallback);
+    }
+    Object value = field.getValue();
+    if (value instanceof Number number) {
+      return number.doubleValue();
+    }
+    return fallback;
   }
 
   private class LayerActiveListener implements ActionListener {
