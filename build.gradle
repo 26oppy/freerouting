@@ -459,6 +459,8 @@ test {
 tasks.register('guiTest', Test) {
     group = 'verification'
     description = 'Runs GUI smoke tests under a real display context'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
 
     useJUnitPlatform {
         includeTags 'gui'

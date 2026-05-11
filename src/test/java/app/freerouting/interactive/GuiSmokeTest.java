@@ -12,6 +12,7 @@ import app.freerouting.settings.GlobalSettings;
 import java.awt.Frame;
 import java.awt.GraphicsEnvironment;
 import java.time.Duration;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -26,6 +27,7 @@ class GuiSmokeTest {
         "GUI smoke tests require a display (run with Xvfb in CI)");
     InteractiveSettings.resetForTesting();
     Freerouting.globalSettings = new GlobalSettings();
+    Freerouting.globalSettings.userProfileSettings.userId = UUID.randomUUID().toString();
     Freerouting.globalSettings.version = Constants.FREEROUTING_VERSION;
   }
 
