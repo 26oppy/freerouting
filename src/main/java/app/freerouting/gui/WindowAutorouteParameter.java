@@ -29,6 +29,7 @@ import javax.swing.JPanel;
  * Window handling parameters of the automatic routing.
  */
 public class WindowAutorouteParameter extends BoardSavableSubWindow {
+  private static final String JOB_TIMEOUT_PATTERN = "^(\\d+\\.)?\\d{1,2}:\\d{2}:\\d{2}$";
 
   private final GuiBoardManager board_handling;
   private final JLabel[] layer_name_arr;
@@ -529,6 +530,13 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     super.parent_deiconified();
   }
 
+  /**
+   * Applies the current values from all controls to RouterSettings.
+   * <p>
+   * Numeric fields are committed and clamped to their supported ranges. If parsing fails, the
+   * current RouterSettings value is kept. This is used by the OK button to persist values without
+   * requiring Enter in each field.
+   */
   private void applyPendingValues() {
     RouterSettings settings = board_handling.getCurrentRoutingJob().routerSettings;
     LayerStructure layerStructure = board_handling.get_routing_board().layer_structure;
@@ -567,7 +575,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
 
     String oldTimeout = settings.jobTimeoutString;
     String timeout = getParsedString(job_timeout_field, oldTimeout);
-    if (!timeout.matches("^(\\d+\\.)?\\d{1,2}:\\d{2}:\\d{2}$")) {
+    if (!timeout.matches(JOB_TIMEOUT_PATTERN)) {
       timeout = oldTimeout;
     }
     settings.setJobTimeoutString(timeout);
@@ -1011,7 +1019,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
           input_value = str;
           // Basic validation: check if it matches timespan format (HH:MM:SS or
           // D.HH:MM:SS)
-          if (!input_value.matches("^(\\d+\\.)?\\d{1,2}:\\d{2}:\\d{2}$")) {
+          if (!input_value.matches(JOB_TIMEOUT_PATTERN)) {
             input_value = old_value;
           }
         } else {
@@ -1052,7 +1060,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
         String input_value;
         if (input instanceof String str) {
           input_value = str;
-          if (!input_value.matches("^(\\d+\\.)?\\d{1,2}:\\d{2}:\\d{2}$")) {
+          if (!input_value.matches(JOB_TIMEOUT_PATTERN)) {
             input_value = old_value;
           }
         } else {
