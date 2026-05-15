@@ -111,12 +111,24 @@ jobs:
             } else if (lowerRequest.startsWith("@gemini-cli /triage")) {
               core.setOutput('command', 'triage');
             } else if (
+              lowerRequest.startsWith("@gemini-cli /ai-automator")
+              || lowerRequest.startsWith("@gemini-cli /automator")
+              || lowerRequest.startsWith("@gemini-cli /ui-automator")
+              || lowerRequest.startsWith("@gemini-cli /run-ui-automation")
+              || lowerRequest.startsWith("@gemini-cli /run-automator")
+            ) {
+              core.setOutput('command', 'ai_automator');
+              const additionalContext = normalizedRequest
+                .replace(/^@gemini-cli \/(ai-automator|automator|ui-automator|run-ui-automation|run-automator)/i, '')
+                .trim();
+              core.setOutput('additional_context', additionalContext);
+            } else if (
               lowerRequest.startsWith("@gemini-cli /ui-test")
               || lowerRequest.startsWith("@gemini-cli /uitest")
               || lowerRequest.startsWith("@gemini-cli /test-ui")
               || lowerRequest.startsWith("@gemini-cli /ui-run")
             ) {
-              core.setOutput('command', 'ui_test');
+              core.setOutput('command', 'ai_automator');
               const additionalContext = normalizedRequest
                 .replace(/^@gemini-cli \/(ui-test|uitest|test-ui|ui-run)/i, '')
                 .trim();
@@ -192,10 +204,10 @@ jobs:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
     secrets: 'inherit'
 
-  ui_test:
+  ai_automator:
     needs: 'dispatch'
     if: |-
-      ${{ needs.dispatch.outputs.command == 'ui_test' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') }}
+      ${{ needs.dispatch.outputs.command == 'ai_automator' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') }}
     uses: './.github/workflows/gemini-ui-tester.yml'
     permissions:
       contents: 'read'
@@ -226,7 +238,7 @@ jobs:
       - 'review'
       - 'triage'
       - 'invoke'
-      - 'ui_test'
+      - 'ai_automator'
       - 'test_review'
     if: |-
       ${{ always() && !cancelled() && (failure() || needs.dispatch.outputs.command == 'fallthrough') }}

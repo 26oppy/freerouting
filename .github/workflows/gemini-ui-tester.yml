@@ -1,4 +1,4 @@
-name: '🧪 Gemini UI Tester'
+name: '🤖 AI Automator'
 
 on:
   workflow_call:
@@ -17,9 +17,9 @@ defaults:
     shell: 'bash'
 
 jobs:
-  ui_test:
+  ai_automator:
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -54,6 +54,15 @@ jobs:
       - name: 'Make Gradle wrapper executable'
         run: chmod +x gradlew
 
+      - name: 'Install UI automation tools'
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y xvfb xdotool imagemagick
+
+      - name: 'Prepare screenshot workspace'
+        run: |-
+          mkdir -p /tmp/ai-automator-screenshots
+
       - name: 'Check Gemini authentication'
         id: 'check_auth'
         env:
@@ -66,7 +75,7 @@ jobs:
             exit 1
           fi
 
-      - name: 'Run Gemini UI impact analysis'
+      - name: 'Run AI Automator impact analysis'
         uses: 'google-github-actions/run-gemini-cli@v0' # ratchet:exclude
         env:
           GEMINI_CLI_TRUST_WORKSPACE: 'true'
@@ -74,6 +83,7 @@ jobs:
           PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
           REPOSITORY: '${{ github.repository }}'
           ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
+          SCREENSHOT_DIR: '/tmp/ai-automator-screenshots'
         with:
           gcp_location: '${{ vars.GOOGLE_CLOUD_LOCATION }}'
           gcp_project_id: '${{ vars.GOOGLE_CLOUD_PROJECT }}'
@@ -116,27 +126,73 @@ jobs:
               },
               "tools": {
                 "core": [
-                  "run_shell_command(echo)"
+                  "run_shell_command(echo)",
+                  "run_shell_command(ls)",
+                  "run_shell_command(find)",
+                  "run_shell_command(timeout)",
+                  "run_shell_command(xvfb-run)",
+                  "run_shell_command(xdotool)",
+                  "run_shell_command(import)",
+                  "run_shell_command(./gradlew)"
                 ]
               }
             }
           prompt: |-
-            You are a UI-focused PR tester.
-            Review PR #${{ env.PULL_REQUEST_NUMBER }} in ${{ env.REPOSITORY }} with a strict focus on GUI/interactive impact and testability.
+            You are AI Automator, a UI and routing automation specialist.
+            Review PR #${{ env.PULL_REQUEST_NUMBER }} in ${{ env.REPOSITORY }} with strict focus on GUI/interactive impact, UI automation feasibility, and routing safety.
             Additional context: ${{ env.ADDITIONAL_CONTEXT }}
-            Use pull_request_read tools to inspect metadata and changed files.
-            Output a concise checklist with:
-            - UI areas changed
-            - Risks specific to GUI behavior
-            - Headless/API contrast checks
-            - Recommended UI regression tests
-            Keep output quality high: no filler text, no speculative claims, and include concrete test recommendations only.
+            Screenshot directory for evidence: ${{ env.SCREENSHOT_DIR }}
+            Use pull_request_read tools to inspect metadata and changed files, then decide if UI automation is needed.
+            Requirements:
+            1) Understand repository structure first (focus on interactive/gui/boardgraphics vs headless paths).
+            2) If UI impact exists or user requested UI checks, run UI automation commands as needed:
+               - execute tutorial board and UI smoke tests,
+               - interact with window controls where possible (menus/buttons/tooltips/sliders/open-file style interactions),
+               - capture screenshots of observed state and any before/after evidence into SCREENSHOT_DIR.
+            3) If UI automation is not needed, explain why and run at least tutorial board smoke coverage.
+            4) Keep output concise, actionable, and evidence-backed.
+            5) Never fabricate interaction results; only claim actions that were actually executed.
 
-      - name: 'Run UI-focused automated tests'
+      - name: 'Run AI Automator automated tests (UI + tutorial board + routing smoke)'
         run: |-
           ./gradlew --no-daemon test \
             --tests "app.freerouting.interactive.GuiStartupHeadlessTest" \
-            --tests "app.freerouting.interactive.TutorialBoardUiSmokeTest"
+            --tests "app.freerouting.interactive.TutorialBoardUiSmokeTest" \
+            --tests "app.freerouting.fixtures.Dac2020Bm01RoutingTest"
+
+      - name: 'Capture baseline screenshot artifact'
+        run: |-
+          xvfb-run -a bash -lc '
+            ./gradlew --no-daemon run --args="--gui.enabled=true" >/tmp/ai-automator-run.log 2>&1 &
+            APP_PID=$!;
+            sleep 12;
+            import -window root "/tmp/ai-automator-screenshots/ai-automator-baseline.png" || true;
+            WINDOW_ID="$(xdotool search --onlyvisible --name "Freerouting" | head -n 1 || true)";
+            if [ -n "${WINDOW_ID}" ]; then
+              xdotool windowactivate "${WINDOW_ID}" || true;
+              xdotool key --window "${WINDOW_ID}" alt+f || true;
+              sleep 1;
+              import -window root "/tmp/ai-automator-screenshots/ai-automator-menu.png" || true;
+              xdotool key --window "${WINDOW_ID}" Escape || true;
+              xdotool key --window "${WINDOW_ID}" ctrl+o || true;
+              sleep 1;
+              import -window root "/tmp/ai-automator-screenshots/ai-automator-open-file-dialog.png" || true;
+              xdotool key --window "${WINDOW_ID}" Escape || true;
+            fi
+            if [ -n "${APP_PID}" ]; then
+              kill "${APP_PID}" || true;
+            fi
+          '
+
+      - name: 'Upload AI Automator screenshots and logs'
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'ai-automator-artifacts'
+          if-no-files-found: 'warn'
+          path: |-
+            /tmp/ai-automator-screenshots/**
+            /tmp/ai-automator-run.log
+            /home/runner/work/freerouting/freerouting/build/reports/tests/test/**
 
       - name: 'Report completion'
         env:
@@ -144,11 +200,13 @@ jobs:
           ISSUE_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
           REPOSITORY: '${{ github.repository }}'
           MESSAGE: |-
-            ✅ UI-focused AI test run completed.
-            - Performed Gemini UI impact analysis.
-            - Executed UI automated tests:
+            ✅ AI Automator run completed.
+            - Performed AI impact analysis with UI/routing focus.
+            - Executed automated tests:
               - `app.freerouting.interactive.GuiStartupHeadlessTest`
               - `app.freerouting.interactive.TutorialBoardUiSmokeTest`
+              - `app.freerouting.fixtures.Dac2020Bm01RoutingTest`
+            - Captured and uploaded AI Automator screenshots/logs artifact.
             Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |-
           gh issue comment "${ISSUE_NUMBER}" \
