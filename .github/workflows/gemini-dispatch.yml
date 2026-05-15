@@ -177,7 +177,7 @@ jobs:
   ui_test:
     needs: 'dispatch'
     if: |-
-      ${{ needs.dispatch.outputs.command == 'ui_test' }}
+      ${{ needs.dispatch.outputs.command == 'ui_test' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') }}
     uses: './.github/workflows/gemini-ui-tester.yml'
     permissions:
       contents: 'read'
