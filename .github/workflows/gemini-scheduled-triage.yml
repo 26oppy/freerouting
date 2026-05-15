@@ -130,9 +130,7 @@ jobs:
               },
               "tools": {
                 "core": [
-                  "run_shell_command(echo)",
-                  "run_shell_command(jq)",
-                  "run_shell_command(printenv)"
+                  "run_shell_command(echo)"
                 ]
               }
             }
@@ -158,6 +156,7 @@ jobs:
             4. **Variable Handling:** Reference all shell variables as `"${VAR}"` (with quotes and braces) to prevent word splitting and globbing issues.
 
             5. **Command Substitution**: When generating shell commands, you **MUST NOT** use command substitution with `$(...)`, `<(...)`, or `>(...)`. This is a security measure to prevent unintended command execution.
+            6. **Output Quality**: Return only high-confidence label decisions and keep the final JSON sorted by `issue_number`.
 
             ## Input Data
 

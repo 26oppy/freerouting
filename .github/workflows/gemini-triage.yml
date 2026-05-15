@@ -100,9 +100,7 @@ jobs:
               },
               "tools": {
                 "core": [
-                  "run_shell_command(cat)",
-                  "run_shell_command(echo)",
-                  "run_shell_command(printenv)"
+                  "run_shell_command(echo)"
                 ]
               }
             }
@@ -163,6 +161,7 @@ jobs:
                 ```
 
             5. After running the `echo` command, your task is complete. Do not run any further commands.
+            6. Output quality requirement: ensure labels are deduplicated and ordered by confidence.
 
   label:
     runs-on: 'ubuntu-latest'

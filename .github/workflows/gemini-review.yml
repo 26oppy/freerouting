@@ -109,11 +109,7 @@ jobs:
               },
               "tools": {
                 "core": [
-                  "run_shell_command(cat)",
-                  "run_shell_command(echo)",
-                  "run_shell_command(grep)",
-                  "run_shell_command(head)",
-                  "run_shell_command(tail)"
+                  "run_shell_command(echo)"
                 ]
               }
             }
@@ -144,7 +140,8 @@ jobs:
 
             6. **Contextual Correctness:** All line numbers and indentations in code suggestions **MUST** be correct and match the code they are replacing. Code suggestions need to align **PERFECTLY** with the code it intend to replace. Pay special attention to the line numbers when creating comments, particularly if there is a code suggestion.
 
-            7. **Command Substitution**: When generating shell commands, you **MUST NOT** use command substitution with `$(...)`, `<(...)`, or `>(...)`. This is a security measure to prevent unintended command execution.
+             7. **Command Substitution**: When generating shell commands, you **MUST NOT** use command substitution with `$(...)`, `<(...)`, or `>(...)`. This is a security measure to prevent unintended command execution.
+             8. **Output Quality**: Each comment must be concise, actionable, and include a clear rationale tied to the changed code.
 
 
             ## Input Data

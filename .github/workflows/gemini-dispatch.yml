@@ -95,25 +95,43 @@ jobs:
         with:
           script: |
             const eventType = process.env.EVENT_TYPE;
-            const request = process.env.REQUEST;
+            const request = process.env.REQUEST || '';
+            const normalizedRequest = request.trimStart();
+            const lowerRequest = normalizedRequest.toLowerCase();
             core.setOutput('request', request);
 
             if (eventType === 'pull_request.opened') {
               core.setOutput('command', 'review');
             } else if (['issues.opened', 'issues.reopened'].includes(eventType)) {
               core.setOutput('command', 'triage');
-            } else if (request.startsWith("@gemini-cli /review")) {
+            } else if (lowerRequest.startsWith("@gemini-cli /review")) {
               core.setOutput('command', 'review');
-              const additionalContext = request.replace(/^@gemini-cli \/review/, '').trim();
+              const additionalContext = normalizedRequest.replace(/^@gemini-cli \/review/i, '').trim();
               core.setOutput('additional_context', additionalContext);
-            } else if (request.startsWith("@gemini-cli /triage")) {
+            } else if (lowerRequest.startsWith("@gemini-cli /triage")) {
               core.setOutput('command', 'triage');
-            } else if (request.startsWith("@gemini-cli /ui-test")) {
+            } else if (
+              lowerRequest.startsWith("@gemini-cli /ui-test")
+              || lowerRequest.startsWith("@gemini-cli /uitest")
+              || lowerRequest.startsWith("@gemini-cli /test-ui")
+              || lowerRequest.startsWith("@gemini-cli /ui-run")
+            ) {
               core.setOutput('command', 'ui_test');
-              const additionalContext = request.replace(/^@gemini-cli \/ui-test/, '').trim();
+              const additionalContext = normalizedRequest
+                .replace(/^@gemini-cli \/(ui-test|uitest|test-ui|ui-run)/i, '')
+                .trim();
               core.setOutput('additional_context', additionalContext);
-            } else if (request.startsWith("@gemini-cli")) {
-              const additionalContext = request.replace(/^@gemini-cli/, '').trim();
+            } else if (
+              lowerRequest.startsWith("@gemini-cli /test-review")
+              || lowerRequest.startsWith("@gemini-cli /testreview")
+            ) {
+              core.setOutput('command', 'test_review');
+              const additionalContext = normalizedRequest
+                .replace(/^@gemini-cli \/(test-review|testreview)/i, '')
+                .trim();
+              core.setOutput('additional_context', additionalContext);
+            } else if (lowerRequest.startsWith("@gemini-cli")) {
+              const additionalContext = normalizedRequest.replace(/^@gemini-cli/i, '').trim();
               core.setOutput('command', 'invoke');
               core.setOutput('additional_context', additionalContext);
             } else {
@@ -188,6 +206,20 @@ jobs:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
     secrets: 'inherit'
 
+  test_review:
+    needs: 'dispatch'
+    if: |-
+      ${{ needs.dispatch.outputs.command == 'test_review' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_review' || github.event_name == 'pull_request_review_comment') }}
+    uses: './.github/workflows/gemini-test-review.yml'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+      issues: 'write'
+      pull-requests: 'write'
+    with:
+      additional_context: '${{ needs.dispatch.outputs.additional_context }}'
+    secrets: 'inherit'
+
   fallthrough:
     needs:
       - 'dispatch'
@@ -195,6 +227,7 @@ jobs:
       - 'triage'
       - 'invoke'
       - 'ui_test'
+      - 'test_review'
     if: |-
       ${{ always() && !cancelled() && (failure() || needs.dispatch.outputs.command == 'fallthrough') }}
     runs-on: 'ubuntu-latest'

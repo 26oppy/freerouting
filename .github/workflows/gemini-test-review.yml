@@ -1,4 +1,4 @@
-name: '🧪 Gemini UI Tester'
+name: '🧪🔎 Gemini Test-Backed Review'
 
 on:
   workflow_call:
@@ -9,7 +9,7 @@ on:
         required: false
 
 concurrency:
-  group: '${{ github.workflow }}-ui-test-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}'
+  group: '${{ github.workflow }}-test-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}'
   cancel-in-progress: true
 
 defaults:
@@ -17,7 +17,7 @@ defaults:
     shell: 'bash'
 
 jobs:
-  ui_test:
+  test_review:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 30
     permissions:
@@ -66,14 +66,37 @@ jobs:
             exit 1
           fi
 
-      - name: 'Run Gemini UI impact analysis'
+      - name: 'Run automated tests (required before suggestions)'
+        id: 'run_tests'
+        env:
+          LOG_FILE: '/tmp/gemini-test-review.log'
+        run: |-
+          set +e
+          ./gradlew --no-daemon test \
+            --tests "app.freerouting.interactive.GuiStartupHeadlessTest" \
+            --tests "app.freerouting.interactive.TutorialBoardUiSmokeTest" \
+            --tests "app.freerouting.fixtures.Dac2020Bm01RoutingTest" | tee "${LOG_FILE}"
+          TEST_EXIT_CODE="${PIPESTATUS[0]}"
+          echo "TEST_EXIT_CODE=${TEST_EXIT_CODE}" >> "${GITHUB_ENV}"
+          tail -n 200 "${LOG_FILE}" > /tmp/gemini-test-review-tail.log
+          {
+            echo "TEST_LOG_TAIL<<EOF"
+            cat /tmp/gemini-test-review-tail.log
+            echo "EOF"
+          } >> "${GITHUB_ENV}"
+          exit 0
+
+      - name: 'Run Gemini test-backed review'
         uses: 'google-github-actions/run-gemini-cli@v0' # ratchet:exclude
+        id: 'gemini_test_review'
         env:
           GEMINI_CLI_TRUST_WORKSPACE: 'true'
           GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
           PULL_REQUEST_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
           REPOSITORY: '${{ github.repository }}'
           ADDITIONAL_CONTEXT: '${{ inputs.additional_context }}'
+          TEST_EXIT_CODE: '${{ env.TEST_EXIT_CODE }}'
+          TEST_LOG_TAIL: '${{ env.TEST_LOG_TAIL }}'
         with:
           gcp_location: '${{ vars.GOOGLE_CLOUD_LOCATION }}'
           gcp_project_id: '${{ vars.GOOGLE_CLOUD_PROJECT }}'
@@ -89,7 +112,7 @@ jobs:
           settings: |-
             {
               "model": {
-                "maxSessionTurns": 20
+                "maxSessionTurns": 25
               },
               "telemetry": {
                 "enabled": ${{ vars.GOOGLE_CLOUD_PROJECT != '' }},
@@ -107,7 +130,10 @@ jobs:
                     "ghcr.io/github/github-mcp-server:v0.18.0"
                   ],
                   "includeTools": [
-                    "pull_request_read"
+                    "add_comment_to_pending_review",
+                    "create_pending_pull_request_review",
+                    "pull_request_read",
+                    "submit_pending_pull_request_review"
                   ],
                   "env": {
                     "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
@@ -121,36 +147,47 @@ jobs:
               }
             }
           prompt: |-
-            You are a UI-focused PR tester.
-            Review PR #${{ env.PULL_REQUEST_NUMBER }} in ${{ env.REPOSITORY }} with a strict focus on GUI/interactive impact and testability.
-            Additional context: ${{ env.ADDITIONAL_CONTEXT }}
-            Use pull_request_read tools to inspect metadata and changed files.
-            Output a concise checklist with:
-            - UI areas changed
-            - Risks specific to GUI behavior
-            - Headless/API contrast checks
-            - Recommended UI regression tests
-            Keep output quality high: no filler text, no speculative claims, and include concrete test recommendations only.
+            ## Role
+            You are a test-backed PR review assistant. You must provide review suggestions only when they are supported by the executed test evidence provided below.
 
-      - name: 'Run UI-focused automated tests'
-        run: |-
-          ./gradlew --no-daemon test \
-            --tests "app.freerouting.interactive.GuiStartupHeadlessTest" \
-            --tests "app.freerouting.interactive.TutorialBoardUiSmokeTest"
+            ## Inputs
+            - Repository: ${{ env.REPOSITORY }}
+            - Pull Request Number: ${{ env.PULL_REQUEST_NUMBER }}
+            - Additional Context: ${{ env.ADDITIONAL_CONTEXT }}
+            - Test Exit Code: ${{ env.TEST_EXIT_CODE }}
+            - Test Log Tail:
+            ```
+            ${{ env.TEST_LOG_TAIL }}
+            ```
 
-      - name: 'Report completion'
+            ## Rules
+            1. Create a pending review, then add comments, then submit with event `COMMENT`.
+            2. If Test Exit Code is non-zero, prioritize comments about failing test evidence and likely root causes in the diff.
+            3. If Test Exit Code is zero, only comment on issues where you can justify risk with evidence from test scope and changed code.
+            4. Every comment must include one short evidence line beginning with `Evidence:`.
+            5. Do not post speculative comments without test-backed rationale.
+            6. Use only `mcp__github__*` tools.
+
+            ## Required summary format
+            ```
+            ## 🧪 Test-Backed Review Summary
+            - Test status: PASS|FAIL
+            - Evidence basis: short statement
+            - Suggestions posted: N
+            ```
+
+      - name: 'Post test run status comment'
         env:
           GITHUB_TOKEN: '${{ steps.mint_identity_token.outputs.token || secrets.GITHUB_TOKEN || github.token }}'
           ISSUE_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
           REPOSITORY: '${{ github.repository }}'
-          MESSAGE: |-
-            ✅ UI-focused AI test run completed.
-            - Performed Gemini UI impact analysis.
-            - Executed UI automated tests:
-              - `app.freerouting.interactive.GuiStartupHeadlessTest`
-              - `app.freerouting.interactive.TutorialBoardUiSmokeTest`
-            Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TEST_EXIT_CODE: '${{ env.TEST_EXIT_CODE }}'
         run: |-
+          if [[ "${TEST_EXIT_CODE}" == "0" ]]; then
+            STATUS='PASS'
+          else
+            STATUS='FAIL'
+          fi
           gh issue comment "${ISSUE_NUMBER}" \
-            --body "${MESSAGE}" \
+            --body "✅ Test-backed AI review completed. Automated test status: **${STATUS}**. Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --repo "${REPOSITORY}"

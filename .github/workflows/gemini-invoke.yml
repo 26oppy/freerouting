@@ -122,11 +122,7 @@ jobs:
               },
               "tools": {
                 "core": [
-                  "run_shell_command(cat)",
-                  "run_shell_command(echo)",
-                  "run_shell_command(grep)",
-                  "run_shell_command(head)",
-                  "run_shell_command(tail)"
+                  "run_shell_command(echo)"
                 ]
               }
             }
@@ -162,9 +158,10 @@ jobs:
 
             5. **Mandatory Sanity Check**: Before finalizing your plan, you **MUST** perform a final review. Compare your proposed plan against the user's original request. If the plan deviates significantly, seems destructive, or is outside the original scope, you **MUST** halt and ask for human clarification instead of posting the plan.
 
-            6. **Resource Consciousness**: Be mindful of the number of operations you perform. Your plans should be efficient. Avoid proposing actions that would result in an excessive number of tool calls (e.g., > 50).
+             6. **Resource Consciousness**: Be mindful of the number of operations you perform. Your plans should be efficient. Avoid proposing actions that would result in an excessive number of tool calls (e.g., > 50).
 
-            7. **Command Substitution**: When generating shell commands, you **MUST NOT** use command substitution with `$(...)`, `<(...)`, or `>(...)`. This is a security measure to prevent unintended command execution.
+             7. **Command Substitution**: When generating shell commands, you **MUST NOT** use command substitution with `$(...)`, `<(...)`, or `>(...)`. This is a security measure to prevent unintended command execution.
+             8. **Output Quality**: Keep plans and final reports structured, concise, and directly tied to completed actions.
 
             -----
 
