@@ -82,7 +82,6 @@ jobs:
             --tests "app.freerouting.fixtures.Dac2020Bm01RoutingTest"
 
       - name: 'Launch Freerouting under Xvfb and capture UI screenshots for vision analysis'
-        continue-on-error: true
         run: |-
           SCREENSHOT_DIR="/tmp/ai-automator-screenshots"
           mkdir -p "${SCREENSHOT_DIR}"
@@ -101,11 +100,18 @@ jobs:
           APP_PID=$!
 
           # Wait for the Swing window to appear (up to 20 s)
+          WIN=""
           for i in $(seq 1 20); do
             WIN="$(xdotool search --onlyvisible --name "Freerouting" 2>/dev/null | head -1 || true)"
             [ -n "${WIN}" ] && break
             sleep 1
           done
+
+          if [ -z "${WIN}" ]; then
+            echo "::warning::Freerouting window not detected after 20 s — UI may not have launched. Screenshots may be blank or show only the desktop."
+          else
+            echo "Freerouting window detected (id=${WIN}) — proceeding with UI interactions."
+          fi
 
           # Screenshot 01: initial app state with tutorial board loaded
           import -window root -display :99 "${SCREENSHOT_DIR}/01-app-initial.png" 2>/dev/null || \
