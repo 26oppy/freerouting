@@ -146,7 +146,11 @@ public class RoutingJob implements Serializable, Comparable<RoutingJob> {
     // Set a file filter as the default one
     fileChooser.setFileFilter(dsnFilter);
 
-    fileChooser.showOpenDialog(p_parent);
+    int choice = fileChooser.showOpenDialog(p_parent);
+    if (choice != JFileChooser.APPROVE_OPTION) {
+      return null;
+    }
+
     return fileChooser.getSelectedFile();
   }
 

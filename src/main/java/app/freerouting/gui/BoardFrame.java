@@ -99,6 +99,7 @@ public class BoardFrame extends WindowBase {
    * The panel with the message line/status bar.
    */
   private final BoardPanelStatus message_panel;
+  private final GlobalSettings globalSettings;
   private final Locale locale;
   private final SettingsMerger settingsMerger;
   private final List<Consumer<RoutingBoard>> boardLoadedEventListeners = new ArrayList<>();
@@ -161,6 +162,7 @@ public class BoardFrame extends WindowBase {
     super(800, 150);
 
     this.routingJob = routingJob;
+    this.globalSettings = globalSettings;
     this.settingsMerger = settingsMerger;
     this.board_observers = boardObservers;
     this.locale = globalSettings.currentLocale;
@@ -288,77 +290,15 @@ public class BoardFrame extends WindowBase {
           FRAnalytics.buttonClicked("fileio_savescr", "");
           break;
         default:
-          // The file format is not supported
-          FRLogger.warn("Saving the board failed, because the selected file format is not supported.");
           break;
       }
     });
 
-    setJMenuBar(this.menubar);
-
-    // Set the toolbar panel to the top of the frame, just above the canvas.
-    this.toolbar_panel = new BoardToolbar(this, !globalSettings.featureFlags.inspectionMode);
-    this.add(this.toolbar_panel, BorderLayout.NORTH);
-
-    // Create and move the status bar one-liners (like current layer, cursor
-    // position, etc.) below the canvas.
-    this.message_panel = new BoardPanelStatus(this.locale);
-    this.add(this.message_panel, BorderLayout.SOUTH);
-
-    this.message_panel.addErrorOrWarningLabelClickedListener(() -> {
-      LogEntries logEntries = FRLogger.getLogEntries();
-
-      // Filter the log entries that are not errors or warnings
-      LogEntries filteredLogEntries = new LogEntries();
-      for (LogEntry entry : logEntries.getEntries(null, null)) {
-        if (entry.getType() == LogEntryType.Error || entry.getType() == LogEntryType.Warning
-            || entry.getType() == LogEntryType.Info) {
-          filteredLogEntries.add(entry.getType(), entry.getMessage(), entry.getTopic());
-        }
+    this.addBoardLoadedEventListener((RoutingBoard board) -> {
+      if ((this.routingJob.input != null) && (this.routingJob.input.getFile() != null)) {
+        rememberRecentInputFile(this.routingJob.input.getFile());
       }
 
-      // Show a dialog box with the latest log entries
-      JTextArea textArea = new JTextArea(filteredLogEntries.getAsString());
-      JScrollPane scrollPane = new JScrollPane(textArea);
-      scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-      scrollPane.setPreferredSize(new Dimension(1000, 600));
-
-      // Append the new log entries to the text area
-      log_entry_added_listener = (LogEntry logEntry) -> {
-        var type = logEntry.getType();
-        if (type == LogEntryType.Error || type == LogEntryType.Warning || type == LogEntryType.Info) {
-          textArea.append(logEntry + "\n");
-        }
-      };
-      logEntries.addLogEntryAddedListener(log_entry_added_listener);
-
-      int messageType = filteredLogEntries.getErrorCount() > 0 ? JOptionPane.ERROR_MESSAGE
-          : JOptionPane.WARNING_MESSAGE;
-
-      JOptionPane.showMessageDialog(null, scrollPane, tm.getText("logs_window_title"), messageType);
-    });
-
-    // Toolbar for inspected items (e.g. when a component is selected)
-    this.inspect_toolbar = new BoardToolbarInspectedItem(this);
-
-    // Screen messages are displayed in the status bar, below the canvas.
-    this.screen_messages = new ScreenMessages(this.message_panel.errorLabel, this.message_panel.warningLabel,
-        this.message_panel.statusMessage, this.message_panel.additionalMessage,
-        this.message_panel.currentLayer, this.message_panel.currentBoardScore, this.message_panel.mousePosition,
-        this.message_panel.unitLabel, this.locale);
-
-    // The scroll pane for the canvas of the routing board.
-    this.scroll_pane = new JScrollPane();
-    this.scroll_pane.setPreferredSize(new Dimension(1150, 800));
-    this.scroll_pane.setVerifyInputWhenFocusTarget(false);
-    this.add(scroll_pane, BorderLayout.CENTER);
-
-    this.board_panel = new BoardPanel(screen_messages, this, globalSettings, routingJob, settingsMerger);
-    this.scroll_pane.setViewportView(board_panel);
-
-    this.addWindowListener(new WindowStateListener());
-
-    this.addBoardLoadedEventListener((RoutingBoard board) -> {
       boolean isBoardEmpty = (board == null) || (board.components.count() == 0);
       this.menubar.fileMenu.file_save_as_menuitem.setEnabled(!isBoardEmpty);
       this.menubar.appereanceMenu.setEnabled(!isBoardEmpty);
@@ -686,6 +626,125 @@ public class BoardFrame extends WindowBase {
     fileChooser.showSaveDialog(p_parent);
 
     return fileChooser.getSelectedFile();
+  }
+
+  public void showRecentFilesDialog() {
+    boolean recentFilesChanged = RecentFiles.pruneMissingFiles(globalSettings.guiSettings.recentInputFiles);
+    if (recentFilesChanged) {
+      persistGlobalSettings();
+    }
+
+    List<File> recentFiles = RecentFiles.getRecentFiles(globalSettings.guiSettings.recentInputFiles);
+    if (recentFiles.isEmpty()) {
+      JOptionPane.showMessageDialog(this, tm.getText("recent_files_empty"), tm.getText("recent_files_title"),
+          JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+
+    String[] recentFilePaths = recentFiles
+        .stream()
+        .map(File::getAbsolutePath)
+        .toArray(String[]::new);
+    Object selectedValue = JOptionPane.showInputDialog(
+        this,
+        tm.getText("recent_files_prompt"),
+        tm.getText("recent_files_title"),
+        JOptionPane.INFORMATION_MESSAGE,
+        null,
+        recentFilePaths,
+        recentFilePaths[0]);
+
+    if (!(selectedValue instanceof String selectedPath) || selectedPath.isBlank()) {
+      return;
+    }
+
+    openDesignFile(new File(selectedPath));
+  }
+
+  private void openDesignFile(File selectedFile) {
+    if (selectedFile == null) {
+      return;
+    }
+
+    if (!selectedFile.exists()) {
+      if (RecentFiles.removeRecentFile(globalSettings.guiSettings.recentInputFiles, selectedFile)) {
+        persistGlobalSettings();
+      }
+      FRLogger.warn("The selected file no longer exists: '" + selectedFile.getPath() + "'.");
+      if (screen_messages != null) {
+        screen_messages.set_status_message(tm.getText("recent_files_missing", selectedFile.getPath()));
+      }
+      return;
+    }
+
+    try {
+      routingJob.setInput(selectedFile);
+      if (routingJob.input.format == FileFormat.UNKNOWN) {
+        FRLogger.warn("The input file format was not recognised.");
+        return;
+      }
+    } catch (Exception e) {
+      FRLogger.error("There was an error while reading the input file.", e);
+      return;
+    }
+
+    if (routingJob.input.getFile() != null) {
+      // We allow only one job in the queue for GUI sessions, so we need to remove any
+      // existing ones before adding a new one
+      String sessionId = SessionManager
+          .getInstance()
+          .getGuiSession().id.toString();
+      RoutingJobScheduler
+          .getInstance()
+          .clearJobs(sessionId);
+
+      // Enqueue the job to the routing queue
+      RoutingJobScheduler
+          .getInstance()
+          .enqueueJob(routingJob);
+
+      // Set the input directory in the global settings
+      String oldInputDirectory = globalSettings.guiSettings.inputDirectory;
+      globalSettings.guiSettings.inputDirectory = this.routingJob.input.getDirectoryPath();
+
+      // Save the global settings to the configuration file if the input directory was
+      // changed
+      if (!oldInputDirectory.equals(globalSettings.guiSettings.inputDirectory)) {
+        persistGlobalSettings();
+      }
+
+    }
+
+    // Load the file into the frame based on its recognised format
+    if ((board_panel != null) && (board_panel.board_handling != null)
+        && (routingJob.input.format != FileFormat.UNKNOWN)) {
+      switch (routingJob.input.format) {
+        case DSN:
+          this.load(routingJob.input.getData(), true, null, routingJob);
+          FRAnalytics.buttonClicked("fileio_loaddsn", this.routingJob.getInputFileDetails());
+          break;
+        case FRB:
+          this.load(routingJob.input.getData(), false, null, routingJob);
+          FRAnalytics.buttonClicked("fileio_loadfrb", this.routingJob.getInputFileDetails());
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  private void persistGlobalSettings() {
+    try {
+      GlobalSettings.saveAsJson(globalSettings);
+    } catch (IOException e) {
+      FRLogger.error("Couldn't save the global settings to the configuration file", e);
+    }
+  }
+
+  private void rememberRecentInputFile(File inputFile) {
+    if (RecentFiles.rememberRecentFile(globalSettings.guiSettings.recentInputFiles, inputFile)) {
+      persistGlobalSettings();
+    }
   }
 
   /**

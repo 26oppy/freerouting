@@ -48,6 +48,16 @@ public class BoardMenuFile extends JMenu {
         .addActionListener(_ -> FRAnalytics.buttonClicked("file_open_menuitem", file_open_menuitem.getText()));
     add(file_open_menuitem);
 
+    // File / Recent files...
+    JMenuItem file_recent_menuitem = new JMenuItem();
+    file_recent_menuitem.setText(tm.getText("recent_files"));
+    file_recent_menuitem.setToolTipText(tm.getText("recent_files_tooltip"));
+    file_recent_menuitem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK));
+    file_recent_menuitem.addActionListener(_ -> board_frame.showRecentFilesDialog());
+    file_recent_menuitem
+      .addActionListener(_ -> FRAnalytics.buttonClicked("file_recent_menuitem", file_recent_menuitem.getText()));
+    add(file_recent_menuitem);
+
     // File / Save as...
     file_save_as_menuitem = new JMenuItem();
     file_save_as_menuitem.setText(tm.getText("save_as"));
