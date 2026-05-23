@@ -24,6 +24,12 @@ public class RouterSettings implements Serializable, Cloneable {
   public FanoutSettings fanout;
   @SerializedName("copper_to_edge_clearance_um")
   public Double copperToEdgeClearanceUm;
+  @SerializedName("length_tuning")
+  public Boolean lengthTuningEnabled;
+  @SerializedName("length_tuning_default_amplitude_um")
+  public Double lengthTuningDefaultAmplitudeUm;
+  @SerializedName("length_tuning_default_pitch_um")
+  public Double lengthTuningDefaultPitchUm;
   @SerializedName("job_timeout")
   public String jobTimeoutString;
   @SerializedName("max_passes")
@@ -286,6 +292,9 @@ public class RouterSettings implements Serializable, Cloneable {
     result.maxPasses = this.maxPasses;
     result.maxItems = this.maxItems;
     result.copperToEdgeClearanceUm = this.copperToEdgeClearanceUm;
+    result.lengthTuningEnabled = this.lengthTuningEnabled;
+    result.lengthTuningDefaultAmplitudeUm = this.lengthTuningDefaultAmplitudeUm;
+    result.lengthTuningDefaultPitchUm = this.lengthTuningDefaultPitchUm;
     result.ignoreNetClasses = (this.ignoreNetClasses != null) ? this.ignoreNetClasses.clone() : null;
     result.trace_pull_tight_accuracy = this.trace_pull_tight_accuracy;
     result.enabled = this.enabled;
@@ -333,6 +342,31 @@ public class RouterSettings implements Serializable, Cloneable {
    */
   public boolean isFanoutEnabled() {
     return fanout != null && Boolean.TRUE.equals(fanout.enabled);
+  }
+
+  /**
+   * Returns whether post-route length tuning is enabled.
+   */
+  public boolean isLengthTuningEnabled() {
+    return Boolean.TRUE.equals(lengthTuningEnabled);
+  }
+
+  /**
+   * Returns the default serpentine amplitude used by the length tuner in micrometres.
+   */
+  public double getLengthTuningDefaultAmplitudeUm() {
+    return (lengthTuningDefaultAmplitudeUm != null && lengthTuningDefaultAmplitudeUm > 0)
+        ? lengthTuningDefaultAmplitudeUm
+        : 500.0;
+  }
+
+  /**
+   * Returns the default serpentine pitch used by the length tuner in micrometres.
+   */
+  public double getLengthTuningDefaultPitchUm() {
+    return (lengthTuningDefaultPitchUm != null && lengthTuningDefaultPitchUm > 0)
+        ? lengthTuningDefaultPitchUm
+        : 400.0;
   }
 
   public boolean get_vias_allowed() {

@@ -6,6 +6,7 @@ import app.freerouting.autoroute.BatchAutorouter;
 import app.freerouting.autoroute.BatchAutorouterV19;
 import app.freerouting.autoroute.BatchOptimizer;
 import app.freerouting.autoroute.BatchOptimizerMultiThreaded;
+import app.freerouting.autoroute.LengthTuner;
 import app.freerouting.autoroute.NamedAlgorithm;
 import app.freerouting.autoroute.TaskState;
 import app.freerouting.autoroute.events.BoardUpdatedEvent;
@@ -609,6 +610,13 @@ public class AutorouterAndRouteOptimizerThread extends InteractiveActionThread {
                     percentage_improvement) + "%." : "."));
         FRAnalytics.routeOptimizerFinished();
 
+      }
+
+      if (routingJob.routerSettings.isLengthTuningEnabled() && !this.isStopRequested()) {
+        routingJob.logInfo("Starting length tuning pass...");
+        new LengthTuner(routingJob).run();
+        boardManager.replaceRoutingBoard(routingJob.board);
+        bs = new BoardStatistics(boardManager.get_routing_board());
       }
 
       // Restore the board read-only state

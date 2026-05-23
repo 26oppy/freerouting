@@ -3,6 +3,7 @@ package app.freerouting.management;
 import app.freerouting.Freerouting;
 import app.freerouting.autoroute.BatchAutorouter;
 import app.freerouting.autoroute.BatchOptimizer;
+import app.freerouting.autoroute.LengthTuner;
 import app.freerouting.autoroute.NamedAlgorithm;
 import app.freerouting.autoroute.events.BoardUpdatedEvent;
 import app.freerouting.autoroute.events.BoardUpdatedEventListener;
@@ -182,6 +183,12 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
       });
       optimizer.runBatchLoop();
       job.stage = RoutingStage.IDLE;
+    }
+
+    if (job.routerSettings.isLengthTuningEnabled() && !job.thread.isStopRequested()) {
+      job.logInfo("Starting length tuning pass...");
+      new LengthTuner(job).run();
+      setJobOutputToSpecctraSes(job);
     }
 
     job.finishedAt = Instant.now();

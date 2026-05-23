@@ -83,6 +83,10 @@ public class DefaultSettings implements SettingsSource {
 
     /** Default copper-to-board-edge clearance in micrometres (0.5 mm). */
     public static final double DEFAULT_COPPER_TO_EDGE_CLEARANCE_UM = 500.0;
+    /** Default post-route length-tuning accordion amplitude in micrometres. */
+    public static final double DEFAULT_LENGTH_TUNING_AMPLITUDE_UM = 500.0;
+    /** Default post-route length-tuning accordion pitch in micrometres. */
+    public static final double DEFAULT_LENGTH_TUNING_PITCH_UM = 400.0;
 
     @Override
     public RouterSettings getSettings() {
@@ -107,6 +111,9 @@ public class DefaultSettings implements SettingsSource {
         settings.ignoreNetClasses = new String[0];
         settings.maxThreads = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
         settings.copperToEdgeClearanceUm = DEFAULT_COPPER_TO_EDGE_CLEARANCE_UM;
+        settings.lengthTuningEnabled = false;
+        settings.lengthTuningDefaultAmplitudeUm = DEFAULT_LENGTH_TUNING_AMPLITUDE_UM;
+        settings.lengthTuningDefaultPitchUm = DEFAULT_LENGTH_TUNING_PITCH_UM;
 
         // isLayerActive and isPreferredDirectionHorizontalOnLayer are left null intentionally –
         // they will be populated by DsnFileSettings (from the DSN layer count) and then

@@ -415,7 +415,9 @@ public class Network extends ScopeKeyword {
       board_net_class.set_maximum_trace_length(p_coordinate_transform.dsn_to_board(p_class.max_trace_length));
     }
     if (p_class.min_trace_length > 0) {
-      board_net_class.set_minimum_trace_length(p_coordinate_transform.dsn_to_board(p_class.min_trace_length));
+      double targetTraceLength = p_coordinate_transform.dsn_to_board(p_class.min_trace_length);
+      board_net_class.set_minimum_trace_length(targetTraceLength);
+      board_net_class.set_target_trace_length(targetTraceLength);
     }
     for (String curr_net_name : p_class.net_list) {
       Collection<app.freerouting.rules.Net> curr_net_list = p_board.rules.nets.get(curr_net_name);

@@ -33,6 +33,8 @@ public class NetClass implements Serializable, ObjectInfoPanel.Printable {
   private boolean ignore_cycles_with_areas;
   private double minimum_trace_length = 0;
   private double maximum_trace_length = 0;
+  private double target_trace_length = 0;
+  private double length_tolerance = 0;
 
   /**
    * Creates a new instance of NetClass
@@ -202,6 +204,37 @@ public class NetClass implements Serializable, ObjectInfoPanel.Printable {
    */
   public void set_maximum_trace_length(double p_value) {
     maximum_trace_length = p_value;
+  }
+
+  /**
+   * Returns the target trace length used by post-route length tuning.
+   * If the result is {@literal <=} 0, no target length is defined.
+   */
+  public double get_target_trace_length() {
+    return target_trace_length;
+  }
+
+  /**
+   * Sets the target trace length used by post-route length tuning.
+   * If p_value is {@literal <=} 0, target-length-based tuning is disabled.
+   */
+  public void set_target_trace_length(double p_value) {
+    target_trace_length = p_value;
+  }
+
+  /**
+   * Returns the allowed tolerance for the target trace length.
+   */
+  public double get_length_tolerance() {
+    return length_tolerance;
+  }
+
+  /**
+   * Sets the allowed tolerance for the target trace length.
+   * If p_value is {@literal <} 0, zero is used.
+   */
+  public void set_length_tolerance(double p_value) {
+    length_tolerance = Math.max(0, p_value);
   }
 
   /**
