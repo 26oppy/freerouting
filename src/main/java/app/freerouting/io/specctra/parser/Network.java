@@ -616,12 +616,8 @@ public class Network extends ScopeKeyword {
     }
     for (String cur_layer_name : p_use_layer) {
       int curr_no = p_layer_structure.get_no(cur_layer_name);
-      p_net_class.set_active_routing_layer(curr_no, true);
-    }
-    // currently all inactive layers have tracewidth 0.
-    for (int i = 0; i < p_layer_structure.arr.length; i++) {
-      if (!p_net_class.is_active_routing_layer(i)) {
-        p_net_class.set_trace_half_width(i, 0);
+      if (curr_no >= 0) {
+        p_net_class.set_active_routing_layer(curr_no, true);
       }
     }
   }

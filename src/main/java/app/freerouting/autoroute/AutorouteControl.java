@@ -29,6 +29,7 @@ public class AutorouteControl {
    * Defines for each layer, if it may be used for routing.
    */
   final public boolean[] layer_active;
+  final public boolean[] net_class_layer_allowed;
   final int layer_count;
   /**
    * The currently used trace half widths in the autoroute algorithm on each layer
@@ -149,6 +150,7 @@ public class AutorouteControl {
     trace_half_width = new int[layer_count];
     compensated_trace_half_width = new int[layer_count];
     layer_active = new boolean[layer_count];
+    net_class_layer_allowed = new boolean[layer_count];
     vias_allowed = p_settings.get_vias_allowed();
     via_radius_arr = new double[layer_count];
     add_via_costs = new ViaCost[layer_count];
@@ -202,7 +204,12 @@ public class AutorouteControl {
         trace_half_width[i] = p_board.rules.get_trace_half_width(1, i);
       }
       compensated_trace_half_width[i] = trace_half_width[i] + p_board.rules.clearance_matrix.clearance_compensation_value(trace_clearance_class_no, i);
-      if (curr_net_class != null && !curr_net_class.is_active_routing_layer(i)) {
+      if (curr_net_class != null) {
+        net_class_layer_allowed[i] = curr_net_class.isLayerAllowed(i);
+      } else {
+        net_class_layer_allowed[i] = true;
+      }
+      if (curr_net_class != null && !net_class_layer_allowed[i]) {
         layer_active[i] = false;
       }
     }
@@ -254,6 +261,27 @@ public class AutorouteControl {
     }
     min_normal_via_cost = p_via_costs * via_cost_factor;
     min_cheap_via_cost = 0.8 * min_normal_via_cost;
+  }
+
+  public boolean is_net_class_layer_allowed(int layerNo) {
+    if (layerNo < 0 || layerNo >= net_class_layer_allowed.length) {
+      return false;
+    }
+    return net_class_layer_allowed[layerNo];
+  }
+
+  public boolean is_via_span_allowed_by_net_class(int fromLayer, int toLayer) {
+    if (fromLayer < 0 || toLayer < 0 || fromLayer >= layer_count || toLayer >= layer_count) {
+      return false;
+    }
+    int start = Math.min(fromLayer, toLayer);
+    int end = Math.max(fromLayer, toLayer);
+    for (int layer = start; layer <= end; layer++) {
+      if (!is_net_class_layer_allowed(layer)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static boolean isPureSmdNet(RoutingBoard p_board, int p_net_no) {

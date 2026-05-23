@@ -203,6 +203,11 @@ public class AutorouteEngine {
       return new AutorouteAttemptResult(AutorouteAttemptState.FAILED, "Failed to route connection between "
           + sourceItems + " and " + targetItems + ", because some of their layers are disabled.");
     }
+    if (!p_ctrl.is_net_class_layer_allowed(autoroute_result.start_layer)
+        || !p_ctrl.is_net_class_layer_allowed(autoroute_result.target_layer)) {
+      return new AutorouteAttemptResult(AutorouteAttemptState.FAILED, "Failed to route connection between "
+          + sourceItems + " and " + targetItems + ", because net-class layer restrictions were violated.");
+    }
 
     if (autoroute_result.connection_items == null) {
       FRLogger.debug("AutorouteEngine.autoroute_connection: result_items != null expected");

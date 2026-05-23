@@ -215,6 +215,19 @@ public class NetClass implements Serializable, ObjectInfoPanel.Printable {
   }
 
   /**
+   * Returns whether routing is allowed on the specified layer for this net class.
+   */
+  public boolean isLayerAllowed(int layerId) {
+    if (layerId < 0) {
+      return false;
+    }
+    if (this.active_routing_layer_arr == null || layerId >= this.active_routing_layer_arr.length) {
+      return true;
+    }
+    return this.active_routing_layer_arr[layerId];
+  }
+
+  /**
    * Sets the layer with index p_layer_no to p_active.
    */
   public void set_active_routing_layer(int p_layer_no, boolean p_active) {
@@ -222,6 +235,16 @@ public class NetClass implements Serializable, ObjectInfoPanel.Printable {
       return;
     }
     this.active_routing_layer_arr[p_layer_no] = p_active;
+  }
+
+  /**
+   * Enables/disables routing permission on the specified layer for this net class.
+   */
+  public void setLayerAllowed(int layerId, boolean allowed) {
+    if (layerId < 0 || layerId >= this.active_routing_layer_arr.length) {
+      return;
+    }
+    this.active_routing_layer_arr[layerId] = allowed;
   }
 
   /**

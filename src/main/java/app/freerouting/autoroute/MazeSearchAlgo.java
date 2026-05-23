@@ -297,6 +297,9 @@ public class MazeSearchAlgo {
     // Complete the neighbour rooms to make sure, that the
     // doors of this room will not change later on.
     int layer_no = p_list_element.next_room.get_layer();
+    if (!ctrl.is_net_class_layer_allowed(layer_no)) {
+      return true;
+    }
 
     boolean layer_active = ctrl.layer_active[layer_no];
     if (!layer_active) {
@@ -999,6 +1002,9 @@ public class MazeSearchAlgo {
     int via_upper_bound = -1;
     ExpansionDrill curr_drill = (ExpansionDrill) p_list_element.door;
     int from_layer = curr_drill.first_layer + p_list_element.section_no_of_door;
+    if (!ctrl.is_net_class_layer_allowed(from_layer)) {
+      return;
+    }
     boolean smd_attached_on_component_side = false;
     boolean smd_attached_on_solder_side = false;
     boolean room_ripped;
@@ -1079,6 +1085,9 @@ public class MazeSearchAlgo {
       if (to_layer == from_layer) {
         continue;
       }
+      if (!ctrl.is_net_class_layer_allowed(to_layer)) {
+        continue;
+      }
       // check, there is a fitting via mask.
       int curr_first_layer;
       int curr_last_layer;
@@ -1095,9 +1104,12 @@ public class MazeSearchAlgo {
         if (curr_first_layer >= curr_via_info.from_layer && curr_last_layer <= curr_via_info.to_layer
             && curr_via_info.from_layer >= via_lower_bound && curr_via_info.to_layer <= via_upper_bound) {
           boolean mask_ok = true;
+          if (!ctrl.is_via_span_allowed_by_net_class(curr_first_layer, curr_last_layer)) {
+            mask_ok = false;
+          }
           if (curr_via_info.from_layer == 0 && smd_attached_on_component_side
               || curr_via_info.to_layer == ctrl.layer_count - 1 && smd_attached_on_solder_side) {
-            mask_ok = curr_via_info.attach_smd_allowed;
+            mask_ok = mask_ok && curr_via_info.attach_smd_allowed;
           }
           if (mask_ok) {
             mask_found = true;

@@ -671,9 +671,11 @@ public class WindowNetClasses extends BoardSavableSubWindow {
         }
         int curr_half_width;
         boolean is_active;
+        boolean deactivate_layer_selection = false;
         if (curr_value == 0) {
           curr_half_width = 0;
           is_active = false;
+          deactivate_layer_selection = true;
         } else {
           curr_half_width = (int) Math.round(board_frame.board_panel.board_handling.coordinate_transform.user_to_board(0.5 * curr_value));
           if (curr_half_width <= 0) {
@@ -688,14 +690,26 @@ public class WindowNetClasses extends BoardSavableSubWindow {
         NetClass curr_net_class = board_rules.net_classes.get(p_row);
 
         if (layer_index == ComboBoxLayer.ALL_LAYER_INDEX) {
-          curr_net_class.set_trace_half_width(curr_half_width);
-          curr_net_class.set_all_layers_active(is_active);
+          if (deactivate_layer_selection) {
+            curr_net_class.set_all_layers_active(false);
+          } else {
+            curr_net_class.set_trace_half_width(curr_half_width);
+            curr_net_class.set_all_layers_active(is_active);
+          }
         } else if (layer_index == ComboBoxLayer.INNER_LAYER_INDEX) {
-          curr_net_class.set_trace_half_width_on_inner(curr_half_width);
-          curr_net_class.set_all_inner_layers_active(is_active);
+          if (deactivate_layer_selection) {
+            curr_net_class.set_all_inner_layers_active(false);
+          } else {
+            curr_net_class.set_trace_half_width_on_inner(curr_half_width);
+            curr_net_class.set_all_inner_layers_active(is_active);
+          }
         } else {
-          curr_net_class.set_trace_half_width(layer_index, curr_half_width);
-          curr_net_class.set_active_routing_layer(layer_index, is_active);
+          if (deactivate_layer_selection) {
+            curr_net_class.set_active_routing_layer(layer_index, false);
+          } else {
+            curr_net_class.set_trace_half_width(layer_index, curr_half_width);
+            curr_net_class.set_active_routing_layer(layer_index, is_active);
+          }
         }
       } else if (p_col == ColumnName.ON_LAYER.ordinal()) {
         if (!(p_value instanceof ComboBoxLayer.Layer)) {

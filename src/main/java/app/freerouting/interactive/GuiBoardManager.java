@@ -806,9 +806,6 @@ public class GuiBoardManager extends HeadlessBoardManager {
    * @see NetClass#is_active_routing_layer(int)
    */
   public boolean is_active_routing_layer(int p_net_no, int p_layer) {
-    if (interactiveSettings.get_manual_rule_selection()) {
-      return true;
-    }
     Net curr_net = this.board.rules.nets.get(p_net_no);
     if (curr_net == null) {
       return true;
@@ -817,7 +814,7 @@ public class GuiBoardManager extends HeadlessBoardManager {
     if (curr_net_class == null) {
       return true;
     }
-    return curr_net_class.is_active_routing_layer(p_layer);
+    return curr_net_class.isLayerAllowed(p_layer);
   }
 
   /**

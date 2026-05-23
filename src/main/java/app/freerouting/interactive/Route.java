@@ -252,6 +252,9 @@ public class Route {
     boolean result = true;
     int min_layer = Math.min(this.layer, p_to_layer);
     int max_layer = Math.max(this.layer, p_to_layer);
+    if (!are_all_layers_active_between(min_layer, max_layer)) {
+      return false;
+    }
     boolean via_found = false;
     for (int i = 0; i < this.via_rule.via_count(); i++) {
       ViaInfo curr_via_info = this.via_rule.get_via(i);
@@ -275,6 +278,15 @@ public class Route {
       this.layer = p_to_layer;
     }
     return result;
+  }
+
+  private boolean are_all_layers_active_between(int fromLayer, int toLayer) {
+    for (int currLayer = fromLayer; currLayer <= toLayer; currLayer++) {
+      if (!this.layer_active[currLayer]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
