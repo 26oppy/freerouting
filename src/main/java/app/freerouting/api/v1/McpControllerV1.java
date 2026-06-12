@@ -81,7 +81,7 @@ public class McpControllerV1 extends BaseController {
 
     UUID userId;
     try {
-      userId = AuthenticateUser();
+      userId = authenticateUser();
     } catch (Exception e) {
       return Response.ok(error(id, -32602, "Authentication failed"))
           .header(CorrelationIdFilter.HEADER_NAME, correlationId)
@@ -121,7 +121,7 @@ public class McpControllerV1 extends BaseController {
   @Path("/events")
   @Produces(MediaType.SERVER_SENT_EVENTS)
   public void events(@Context SseEventSink sink, @Context Sse sse) {
-    AuthenticateUser();
+    authenticateUser();
 
     McpRealtimeBridge.registerSseClient(sink, sse);
     JsonObject hello = new JsonObject();

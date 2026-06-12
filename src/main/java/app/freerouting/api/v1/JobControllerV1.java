@@ -64,7 +64,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>GET  {@code /v1/jobs/{jobId}/drc} — retrieve a KiCad-compatible DRC report.</li>
  * </ol>
  *
- * <p>All endpoints authenticate the caller via {@link app.freerouting.api.BaseController#AuthenticateUser()}
+ * <p>All endpoints authenticate the caller via {@link app.freerouting.api.BaseController#authenticateUser()}
  * and verify that the referenced session belongs to that caller.</p>
  */
 @Path("/v1/jobs")
@@ -96,7 +96,7 @@ public class JobControllerV1 extends BaseController {
   @Consumes(MediaType.APPLICATION_JSON)
   public Response enqueueJob(String requestBody) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     RoutingJob job = GSON.fromJson(requestBody, RoutingJob.class);
     if (job == null) {
@@ -171,7 +171,7 @@ public class JobControllerV1 extends BaseController {
   public Response listJobs(
       @Parameter(description = "Session ID or 'all' for all jobs", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("sessionId") String sessionId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the session with the id of sessionId
     Session session = SessionManager
@@ -214,7 +214,7 @@ public class JobControllerV1 extends BaseController {
   public Response getJob(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Enqueue the job
     var job = RoutingJobScheduler
@@ -267,7 +267,7 @@ public class JobControllerV1 extends BaseController {
   public Response startJob(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -334,7 +334,7 @@ public class JobControllerV1 extends BaseController {
   public Response cancelJob(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -394,7 +394,7 @@ public class JobControllerV1 extends BaseController {
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId,
       String requestBody) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -466,7 +466,7 @@ public class JobControllerV1 extends BaseController {
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId,
       String requestBody) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -566,7 +566,7 @@ public class JobControllerV1 extends BaseController {
   public Response uploadInputJson(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId,
       String jsonBody) {
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     var job = RoutingJobScheduler.getInstance().getJob(jobId);
     if (job == null) {
@@ -645,7 +645,7 @@ public class JobControllerV1 extends BaseController {
   public Response downloadOutput(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -756,7 +756,7 @@ public class JobControllerV1 extends BaseController {
   @Produces(MediaType.APPLICATION_JSON)
   public Response downloadOutputJson(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId) {
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     var job = RoutingJobScheduler.getInstance().getJob(jobId);
     if (job == null) {
@@ -854,7 +854,7 @@ public class JobControllerV1 extends BaseController {
       @Context SseEventSink eventSink,
       @Context Sse sse) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -953,7 +953,7 @@ public class JobControllerV1 extends BaseController {
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId,
       @Context SseEventSink eventSink,
       @Context Sse sse) {
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     var job = RoutingJobScheduler.getInstance().getJob(jobId);
     if (job == null || SessionManager.getInstance().getSession(job.sessionId.toString(), userId) == null) {
@@ -1025,7 +1025,7 @@ public class JobControllerV1 extends BaseController {
   public Response logs(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -1081,7 +1081,7 @@ public class JobControllerV1 extends BaseController {
       @Context SseEventSink eventSink,
       @Context Sse sse) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler
@@ -1161,7 +1161,7 @@ public class JobControllerV1 extends BaseController {
   public Response getDrcReport(
       @Parameter(description = "Unique identifier of the job", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("jobId") String jobId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Get the job based on the jobId
     var job = RoutingJobScheduler

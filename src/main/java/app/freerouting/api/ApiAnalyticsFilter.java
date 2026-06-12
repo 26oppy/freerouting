@@ -63,7 +63,7 @@ public class ApiAnalyticsFilter implements ContainerRequestFilter, ContainerResp
     requestContext.setProperty(PROP_PATH, requestContext.getUriInfo().getPath(true));
 
     // Resolve the caller's UUID from the standard profile header (mirrors
-    // BaseController.AuthenticateUser() without throwing on failure).
+    // BaseController.authenticateUser() without throwing on failure).
     String userIdHeader = requestContext.getHeaderString("Freerouting-Profile-ID");
     if (userIdHeader != null && !userIdHeader.isBlank()) {
       try {

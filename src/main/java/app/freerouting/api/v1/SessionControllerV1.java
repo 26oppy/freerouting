@@ -44,7 +44,7 @@ import java.util.UUID;
  *   <li>{@code GET  /v1/sessions/{sessionId}/logs} — retrieve all log entries for a session.</li>
  * </ul>
  *
- * <p>All endpoints authenticate the caller via {@link app.freerouting.api.BaseController#AuthenticateUser()}
+ * <p>All endpoints authenticate the caller via {@link app.freerouting.api.BaseController#authenticateUser()}
  * using the {@code Freerouting-Profile-ID} request header.</p>
  */
 @Path("/v1/sessions")
@@ -66,7 +66,7 @@ public class SessionControllerV1 extends BaseController {
   @Produces(MediaType.APPLICATION_JSON)
   public Response listSessions() {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // filter the list of sessions to only include the ones that the user has access
     // to
@@ -97,7 +97,7 @@ public class SessionControllerV1 extends BaseController {
   @Produces(MediaType.APPLICATION_JSON)
   public Response createSession() {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // The EnvironmentHostValidationFilter guarantees this header is present and
     // well-formed (<name>/<version>) before the controller is reached.
@@ -125,7 +125,7 @@ public class SessionControllerV1 extends BaseController {
   public Response getSession(
       @Parameter(description = "Unique identifier of the session", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("sessionId") String sessionId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Return one session with the id of sessionId
     Session session = SessionManager.getInstance().getSession(sessionId, userId);
@@ -149,7 +149,7 @@ public class SessionControllerV1 extends BaseController {
   public Response logs(
       @Parameter(description = "Unique identifier of the session", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("sessionId") String sessionId) {
     // Authenticate the user
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
 
     // Return one session with the id of sessionId
     Session session = SessionManager.getInstance().getSession(sessionId, userId);
@@ -175,7 +175,7 @@ public class SessionControllerV1 extends BaseController {
   @Produces(MediaType.APPLICATION_JSON)
   public Response monitorSession(
       @Parameter(description = "Unique identifier of the session", example = "550e8400-e29b-41d4-a716-446655440000") @PathParam("sessionId") String sessionId) {
-    UUID userId = AuthenticateUser();
+    UUID userId = authenticateUser();
     Session session = SessionManager.getInstance().getSession(sessionId, userId);
     if (session == null) {
       return Response.status(Response.Status.NOT_FOUND).entity("{\"error\":\"Session not found\"}").build();

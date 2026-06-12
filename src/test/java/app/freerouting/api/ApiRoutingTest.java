@@ -228,7 +228,7 @@ class ApiRoutingTest {
 
   /**
    * Returns an {@link HttpRequest.Builder} pre-populated with the authentication headers
-   * required by {@code ApiKeyValidationFilter} and {@code BaseController.AuthenticateUser()}.
+   * required by {@code ApiKeyValidationFilter} and {@code BaseController.authenticateUser()}.
    */
   private HttpRequest.Builder authenticatedRequest(URI uri) {
     return HttpRequest.newBuilder(uri)
