@@ -602,21 +602,23 @@ public final class BoardRenderer {
                 maxClearanceLookupBoard,
                 maxMatrixClearance + 100.0 * area.board.communication.getResolution(Unit.UM));
       }
-      double clearanceScreenPx =
-          graphicsContext.coordinateTransform.boardToScreen(maxClearanceLookupBoard);
-      boolean useSimpleFill =
-          clearanceScreenPx < 15.0 || graphicsContext.isSimplifiedPlaneRendering();
-      if (useSimpleFill) {
-        java.awt.geom.Area cachedFill = area.getCachedDetailedFillArea();
-        if (cachedFill != null && !cachedFill.isEmpty()) {
-          renderDetailedFillArea(cachedFill, graphics, graphicsContext, color, fillOpacity);
-        } else {
-          graphicsContext.fillArea(area.getArea(), graphics, color, fillOpacity);
-        }
+      if (graphicsContext.isSimplifiedPlaneRendering()) {
+        graphicsContext.fillArea(area.getArea(), graphics, color, fillOpacity);
       } else {
-        java.awt.geom.Area cachedFill = area.getDetailedFillArea(maxClearanceLookupBoard, layer);
-        if (cachedFill != null && !cachedFill.isEmpty()) {
-          renderDetailedFillArea(cachedFill, graphics, graphicsContext, color, fillOpacity);
+        double clearanceScreenPx =
+            graphicsContext.coordinateTransform.boardToScreen(maxClearanceLookupBoard);
+        if (clearanceScreenPx < 15.0) {
+          java.awt.geom.Area cachedFill = area.getCachedDetailedFillArea();
+          if (cachedFill != null && !cachedFill.isEmpty()) {
+            renderDetailedFillArea(cachedFill, graphics, graphicsContext, color, fillOpacity);
+          } else {
+            graphicsContext.fillArea(area.getArea(), graphics, color, fillOpacity);
+          }
+        } else {
+          java.awt.geom.Area cachedFill = area.getDetailedFillArea(maxClearanceLookupBoard, layer);
+          if (cachedFill != null && !cachedFill.isEmpty()) {
+            renderDetailedFillArea(cachedFill, graphics, graphicsContext, color, fillOpacity);
+          }
         }
       }
     }
@@ -645,18 +647,19 @@ public final class BoardRenderer {
             py.getY() - p0.getY(),
             p0.getX(),
             p0.getY());
-    java.awt.geom.Area screenArea = cachedFill.createTransformedArea(boardToScreen);
-    java.awt.Graphics2D graphics2D = (java.awt.Graphics2D) graphics;
-    java.awt.Paint oldPaint = graphics2D.getPaint();
-    java.awt.Composite oldComposite = graphics2D.getComposite();
-    graphics2D.setColor(color);
-    graphics2D.setComposite(
-        java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, (float) fillOpacity));
-    graphics2D.setRenderingHint(
-        java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-    graphics2D.fill(screenArea);
-    graphics2D.setPaint(oldPaint);
-    graphics2D.setComposite(oldComposite);
+    java.awt.Graphics2D g2d = (java.awt.Graphics2D) graphics.create();
+    try {
+      g2d.setColor(color);
+      g2d.setComposite(
+          java.awt.AlphaComposite.getInstance(
+              java.awt.AlphaComposite.SRC_OVER, (float) fillOpacity));
+      g2d.setRenderingHint(
+          java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+      g2d.transform(boardToScreen);
+      g2d.fill(cachedFill);
+    } finally {
+      g2d.dispose();
+    }
   }
 
   private static int virtualLayerFor(ComponentOutline outline) {

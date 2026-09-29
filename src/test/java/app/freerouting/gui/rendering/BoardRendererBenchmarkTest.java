@@ -293,4 +293,277 @@ class BoardRendererBenchmarkTest {
           detailedMs);
     }
   }
+
+  @Test
+  void benchmarkPanningSingleVariable() throws Exception {
+    String fixturePath =
+        "scripts/benchmark/fixtures/PCBench/kitspace_EEZ%20DIB%20MCU%20r1B2/reference-routed.dsn";
+    java.io.File file = new java.io.File(fixturePath);
+    if (!file.exists()) {
+      return;
+    }
+    BasicBoard board = loadBoard(fixturePath);
+    IntBox designBounds = board.getBoundingBox();
+
+    // Simulate 3x zoom level: panel size is 3072x2304, viewport is 1024x768
+    Dimension panelSize = new Dimension(3072, 2304);
+    GraphicsContext gc =
+        new GraphicsContext(designBounds, panelSize, board.layerStructure, Locale.ENGLISH);
+
+    BufferedImage image = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+
+    // Warm-up renderer & caches
+    Graphics2D gWarm = image.createGraphics();
+    try {
+      gWarm.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+      BoardRenderer.draw(board, gWarm, gc);
+    } finally {
+      gWarm.dispose();
+    }
+
+    int steps = 20;
+    int stepDx = 50;
+    int stepDy = 30;
+
+    // Test 1: Standard panning (current BoardRenderer.draw with detailed cached fill)
+    gc.setSimplifiedPlaneRendering(false);
+    long t1Start = System.nanoTime();
+    for (int i = 0; i < steps; i++) {
+      int viewX = 200 + i * stepDx;
+      int viewY = 200 + i * stepDy;
+      Graphics2D g = image.createGraphics();
+      try {
+        g.setClip(viewX, viewY, IMAGE_WIDTH, IMAGE_HEIGHT);
+        BoardRenderer.draw(board, g, gc);
+      } finally {
+        g.dispose();
+      }
+    }
+    double t1Ms = ((System.nanoTime() - t1Start) / 1_000_000.0) / steps;
+
+    // Test 2: Panning with simplifiedPlaneRendering = true
+    gc.setSimplifiedPlaneRendering(true);
+    long t2Start = System.nanoTime();
+    for (int i = 0; i < steps; i++) {
+      int viewX = 200 + i * stepDx;
+      int viewY = 200 + i * stepDy;
+      Graphics2D g = image.createGraphics();
+      try {
+        g.setClip(viewX, viewY, IMAGE_WIDTH, IMAGE_HEIGHT);
+        BoardRenderer.draw(board, g, gc);
+      } finally {
+        g.dispose();
+      }
+    }
+    double t2Ms = ((System.nanoTime() - t2Start) / 1_000_000.0) / steps;
+
+    // Test 3: Spatial Index Query alone for each pan frame (no rendering)
+    ItemSpatialIndex spatialIndex = ItemSpatialIndex.get(board);
+    spatialIndex.updateIfStale();
+    long t3Start = System.nanoTime();
+    int queryItemCount = 0;
+    for (int i = 0; i < steps; i++) {
+      int viewX = 200 + i * stepDx;
+      int viewY = 200 + i * stepDy;
+      Rectangle clipRect = new Rectangle(viewX, viewY, IMAGE_WIDTH, IMAGE_HEIGHT);
+      IntBox clipBox = gc.coordinateTransform.screenToBoard(clipRect);
+      List<Item> p1 = spatialIndex.query(BoardRenderer.MIN_DRAW_PRIORITY, clipBox);
+      List<Item> p3 = spatialIndex.query(BoardRenderer.MAX_DRAW_PRIORITY, clipBox);
+      queryItemCount += p1.size() + p3.size();
+    }
+    double t3Ms = ((System.nanoTime() - t3Start) / 1_000_000.0) / steps;
+    int avgQueriedItems = queryItemCount / steps;
+
+    // Test 4: Panning with only Traces & Vias (MAX_DRAW_PRIORITY only, no planes, no labels)
+    long t4Start = System.nanoTime();
+    for (int i = 0; i < steps; i++) {
+      int viewX = 200 + i * stepDx;
+      int viewY = 200 + i * stepDy;
+      Rectangle clipRect = new Rectangle(viewX, viewY, IMAGE_WIDTH, IMAGE_HEIGHT);
+      IntBox clipBox = gc.coordinateTransform.screenToBoard(clipRect);
+      List<Item> p3 = spatialIndex.query(BoardRenderer.MAX_DRAW_PRIORITY, clipBox);
+      Graphics2D g = image.createGraphics();
+      try {
+        g.setClip(viewX, viewY, IMAGE_WIDTH, IMAGE_HEIGHT);
+        for (Item item : p3) {
+          BoardRenderer.drawOverlayItem(item, g, gc);
+        }
+      } finally {
+        g.dispose();
+      }
+    }
+    double t4Ms = ((System.nanoTime() - t4Start) / 1_000_000.0) / steps;
+
+    System.out.printf(
+        Locale.US,
+        "%n=== SINGLE-VARIABLE PANNING BENCHMARK on [%s] ===%n"
+            + "Total board items: %d%n"
+            + "Average visible items in viewport: %d%n"
+            + "1. Standard Full Render (detailed planes): %.2f ms / frame (%.1f FPS)%n"
+            + "2. Simplified Plane Render:              %.2f ms / frame (%.1f FPS)%n"
+            + "3. Spatial Index Query Time alone:         %.3f ms / frame%n"
+            + "4. Traces & Vias only (no planes/labels):  %.2f ms / frame (%.1f FPS)%n"
+            + "========================================================%n%n",
+        file.getName(),
+        board.getItems().size(),
+        avgQueriedItems,
+        t1Ms,
+        1000.0 / t1Ms,
+        t2Ms,
+        1000.0 / t2Ms,
+        t3Ms,
+        t4Ms,
+        1000.0 / t4Ms);
+  }
+
+  @Test
+  void benchmarkCopperPlaneFillTechniques() throws Exception {
+    String fixturePath =
+        "scripts/benchmark/fixtures/PCBench/kitspace_EEZ%20DIB%20MCU%20r1B2/reference-routed.dsn";
+    java.io.File file = new java.io.File(fixturePath);
+    if (!file.exists()) {
+      return;
+    }
+    BasicBoard board = loadBoard(fixturePath);
+    IntBox designBounds = board.getBoundingBox();
+    GraphicsContext gc =
+        new GraphicsContext(
+            designBounds,
+            new Dimension(IMAGE_WIDTH, IMAGE_HEIGHT),
+            board.layerStructure,
+            Locale.ENGLISH);
+
+    // Warm-up and populate fill caches on all conduction areas
+    BufferedImage dummyImg =
+        new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D gWarm = dummyImg.createGraphics();
+    try {
+      gWarm.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+      BoardRenderer.draw(board, gWarm, gc);
+    } finally {
+      gWarm.dispose();
+    }
+
+    List<app.freerouting.board.model.items.ConductionArea> planes =
+        board.getItems().stream()
+            .filter(app.freerouting.board.model.items.ConductionArea.class::isInstance)
+            .map(app.freerouting.board.model.items.ConductionArea.class::cast)
+            .filter(app.freerouting.board.model.items.ConductionArea::getIsFilled)
+            .toList();
+
+    var p0 = gc.coordinateTransform.boardToScreen(app.freerouting.geometry.planar.FloatPoint.ZERO);
+    var px =
+        gc.coordinateTransform.boardToScreen(new app.freerouting.geometry.planar.FloatPoint(1, 0));
+    var py =
+        gc.coordinateTransform.boardToScreen(new app.freerouting.geometry.planar.FloatPoint(0, 1));
+    var boardToScreen =
+        new java.awt.geom.AffineTransform(
+            px.getX() - p0.getX(),
+            px.getY() - p0.getY(),
+            py.getX() - p0.getX(),
+            py.getY() - p0.getY(),
+            p0.getX(),
+            p0.getY());
+
+    int iters = 30;
+
+    // Technique A: Area.createTransformedArea() + g.fill()
+    BufferedImage imgA = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+    long tA = System.nanoTime();
+    for (int it = 0; it < iters; it++) {
+      Graphics2D g = imgA.createGraphics();
+      try {
+        g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        g.setRenderingHint(
+            java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        for (var plane : planes) {
+          java.awt.geom.Area cached = plane.getCachedDetailedFillArea();
+          if (cached != null && !cached.isEmpty()) {
+            java.awt.geom.Area screen = cached.createTransformedArea(boardToScreen);
+            g.setColor(java.awt.Color.RED);
+            g.fill(screen);
+          }
+        }
+      } finally {
+        g.dispose();
+      }
+    }
+    double msA = ((System.nanoTime() - tA) / 1_000_000.0) / iters;
+
+    // Technique B: g.transform(boardToScreen) + g.fill(cached)
+    BufferedImage imgB = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+    long tB = System.nanoTime();
+    for (int it = 0; it < iters; it++) {
+      Graphics2D g = imgB.createGraphics();
+      try {
+        g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        g.setRenderingHint(
+            java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        for (var plane : planes) {
+          java.awt.geom.Area cached = plane.getCachedDetailedFillArea();
+          if (cached != null && !cached.isEmpty()) {
+            Graphics2D gSub = (Graphics2D) g.create();
+            try {
+              gSub.transform(boardToScreen);
+              gSub.setColor(java.awt.Color.RED);
+              gSub.fill(cached);
+            } finally {
+              gSub.dispose();
+            }
+          }
+        }
+      } finally {
+        g.dispose();
+      }
+    }
+    double msB = ((System.nanoTime() - tB) / 1_000_000.0) / iters;
+
+    // Technique C: gc.fillArea(plane.getArea()) [simplified solid fill]
+    BufferedImage imgC = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+    long tC = System.nanoTime();
+    for (int it = 0; it < iters; it++) {
+      Graphics2D g = imgC.createGraphics();
+      try {
+        g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        for (var plane : planes) {
+          gc.fillArea(plane.getArea(), g, java.awt.Color.RED, 1.0);
+        }
+      } finally {
+        g.dispose();
+      }
+    }
+    double msC = ((System.nanoTime() - tC) / 1_000_000.0) / iters;
+
+    // Verify visual fidelity between Technique A and Technique B
+    int[] pxA = imgA.getRGB(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, null, 0, IMAGE_WIDTH);
+    int[] pxB = imgB.getRGB(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, null, 0, IMAGE_WIDTH);
+    int diffCount = 0;
+    for (int i = 0; i < pxA.length; i++) {
+      if (pxA[i] != pxB[i]) {
+        diffCount++;
+      }
+    }
+    double diffPct = (diffCount * 100.0) / pxA.length;
+
+    System.out.printf(
+        Locale.US,
+        "%n=== COPPER POUR FILL TECHNIQUES (%d zones) ===%n"
+            + "Technique A (Area.createTransformedArea): %.2f ms / frame%n"
+            + "Technique B (g2d.transform directly):    %.2f ms / frame (%.1fx faster)%n"
+            + "Technique C (solid polygon fill):        %.2f ms / frame (%.1fx faster)%n"
+            + "Pixel mismatch between A and B:           %d px (%.3f%%)%n"
+            + "==============================================%n%n",
+        planes.size(),
+        msA,
+        msB,
+        msA / msB,
+        msC,
+        msA / msC,
+        diffCount,
+        diffPct);
+
+    assertTrue(
+        diffPct < 0.1,
+        "Technique B must visually match Technique A (<0.1% subpixel antialias diff)");
+  }
 }

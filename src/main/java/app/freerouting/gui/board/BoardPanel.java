@@ -274,13 +274,11 @@ public class BoardPanel extends JPanel {
    */
   private Robot robot;
 
-  /**
-   * Starting position for middle mouse button drag operation.
-   *
-   * <p>Non-null while middle button panning is in progress. Used to calculate scroll delta during
-   * drag.
-   */
-  private Point middleDragPosition;
+  private static final long PAN_REPAINT_THROTTLE_MS = 16; // ~60 fps max
+  private Point lastMiddleDragScreenPoint;
+  private long lastPanRepaintTime;
+  private int accumulatedPanDx;
+  private int accumulatedPanDy;
 
   /**
    * Custom crosshair cursor for precise positioning, or null for standard cursor.
@@ -391,14 +389,15 @@ public class BoardPanel extends JPanel {
           @Override
           public void mouseReleased(MouseEvent evt) {
             boardHandling.buttonReleased();
-            if (middleDragPosition != null) {
+            if (lastMiddleDragScreenPoint != null) {
+              applyAccumulatedPan();
               // Restore the detailed copper-pour rendering now that panning has ended.
               if (boardHandling != null && boardHandling.graphicsContext != null) {
                 boardHandling.graphicsContext.setSimplifiedPlaneRendering(false);
               }
               repaint();
             }
-            middleDragPosition = null;
+            lastMiddleDragScreenPoint = null;
           }
         });
     addMouseWheelListener(
@@ -512,7 +511,7 @@ public class BoardPanel extends JPanel {
    * @see #zoom(double, Point2D)
    */
   public void zoomWithMouseWheel(Point2D point, int wheelRotation) {
-    if (this.middleDragPosition != null || wheelRotation == 0) {
+    if (this.lastMiddleDragScreenPoint != null || wheelRotation == 0) {
       return; // scrolling with the middle mouse button in progress
     }
     double zoomFactor = 1 - 0.1 * wheelRotation;
@@ -523,8 +522,11 @@ public class BoardPanel extends JPanel {
   private void mousePressedAction(MouseEvent evt) {
     if (evt.getButton() == 1) {
       boardHandling.mousePressed(evt.getPoint());
-    } else if (evt.getButton() == 2 && middleDragPosition == null) {
-      middleDragPosition = new Point(evt.getPoint());
+    } else if (evt.getButton() == 2 && lastMiddleDragScreenPoint == null) {
+      lastMiddleDragScreenPoint = getScreenLocationSafe(evt);
+      lastPanRepaintTime = System.currentTimeMillis();
+      accumulatedPanDx = 0;
+      accumulatedPanDy = 0;
       // While panning, render copper pours as fast solid fills (same mechanism used
       // for the first paint after load) so that the expensive per-frame clearance
       // CSG / transformed-area fill is skipped during the drag. The detailed view
@@ -536,7 +538,7 @@ public class BoardPanel extends JPanel {
   }
 
   private void mouseDraggedAction(MouseEvent evt) {
-    if (middleDragPosition != null) {
+    if (lastMiddleDragScreenPoint != null) {
       scrollMiddleMouse(evt);
     } else {
       boardHandling.mouseDragged(evt.getPoint());
@@ -974,23 +976,48 @@ public class BoardPanel extends JPanel {
     ((JPanel) event.getSource()).scrollRectToVisible(r);
   }
 
+  private Point getScreenLocationSafe(MouseEvent event) {
+    try {
+      return event.getLocationOnScreen();
+    } catch (Exception e) {
+      return event.getPoint();
+    }
+  }
+
   private void scrollMiddleMouse(MouseEvent event) {
-    double deltaX = middleDragPosition.x - event.getX();
-    double deltaY = middleDragPosition.y - event.getY();
+    if (lastMiddleDragScreenPoint == null) {
+      lastMiddleDragScreenPoint = getScreenLocationSafe(event);
+      return;
+    }
+    Point currentScreen = getScreenLocationSafe(event);
+    accumulatedPanDx += (currentScreen.x - lastMiddleDragScreenPoint.x);
+    accumulatedPanDy += (currentScreen.y - lastMiddleDragScreenPoint.y);
+    lastMiddleDragScreenPoint = currentScreen;
 
+    long now = System.currentTimeMillis();
+    if (now - lastPanRepaintTime >= PAN_REPAINT_THROTTLE_MS) {
+      lastPanRepaintTime = now;
+      applyAccumulatedPan();
+    }
+  }
+
+  private void applyAccumulatedPan() {
+    if (accumulatedPanDx == 0 && accumulatedPanDy == 0) {
+      return;
+    }
     Point viewPosition = getViewportPosition();
-
-    double x = viewPosition.x + deltaX;
-    double y = viewPosition.y + deltaY;
-
     Dimension panelSize = this.getSize();
-    x = Math.min(x, panelSize.getWidth() - this.getViewportBounds().getWidth());
-    y = Math.min(y, panelSize.getHeight() - this.getViewportBounds().getHeight());
+    Rectangle viewportBounds = this.getViewportBounds();
+    double maxX = Math.max(0, panelSize.getWidth() - viewportBounds.getWidth());
+    double maxY = Math.max(0, panelSize.getHeight() - viewportBounds.getHeight());
 
-    x = Math.max(x, 0);
-    y = Math.max(y, 0);
+    double x = Math.max(0, Math.min(maxX, viewPosition.x - accumulatedPanDx));
+    double y = Math.max(0, Math.min(maxY, viewPosition.y - accumulatedPanDy));
 
-    Point p = new Point((int) x, (int) y);
+    accumulatedPanDx = 0;
+    accumulatedPanDy = 0;
+
+    Point p = new Point((int) Math.round(x), (int) Math.round(y));
     setViewportPosition(p);
   }
 
