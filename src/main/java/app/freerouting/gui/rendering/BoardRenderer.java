@@ -65,8 +65,26 @@ public final class BoardRenderer {
       if (candidateItems.isEmpty()) {
         continue;
       }
+
+      List<Item> renderableItems = new ArrayList<>(candidateItems.size());
+      for (Item item : candidateItems) {
+        IntBox box = item.boundingBox();
+        if (box != null && !box.isEmpty()) {
+          double screenW = graphicsContext.coordinateTransform.boardToScreen(box.width());
+          double screenH = graphicsContext.coordinateTransform.boardToScreen(box.height());
+          if (Math.max(screenW, screenH) < 0.5) {
+            continue;
+          }
+        }
+        renderableItems.add(item);
+      }
+
+      if (renderableItems.isEmpty()) {
+        continue;
+      }
+
       for (RenderStep step : drawSteps) {
-        for (Item item : candidateItems) {
+        for (Item item : renderableItems) {
           renderItem(item, step, graphics, graphicsContext, null);
         }
       }
@@ -648,6 +666,12 @@ public final class BoardRenderer {
       return;
     }
 
+    // Skip component labels if zoomed out so far that 10mm is less than 6 pixels
+    if (graphicsContext.coordinateTransform.boardToScreen(10_000.0) < 6.0) {
+      return;
+    }
+
+    java.awt.Rectangle clipRect = graphics.getClipBounds();
     Graphics2D graphics2D = (Graphics2D) graphics;
     java.awt.Font originalFont = graphics2D.getFont();
     java.awt.Composite originalComposite = graphics2D.getComposite();
@@ -664,6 +688,18 @@ public final class BoardRenderer {
         if (intensity <= 0) {
           continue;
         }
+        java.awt.geom.Point2D screenLocation =
+            graphicsContext.coordinateTransform.boardToScreen(component.getLocation().toFloat());
+        if (screenLocation == null) {
+          continue;
+        }
+        if (clipRect != null
+            && (screenLocation.getX() < clipRect.x - 200
+                || screenLocation.getX() > clipRect.x + clipRect.width + 200
+                || screenLocation.getY() < clipRect.y - 100
+                || screenLocation.getY() > clipRect.y + clipRect.height + 100)) {
+          continue;
+        }
         java.awt.Color color =
             front
                 ? graphicsContext.otherColorTable.getFabColor(true)
@@ -675,8 +711,6 @@ public final class BoardRenderer {
         graphics2D.setComposite(
             java.awt.AlphaComposite.getInstance(
                 java.awt.AlphaComposite.SRC_OVER, (float) Math.min(1.0, intensity)));
-        java.awt.geom.Point2D screenLocation =
-            graphicsContext.coordinateTransform.boardToScreen(component.getLocation().toFloat());
         java.awt.FontMetrics metrics = graphics2D.getFontMetrics();
         int textWidth = metrics.stringWidth(component.getPartNumber());
         int textHeight = metrics.getAscent();
