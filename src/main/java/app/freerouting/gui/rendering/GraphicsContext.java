@@ -65,6 +65,8 @@ public class GraphicsContext implements Serializable {
   private transient java.awt.TexturePaint cachedHatchPaint;
   private transient double cachedHatchPitchPx = -1.0;
   private transient Color cachedHatchColor;
+  private transient java.awt.Shape cachedClipShape;
+  private transient IntBox cachedClipBox;
 
   /** Creates a graphics context for the given board bounds and layer structure. */
   public GraphicsContext(
@@ -100,10 +102,17 @@ public class GraphicsContext implements Serializable {
 
   /** Initializes stroke and color settings on the given graphics context. */
   private static void initDrawGraphics(Graphics2D graphics, Color color, float width) {
-    BasicStroke bs =
-        new BasicStroke(Math.max(width, 0), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
-    graphics.setStroke(bs);
-    graphics.setColor(color);
+    java.awt.Stroke stroke = graphics.getStroke();
+    if (!(stroke instanceof BasicStroke bs)
+        || bs.getLineWidth() != width
+        || bs.getEndCap() != BasicStroke.CAP_ROUND
+        || bs.getLineJoin() != BasicStroke.JOIN_ROUND) {
+      graphics.setStroke(
+          new BasicStroke(Math.max(width, 0), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    }
+    if (!color.equals(graphics.getColor())) {
+      graphics.setColor(color);
+    }
     graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
   }
 
@@ -212,6 +221,27 @@ public class GraphicsContext implements Serializable {
     coordinateTransform = updatedTransform;
   }
 
+  /** Returns the cached board-coordinate bounding box for the current graphics clip. */
+  public IntBox getClipBox(Graphics g) {
+    if (g == null) {
+      return null;
+    }
+    java.awt.Shape clip = g.getClip();
+    if (clip == null) {
+      return null;
+    }
+    if (clip.equals(cachedClipShape)) {
+      return cachedClipBox;
+    }
+    Rectangle r = clip.getBounds();
+    if (r == null || r.isEmpty()) {
+      return null;
+    }
+    cachedClipShape = clip;
+    cachedClipBox = coordinateTransform.screenToBoard(r);
+    return cachedClipBox;
+  }
+
   /** Draws a polygon with the given corner points. */
   public void draw(
       FloatPoint[] points, double halfWidth, Color color, Graphics g, double translucencyFactor) {
@@ -229,8 +259,7 @@ public class GraphicsContext implements Serializable {
       drawPath = new GeneralPath();
     }
 
-    Rectangle clipShape = g.getClip().getBounds();
-    IntBox clipBox = coordinateTransform.screenToBoard(clipShape);
+    IntBox clipBox = getClipBox(g);
     for (int i = 0; i < (points.length - 1); i++) {
       if (lineOutsideUpdateBox(points[i], points[i + 1], halfWidth + update_offset, clipBox)) {
         // this check should be unnecessary here,

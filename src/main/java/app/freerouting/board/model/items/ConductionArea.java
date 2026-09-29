@@ -113,6 +113,15 @@ public class ConductionArea extends ObstacleArea implements Connectable {
    * <p>The cache remains owned by the conduction-area model because it depends on board revision
    * and clearance geometry. The renderer owns the AWT paint operation that consumes this geometry.
    */
+  /**
+   * Returns the currently cached detailed fill area without triggering recomputation if stale.
+   *
+   * @return the cached detailed fill area, or {@code null} if not yet computed
+   */
+  public java.awt.geom.Area getCachedDetailedFillArea() {
+    return cachedBoardFillArea;
+  }
+
   public java.awt.geom.Area getDetailedFillArea(double maxClearanceLookupBoard, int layerIndex) {
     ensureDetailedFillCache(maxClearanceLookupBoard, layerIndex);
     return cachedBoardFillArea;
@@ -228,18 +237,45 @@ public class ConductionArea extends ObstacleArea implements Connectable {
         }
       }
 
-      for (java.awt.geom.Area fa : foreignClearances) {
-        fillArea.subtract(fa);
+      java.awt.geom.Area combinedForeign =
+          combineAreas(foreignClearances, 0, foreignClearances.size());
+      if (combinedForeign != null && !combinedForeign.isEmpty()) {
+        fillArea.subtract(combinedForeign);
       }
-      for (java.awt.geom.Area sa : sameNetClearances) {
-        fillArea.subtract(sa);
+      java.awt.geom.Area combinedSameNet =
+          combineAreas(sameNetClearances, 0, sameNetClearances.size());
+      if (combinedSameNet != null && !combinedSameNet.isEmpty()) {
+        fillArea.subtract(combinedSameNet);
       }
-      for (java.awt.geom.Area sp : sameNetSpokesList) {
-        fillArea.add(sp);
+      java.awt.geom.Area combinedSpokes =
+          combineAreas(sameNetSpokesList, 0, sameNetSpokesList.size());
+      if (combinedSpokes != null && !combinedSpokes.isEmpty()) {
+        fillArea.add(combinedSpokes);
       }
     }
     cachedBoardFillArea = fillArea;
     cachedBoardRevision = this.board.getRevision();
+  }
+
+  private static java.awt.geom.Area combineAreas(
+      java.util.List<java.awt.geom.Area> list, int start, int end) {
+    if (start >= end) {
+      return null;
+    }
+    if (end - start == 1) {
+      return list.get(start);
+    }
+    int mid = (start + end) >>> 1;
+    java.awt.geom.Area left = combineAreas(list, start, mid);
+    java.awt.geom.Area right = combineAreas(list, mid, end);
+    if (left == null) {
+      return right;
+    }
+    if (right == null) {
+      return left;
+    }
+    left.add(right);
+    return left;
   }
 
   private static java.awt.geom.Area getAwtAreaInBoardUnits(Area area) {

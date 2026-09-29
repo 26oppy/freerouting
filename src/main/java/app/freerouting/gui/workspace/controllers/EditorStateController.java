@@ -35,6 +35,9 @@ public interface EditorStateController {
   /** Returns whether an interactive drag is active. */
   public boolean isInteractiveDrag();
 
+  /** Returns whether an interactive route, drag, or move action is active. */
+  public boolean isInteractiveAction();
+
   /** Returns whether the current state is a menu state. */
   public boolean isMenuState();
 

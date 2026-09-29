@@ -102,6 +102,13 @@ public final class InteractiveStateController implements EditorStateController {
   }
 
   @Override
+  public boolean isInteractiveAction() {
+    return currentState instanceof DragState
+        || currentState instanceof RouteState
+        || currentState instanceof MoveItemState;
+  }
+
+  @Override
   public boolean isMenuState() {
     return currentState instanceof MenuState;
   }

@@ -114,7 +114,18 @@ public final class GuiBoardPresentationController {
       return;
     }
 
-    BoardRenderer.draw(board, graphics, graphicsContext);
+    boolean interactive = manager.isInInteractiveAction();
+    boolean previousSimplified = graphicsContext.isSimplifiedPlaneRendering();
+    if (interactive && !previousSimplified) {
+      graphicsContext.setSimplifiedPlaneRendering(true);
+    }
+    try {
+      BoardRenderer.draw(board, graphics, graphicsContext);
+    } finally {
+      if (interactive && !previousSimplified) {
+        graphicsContext.setSimplifiedPlaneRendering(previousSimplified);
+      }
+    }
     if (manager.getPresentationRatsNest() != null) {
       manager.getPresentationRatsNest().draw(graphics, graphicsContext);
     }

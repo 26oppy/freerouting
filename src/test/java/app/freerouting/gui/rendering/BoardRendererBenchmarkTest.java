@@ -33,8 +33,12 @@ class BoardRendererBenchmarkTest {
   private static final int IMAGE_HEIGHT = 768;
 
   private static BasicBoard loadBoard() throws Exception {
+    return loadBoard("fixtures/" + FIXTURE);
+  }
+
+  private static BasicBoard loadBoard(String path) throws Exception {
     BoardReadResult result;
-    try (FileInputStream in = new FileInputStream("fixtures/" + FIXTURE)) {
+    try (FileInputStream in = new FileInputStream(path)) {
       result = DsnReader.readBoard(in, null, null, "benchmark-test");
     }
     return switch (result) {
@@ -173,5 +177,120 @@ class BoardRendererBenchmarkTest {
     assertTrue(
         msPerFrame < 50.0,
         "Zoomed-in frame render time must be under 50ms (was " + msPerFrame + "ms)");
+  }
+
+  @Test
+  void benchmarkPCBenchBoards() throws Exception {
+    String[] fixtures = {
+      "scripts/benchmark/fixtures/PCBench/oskirby_logicbone/reference-routed.dsn",
+      "scripts/benchmark/fixtures/PCBench/kitspace_EEZ%20DIB%20MCU%20r1B2/reference-routed.dsn"
+    };
+
+    for (String fixturePath : fixtures) {
+      java.io.File file = new java.io.File(fixturePath);
+      if (!file.exists()) {
+        continue;
+      }
+      BasicBoard board = loadBoard(fixturePath);
+      IntBox designBounds = board.getBoundingBox();
+      GraphicsContext graphicsContext =
+          new GraphicsContext(
+              designBounds,
+              new Dimension(IMAGE_WIDTH, IMAGE_HEIGHT),
+              board.layerStructure,
+              Locale.ENGLISH);
+
+      BufferedImage image =
+          new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+
+      // Warmup
+      Graphics2D gWarm = image.createGraphics();
+      try {
+        gWarm.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        BoardRenderer.draw(board, gWarm, graphicsContext);
+      } finally {
+        gWarm.dispose();
+      }
+
+      // 1. Measure full viewport render
+      long startFull = System.nanoTime();
+      int fullIters = 5;
+      for (int i = 0; i < fullIters; i++) {
+        Graphics2D g = image.createGraphics();
+        try {
+          g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+          BoardRenderer.draw(board, g, graphicsContext);
+        } finally {
+          g.dispose();
+        }
+      }
+      double fullMs = ((System.nanoTime() - startFull) / 1_000_000.0) / fullIters;
+
+      // 2. Measure zoomed-in viewport render (10% window)
+      long startZoom = System.nanoTime();
+      int zoomIters = 10;
+      for (int i = 0; i < zoomIters; i++) {
+        Graphics2D g = image.createGraphics();
+        try {
+          g.setClip(300, 200, 400, 300);
+          BoardRenderer.draw(board, g, graphicsContext);
+        } finally {
+          g.dispose();
+        }
+      }
+      double zoomMs = ((System.nanoTime() - startZoom) / 1_000_000.0) / zoomIters;
+
+      // 3. Measure zoomed-in render when revision changes on every frame (like interactive routing)
+      long startInteractive = System.nanoTime();
+      int interactiveIters = 5;
+      for (int i = 0; i < interactiveIters; i++) {
+        board.incrementRevision();
+        Graphics2D g = image.createGraphics();
+        try {
+          g.setClip(300, 200, 400, 300);
+          BoardRenderer.draw(board, g, graphicsContext);
+        } finally {
+          g.dispose();
+        }
+      }
+      double interactiveMs =
+          ((System.nanoTime() - startInteractive) / 1_000_000.0) / interactiveIters;
+
+      // 4. Measure zoomed-in render during interactive routing (simplified plane rendering active)
+      GraphicsContext zoomedContext =
+          new GraphicsContext(
+              new IntBox(
+                  designBounds.ll.x + designBounds.width() / 4,
+                  designBounds.ll.y + designBounds.height() / 4,
+                  designBounds.ll.x + 3 * designBounds.width() / 4,
+                  designBounds.ll.y + 3 * designBounds.height() / 4),
+              new Dimension(2000, 2000),
+              board.layerStructure,
+              Locale.ENGLISH);
+      zoomedContext.setSimplifiedPlaneRendering(true);
+      long startDetailed = System.nanoTime();
+      int detailedIters = 5;
+      for (int i = 0; i < detailedIters; i++) {
+        board.incrementRevision();
+        Graphics2D g = image.createGraphics();
+        try {
+          g.setClip(300, 200, 400, 300);
+          BoardRenderer.draw(board, g, zoomedContext);
+        } finally {
+          g.dispose();
+        }
+      }
+      double detailedMs = ((System.nanoTime() - startDetailed) / 1_000_000.0) / detailedIters;
+
+      System.out.printf(
+          Locale.US,
+          "BENCHMARK [%s]: items=%d, full=%.2f ms, zoom=%.2f ms, interactive=%.2f ms, detailedInteractive=%.2f ms%n",
+          file.getName(),
+          board.getItems().size(),
+          fullMs,
+          zoomMs,
+          interactiveMs,
+          detailedMs);
+    }
   }
 }

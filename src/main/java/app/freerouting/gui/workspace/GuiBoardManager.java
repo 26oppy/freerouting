@@ -473,6 +473,11 @@ public class GuiBoardManager extends HeadlessBoardManager implements WorkspaceCo
     return editorStateController != null && editorStateController.isInteractiveDrag();
   }
 
+  /** GUI workspace member. */
+  public boolean isInInteractiveAction() {
+    return editorStateController != null && editorStateController.isInteractiveAction();
+  }
+
   public app.freerouting.gui.board.BoardFrame getBoardFrame() {
     return boardFrame;
   }

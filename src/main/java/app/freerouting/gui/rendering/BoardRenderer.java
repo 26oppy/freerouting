@@ -607,41 +607,56 @@ public final class BoardRenderer {
       boolean useSimpleFill =
           clearanceScreenPx < 15.0 || graphicsContext.isSimplifiedPlaneRendering();
       if (useSimpleFill) {
-        graphicsContext.fillArea(area.getArea(), graphics, color, fillOpacity);
+        java.awt.geom.Area cachedFill = area.getCachedDetailedFillArea();
+        if (cachedFill != null && !cachedFill.isEmpty()) {
+          renderDetailedFillArea(cachedFill, graphics, graphicsContext, color, fillOpacity);
+        } else {
+          graphicsContext.fillArea(area.getArea(), graphics, color, fillOpacity);
+        }
       } else {
         java.awt.geom.Area cachedFill = area.getDetailedFillArea(maxClearanceLookupBoard, layer);
         if (cachedFill != null && !cachedFill.isEmpty()) {
-          var p0 = graphicsContext.coordinateTransform.boardToScreen(FloatPoint.ZERO);
-          var px = graphicsContext.coordinateTransform.boardToScreen(new FloatPoint(1, 0));
-          var py = graphicsContext.coordinateTransform.boardToScreen(new FloatPoint(0, 1));
-          var boardToScreen =
-              new java.awt.geom.AffineTransform(
-                  px.getX() - p0.getX(),
-                  px.getY() - p0.getY(),
-                  py.getX() - p0.getX(),
-                  py.getY() - p0.getY(),
-                  p0.getX(),
-                  p0.getY());
-          java.awt.geom.Area screenArea = cachedFill.createTransformedArea(boardToScreen);
-          java.awt.Graphics2D graphics2D = (java.awt.Graphics2D) graphics;
-          java.awt.Paint oldPaint = graphics2D.getPaint();
-          java.awt.Composite oldComposite = graphics2D.getComposite();
-          graphics2D.setColor(color);
-          graphics2D.setComposite(
-              java.awt.AlphaComposite.getInstance(
-                  java.awt.AlphaComposite.SRC_OVER, (float) fillOpacity));
-          graphics2D.setRenderingHint(
-              java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-          graphics2D.fill(screenArea);
-          graphics2D.setPaint(oldPaint);
-          graphics2D.setComposite(oldComposite);
+          renderDetailedFillArea(cachedFill, graphics, graphicsContext, color, fillOpacity);
         }
       }
     }
-    double hatchPitch = 500.0 * area.board.communication.getResolution(Unit.UM);
-    graphicsContext.drawPlaneHatch(
-        area.getArea(), graphics, color, layerVisibility * intensity * 0.85, hatchPitch);
+    if (!graphicsContext.isSimplifiedPlaneRendering()) {
+      double hatchPitch = 500.0 * area.board.communication.getResolution(Unit.UM);
+      graphicsContext.drawPlaneHatch(
+          area.getArea(), graphics, color, layerVisibility * intensity * 0.85, hatchPitch);
+    }
     graphicsContext.drawBoundary(area.getArea(), 0.0, color, graphics, layerVisibility);
+  }
+
+  private static void renderDetailedFillArea(
+      java.awt.geom.Area cachedFill,
+      Graphics graphics,
+      GraphicsContext graphicsContext,
+      Color color,
+      double fillOpacity) {
+    var p0 = graphicsContext.coordinateTransform.boardToScreen(FloatPoint.ZERO);
+    var px = graphicsContext.coordinateTransform.boardToScreen(new FloatPoint(1, 0));
+    var py = graphicsContext.coordinateTransform.boardToScreen(new FloatPoint(0, 1));
+    var boardToScreen =
+        new java.awt.geom.AffineTransform(
+            px.getX() - p0.getX(),
+            px.getY() - p0.getY(),
+            py.getX() - p0.getX(),
+            py.getY() - p0.getY(),
+            p0.getX(),
+            p0.getY());
+    java.awt.geom.Area screenArea = cachedFill.createTransformedArea(boardToScreen);
+    java.awt.Graphics2D graphics2D = (java.awt.Graphics2D) graphics;
+    java.awt.Paint oldPaint = graphics2D.getPaint();
+    java.awt.Composite oldComposite = graphics2D.getComposite();
+    graphics2D.setColor(color);
+    graphics2D.setComposite(
+        java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, (float) fillOpacity));
+    graphics2D.setRenderingHint(
+        java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+    graphics2D.fill(screenArea);
+    graphics2D.setPaint(oldPaint);
+    graphics2D.setComposite(oldComposite);
   }
 
   private static int virtualLayerFor(ComponentOutline outline) {
