@@ -36,6 +36,15 @@ public final class BoardRenderer {
   static final int MIN_DRAW_PRIORITY = 1;
   static final int MAX_DRAW_PRIORITY = 3;
 
+  /** Testing and configuration flag for spatial indexing (default: enabled). */
+  static volatile boolean spatialIndexEnabled = true;
+
+  /** Sub-pixel LOD culling threshold in screen pixels (default: 0.5 px). */
+  static volatile double subPixelCullThreshold = 0.5;
+
+  /** Testing and configuration flag for drawing component labels (default: enabled). */
+  static volatile boolean componentLabelsEnabled = true;
+
   private BoardRenderer() {}
 
   /** Draws the complete board using renderer-owned traversal and ordering. */
@@ -54,14 +63,24 @@ public final class BoardRenderer {
     IntBox clipBox =
         clipRect != null ? graphicsContext.coordinateTransform.screenToBoard(clipRect) : null;
 
-    ItemSpatialIndex spatialIndex = ItemSpatialIndex.get(board);
+    ItemSpatialIndex spatialIndex = spatialIndexEnabled ? ItemSpatialIndex.get(board) : null;
     if (spatialIndex != null) {
       spatialIndex.updateIfStale();
     }
 
     for (int priority = MIN_DRAW_PRIORITY; priority <= MAX_DRAW_PRIORITY; priority++) {
-      List<Item> candidateItems =
-          spatialIndex != null ? spatialIndex.query(priority, clipBox) : List.of();
+      List<Item> candidateItems;
+      if (spatialIndex != null) {
+        candidateItems = spatialIndex.query(priority, clipBox);
+      } else {
+        candidateItems = new ArrayList<>();
+        for (Item item : board.getItems()) {
+          if (drawPriority(item) == priority
+              && (clipBox == null || clipBox.intersects(item.boundingBox()))) {
+            candidateItems.add(item);
+          }
+        }
+      }
       if (candidateItems.isEmpty()) {
         continue;
       }
@@ -69,10 +88,10 @@ public final class BoardRenderer {
       List<Item> renderableItems = new ArrayList<>(candidateItems.size());
       for (Item item : candidateItems) {
         IntBox box = item.boundingBox();
-        if (box != null && !box.isEmpty()) {
+        if (box != null && !box.isEmpty() && subPixelCullThreshold > 0.0) {
           double screenW = graphicsContext.coordinateTransform.boardToScreen(box.width());
           double screenH = graphicsContext.coordinateTransform.boardToScreen(box.height());
-          if (Math.max(screenW, screenH) < 0.5) {
+          if (Math.max(screenW, screenH) < subPixelCullThreshold) {
             continue;
           }
         }
@@ -90,7 +109,9 @@ public final class BoardRenderer {
       }
     }
 
-    drawComponentPartNumbers(board, graphics, graphicsContext);
+    if (componentLabelsEnabled) {
+      drawComponentPartNumbers(board, graphics, graphicsContext);
+    }
   }
 
   /**

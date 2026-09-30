@@ -589,4 +589,218 @@ class BoardRendererBenchmarkTest {
         diffPct < 0.1,
         "Technique B must visually match Technique A (<0.1% subpixel antialias diff)");
   }
+
+  @Test
+  void benchmarkSensitivityAblation() throws Exception {
+    String fixture = "scripts/benchmark/fixtures/PCBench/oskirby_logicbone/reference-routed.dsn";
+    BasicBoard board = loadBoard(fixture);
+    IntBox designBounds = board.getBoundingBox();
+    Dimension dim = new Dimension(IMAGE_WIDTH, IMAGE_HEIGHT);
+    BufferedImage img = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+
+    // Zoomed-in 10% region
+    int cx = (designBounds.ll.x + designBounds.ur.x) / 2;
+    int cy = (designBounds.ll.y + designBounds.ur.y) / 2;
+    int hw = designBounds.width() / 20;
+    int hh = designBounds.height() / 20;
+    GraphicsContext zoomedGc =
+        new GraphicsContext(
+            new IntBox(cx - hw, cy - hh, cx + hw, cy + hh),
+            dim,
+            board.layerStructure,
+            Locale.ENGLISH);
+
+    // Full zoomed-out viewport
+    GraphicsContext fullGc =
+        new GraphicsContext(designBounds, dim, board.layerStructure, Locale.ENGLISH);
+
+    System.out.printf(
+        Locale.US,
+        "%n================== ABLATION 1: SPATIAL INDEXING (oskirby_logicbone) ==================%n");
+    // Warmup
+    Graphics2D gw = img.createGraphics();
+    try {
+      gw.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+      BoardRenderer.draw(board, gw, zoomedGc);
+    } finally {
+      gw.dispose();
+    }
+
+    int iters = 10;
+
+    // 1A. Spatial Index OFF (linear item scanning)
+    BoardRenderer.spatialIndexEnabled = false;
+    long tIndexOff = System.nanoTime();
+    for (int i = 0; i < iters; i++) {
+      Graphics2D g = img.createGraphics();
+      try {
+        g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        BoardRenderer.draw(board, g, zoomedGc);
+      } finally {
+        g.dispose();
+      }
+    }
+    double msIndexOff = ((System.nanoTime() - tIndexOff) / 1_000_000.0) / iters;
+
+    // 1B. Spatial Index ON (RTree hierarchical query)
+    BoardRenderer.spatialIndexEnabled = true;
+    long tIndexOn = System.nanoTime();
+    for (int i = 0; i < iters; i++) {
+      Graphics2D g = img.createGraphics();
+      try {
+        g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        BoardRenderer.draw(board, g, zoomedGc);
+      } finally {
+        g.dispose();
+      }
+    }
+    double msIndexOn = ((System.nanoTime() - tIndexOn) / 1_000_000.0) / iters;
+
+    System.out.printf(
+        Locale.US,
+        "Spatial Index OFF (Linear Scan): %.2f ms / frame%n"
+            + "Spatial Index ON  (RTree Query): %.2f ms / frame%n"
+            + "Speedup:                         %.2fx faster (-%.1f%% latency)%n",
+        msIndexOff,
+        msIndexOn,
+        msIndexOff / msIndexOn,
+        ((msIndexOff - msIndexOn) / msIndexOff) * 100.0);
+
+    System.out.printf(
+        Locale.US,
+        "%n================== ABLATION 2: SUB-PIXEL LOD THRESHOLD VARIATION ==================%n");
+    double[] thresholds = {0.0, 0.25, 0.5, 1.0, 2.0};
+    System.out.printf(
+        Locale.US,
+        "%-15s | %-12s | %-15s | %-12s%n",
+        "LOD Threshold",
+        "Frame Time",
+        "Effective FPS",
+        "vs 0.0 (No LOD)");
+    System.out.printf(
+        Locale.US, "----------------+--------------+-----------------+-------------%n");
+
+    double baselineLodMs = 0.0;
+    for (int t = 0; t < thresholds.length; t++) {
+      double thresh = thresholds[t];
+      BoardRenderer.subPixelCullThreshold = thresh;
+      long tLod = System.nanoTime();
+      for (int i = 0; i < iters; i++) {
+        Graphics2D g = img.createGraphics();
+        try {
+          g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+          BoardRenderer.draw(board, g, fullGc);
+        } finally {
+          g.dispose();
+        }
+      }
+      double msLod = ((System.nanoTime() - tLod) / 1_000_000.0) / iters;
+      if (t == 0) {
+        baselineLodMs = msLod;
+      }
+      double fps = 1000.0 / msLod;
+      double speedup = baselineLodMs / msLod;
+      System.out.printf(
+          Locale.US,
+          "%-15s | %9.2f ms | %11.1f FPS | %8.2fx%n",
+          (thresh == 0.0 ? "0.0 px (OFF)" : String.format(Locale.US, "%.2f px", thresh)),
+          msLod,
+          fps,
+          speedup);
+    }
+    BoardRenderer.subPixelCullThreshold = 0.5; // restore default
+
+    System.out.printf(
+        Locale.US,
+        "%n================== ABLATION 3: COMPONENT LABELS CULLING ==================%n");
+    BoardRenderer.componentLabelsEnabled = true;
+    long tLabelsOn = System.nanoTime();
+    for (int i = 0; i < iters; i++) {
+      Graphics2D g = img.createGraphics();
+      try {
+        g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        BoardRenderer.draw(board, g, fullGc);
+      } finally {
+        g.dispose();
+      }
+    }
+    double msLabelsOn = ((System.nanoTime() - tLabelsOn) / 1_000_000.0) / iters;
+
+    BoardRenderer.componentLabelsEnabled = false;
+    long tLabelsOff = System.nanoTime();
+    for (int i = 0; i < iters; i++) {
+      Graphics2D g = img.createGraphics();
+      try {
+        g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+        BoardRenderer.draw(board, g, fullGc);
+      } finally {
+        g.dispose();
+      }
+    }
+    double msLabelsOff = ((System.nanoTime() - tLabelsOff) / 1_000_000.0) / iters;
+    BoardRenderer.componentLabelsEnabled = true; // restore default
+
+    System.out.printf(
+        Locale.US,
+        "Component Labels Enabled:  %.2f ms / frame%n"
+            + "Component Labels Disabled: %.2f ms / frame%n"
+            + "Text Rasterization Delta:  %.2f ms%n",
+        msLabelsOn,
+        msLabelsOff,
+        msLabelsOn - msLabelsOff);
+
+    System.out.printf(
+        Locale.US,
+        "%n================== ABLATION 4: COPPER POURS SIMPLIFIED vs DETAILED ==================%n");
+    String kitspaceFixture =
+        "scripts/benchmark/fixtures/PCBench/kitspace_EEZ%20DIB%20MCU%20r1B2/reference-routed.dsn";
+    java.io.File kitspaceFile = new java.io.File(kitspaceFixture);
+    if (kitspaceFile.exists()) {
+      BasicBoard kitBoard = loadBoard(kitspaceFixture);
+      IntBox kitBounds = kitBoard.getBoundingBox();
+      GraphicsContext kitGc =
+          new GraphicsContext(kitBounds, dim, kitBoard.layerStructure, Locale.ENGLISH);
+
+      // Detailed mode
+      kitGc.setSimplifiedPlaneRendering(false);
+      long tDetailed = System.nanoTime();
+      int kitIters = 5;
+      for (int i = 0; i < kitIters; i++) {
+        Graphics2D g = img.createGraphics();
+        try {
+          g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+          BoardRenderer.draw(kitBoard, g, kitGc);
+        } finally {
+          g.dispose();
+        }
+      }
+      double msDetailed = ((System.nanoTime() - tDetailed) / 1_000_000.0) / kitIters;
+
+      // Simplified mode (solid polygon fills)
+      kitGc.setSimplifiedPlaneRendering(true);
+      long tSimplified = System.nanoTime();
+      for (int i = 0; i < kitIters; i++) {
+        Graphics2D g = img.createGraphics();
+        try {
+          g.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+          BoardRenderer.draw(kitBoard, g, kitGc);
+        } finally {
+          g.dispose();
+        }
+      }
+      double msSimplified = ((System.nanoTime() - tSimplified) / 1_000_000.0) / kitIters;
+
+      System.out.printf(
+          Locale.US,
+          "Detailed Clearance Fill (Static View):   %.2f ms / frame%n"
+              + "Simplified Fast Fill (Active Drag/Route): %.2f ms / frame%n"
+              + "Interactive Drag Speedup:                %.2fx faster%n",
+          msDetailed,
+          msSimplified,
+          msDetailed / msSimplified);
+    }
+    System.out.printf(
+        Locale.US,
+        "========================================================================================%n%n");
+  }
 }
