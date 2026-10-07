@@ -27,6 +27,10 @@ public class BoardRules implements Serializable {
   public final NetClasses netClasses = new NetClasses();
   private final LayerStructure layerStructure;
 
+  public NetMeanderConstraint singleTrackMeander;
+  public NetMeanderConstraint diffPairMeander;
+  public NetMeanderConstraint diffPairSkewMeander;
+
   /** The angle restriction for traces: 90 degree, 45 degree or none. */
   private transient AngleRestriction traceAngleRestriction;
 

@@ -45,6 +45,10 @@ public class Net implements Comparable<Net>, ItemInfoPrinter.Printable, Serializ
    */
   private NetLengthConstraint lengthConstraint;
 
+  public NetMeanderConstraint singleTrackMeander;
+  public NetMeanderConstraint diffPairMeander;
+  public NetMeanderConstraint diffPairSkewMeander;
+
   /** Creates a new net. */
   public Net(String name, int subnetNumber, int number, Nets netList, boolean containsPlane) {
     this.name = name;
@@ -149,6 +153,33 @@ public class Net implements Comparable<Net>, ItemInfoPrinter.Printable, Serializ
    */
   public NetLengthConstraint getExplicitLengthConstraint() {
     return this.lengthConstraint;
+  }
+
+  public NetMeanderConstraint getSingleTrackMeander() {
+    BoardRules rules = this.netList.getBoard().rules;
+    NetMeanderConstraint fallback =
+        this.netClass != null
+            ? this.netClass.getSingleTrackMeander(rules)
+            : rules.singleTrackMeander;
+    return this.singleTrackMeander != null ? this.singleTrackMeander.mergeWith(fallback) : fallback;
+  }
+
+  public NetMeanderConstraint getDiffPairMeander() {
+    BoardRules rules = this.netList.getBoard().rules;
+    NetMeanderConstraint fallback =
+        this.netClass != null ? this.netClass.getDiffPairMeander(rules) : rules.diffPairMeander;
+    return this.diffPairMeander != null ? this.diffPairMeander.mergeWith(fallback) : fallback;
+  }
+
+  public NetMeanderConstraint getDiffPairSkewMeander() {
+    BoardRules rules = this.netList.getBoard().rules;
+    NetMeanderConstraint fallback =
+        this.netClass != null
+            ? this.netClass.getDiffPairSkewMeander(rules)
+            : rules.diffPairSkewMeander;
+    return this.diffPairSkewMeander != null
+        ? this.diffPairSkewMeander.mergeWith(fallback)
+        : fallback;
   }
 
   /** Returns the pins and conduction areas of this net. */

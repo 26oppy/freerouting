@@ -23,6 +23,10 @@ public class NetClass implements Serializable, ItemInfoPrinter.Printable {
   public DefaultItemClearanceClasses defaultItemClearanceClasses =
       new DefaultItemClearanceClasses();
 
+  public NetMeanderConstraint singleTrackMeander;
+  public NetMeanderConstraint diffPairMeander;
+  public NetMeanderConstraint diffPairSkewMeander;
+
   public boolean isIgnoredByAutorouter;
   private String name;
   private ViaRule viaRule;
@@ -203,6 +207,27 @@ public class NetClass implements Serializable, ItemInfoPrinter.Printable {
       this.minimumTraceLength = constraint.minLength();
       this.maximumTraceLength = constraint.maxLength();
     }
+  }
+
+  public NetMeanderConstraint getSingleTrackMeander(BoardRules boardRules) {
+    if (this.singleTrackMeander != null) {
+      return this.singleTrackMeander.mergeWith(boardRules.singleTrackMeander);
+    }
+    return boardRules.singleTrackMeander;
+  }
+
+  public NetMeanderConstraint getDiffPairMeander(BoardRules boardRules) {
+    if (this.diffPairMeander != null) {
+      return this.diffPairMeander.mergeWith(boardRules.diffPairMeander);
+    }
+    return boardRules.diffPairMeander;
+  }
+
+  public NetMeanderConstraint getDiffPairSkewMeander(BoardRules boardRules) {
+    if (this.diffPairSkewMeander != null) {
+      return this.diffPairSkewMeander.mergeWith(boardRules.diffPairSkewMeander);
+    }
+    return boardRules.diffPairSkewMeander;
   }
 
   /** Returns whether the layer with the given index is active for routing. */
