@@ -43,6 +43,16 @@ public class Net {
     if (net.hasExplicitLengthConstraint()) {
       writeCircuit(net, scopeParameter);
     }
+    if (net.singleTrackMeander != null
+        || net.diffPairMeander != null
+        || net.diffPairSkewMeander != null) {
+      scopeParameter.file.startScope();
+      scopeParameter.file.write("rule");
+      Rule.writeMeanderConstraint(scopeParameter, net.singleTrackMeander, "single_track");
+      Rule.writeMeanderConstraint(scopeParameter, net.diffPairMeander, "diff_pair");
+      Rule.writeMeanderConstraint(scopeParameter, net.diffPairSkewMeander, "diff_pair_skew");
+      scopeParameter.file.endScope();
+    }
     scopeParameter.file.endScope();
   }
 

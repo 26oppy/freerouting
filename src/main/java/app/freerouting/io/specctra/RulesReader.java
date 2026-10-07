@@ -301,6 +301,30 @@ public final class RulesReader {
       } else if (rule instanceof Rule.ClearanceRule clearanceRule) {
         Structure.setClearanceRule(
             clearanceRule, layerIndex, coordinateTransform, board.rules, stringQuote);
+      } else if (rule instanceof Rule.MeanderRule meanderRule) {
+        app.freerouting.rules.NetMeanderConstraint constraint =
+            new app.freerouting.rules.NetMeanderConstraint(
+                meanderRule.maxAmplitude >= 0
+                    ? coordinateTransform.dsnToBoard(meanderRule.maxAmplitude)
+                    : null,
+                meanderRule.minAmplitude >= 0
+                    ? coordinateTransform.dsnToBoard(meanderRule.minAmplitude)
+                    : null,
+                meanderRule.gap >= 0 ? coordinateTransform.dsnToBoard(meanderRule.gap) : null,
+                meanderRule.singleSided,
+                app.freerouting.rules.NetMeanderConstraint.CornerStyle.parse(
+                    meanderRule.cornerStyle),
+                meanderRule.cornerRadius);
+        if ("single_track".equals(meanderRule.target)) {
+          board.rules.singleTrackMeander = constraint;
+        } else if ("diff_pair".equals(meanderRule.target)) {
+          board.rules.diffPairMeander = constraint;
+        } else if ("diff_pair_skew".equals(meanderRule.target)) {
+          board.rules.diffPairSkewMeander = constraint;
+        } else {
+          FRLogger.warn(
+              "RulesReader.applyRules: unknown meander target '" + meanderRule.target + "'");
+        }
       }
     }
   }

@@ -57,6 +57,42 @@ public abstract class Rule {
           if (lengthResult != null) {
             currentRule = new LengthRule(lengthResult.maxLength, lengthResult.minLength);
           }
+        } else if (currentToken == Keyword.MEANDER) {
+          currentRule = readMeanderRule(scanner);
+        } else if (currentToken == Keyword.LENGTH_AMPLITUDE) {
+          double maxAmp = scanner.nextDouble();
+          double minAmp = scanner.nextDouble();
+          if (scanner.nextClosingBracket()) {
+            currentRule = new MeanderRule("single_track", maxAmp, minAmp, -1.0, null, null, null);
+          }
+        } else if (currentToken == Keyword.LENGTH_GAP) {
+          double gap = scanner.nextDouble();
+          if (scanner.nextClosingBracket()) {
+            currentRule = new MeanderRule("single_track", -1.0, -1.0, gap, null, null, null);
+          }
+        } else if (currentToken == Keyword.SINGLE_SIDED) {
+          String sideStr = scanner.nextString();
+          Boolean singleSided = "on".equalsIgnoreCase(sideStr);
+          if (scanner.nextClosingBracket()) {
+            currentRule =
+                new MeanderRule("single_track", -1.0, -1.0, -1.0, singleSided, null, null);
+          }
+        } else if (currentToken == Keyword.CORNER_STYLE) {
+          String style = scanner.nextString();
+          Integer radius = null;
+          try {
+            Object nextObj = scanner.nextToken();
+            if (nextObj instanceof Double d) {
+              radius = d.intValue();
+              scanner.nextClosingBracket();
+            } else if (nextObj == Keyword.CLOSED_BRACKET) {
+              // Closed directly
+            }
+          } catch (IOException e) {
+            FRLogger.error("Rule.readScope: IO error scanning file", e);
+            return null;
+          }
+          currentRule = new MeanderRule("single_track", -1.0, -1.0, -1.0, null, style, radius);
         } else {
           ScopeKeyword.skipScope(scanner);
         }
@@ -134,6 +170,11 @@ public abstract class Rule {
     scopeParameter.file.write("(width ");
     scopeParameter.file.write(String.valueOf(traceWidth));
     scopeParameter.file.write(")");
+
+    writeMeanderConstraint(scopeParameter, netClass.singleTrackMeander, "single_track");
+    writeMeanderConstraint(scopeParameter, netClass.diffPairMeander, "diff_pair");
+    writeMeanderConstraint(scopeParameter, netClass.diffPairSkewMeander, "diff_pair_skew");
+
     scopeParameter.file.endScope();
     for (int i = 1; i < scopeParameter.board.layerStructure.layers.length; i++) {
       if (netClass.getTraceHalfWidth(i) != defaultTraceHalfWidth) {
@@ -203,6 +244,65 @@ public abstract class Rule {
     writeNamedClearanceRules(scopeParameter, layer);
     // write_non_default_clearance_rules(scopeParameter, layer, defaultBoardClearance);
 
+    writeMeanderConstraint(
+        scopeParameter, scopeParameter.board.rules.singleTrackMeander, "single_track");
+    writeMeanderConstraint(scopeParameter, scopeParameter.board.rules.diffPairMeander, "diff_pair");
+    writeMeanderConstraint(
+        scopeParameter, scopeParameter.board.rules.diffPairSkewMeander, "diff_pair_skew");
+
+    scopeParameter.file.endScope();
+  }
+
+  public static void writeMeanderConstraint(
+      WriteScopeParameter scopeParameter,
+      app.freerouting.rules.NetMeanderConstraint constraint,
+      String target)
+      throws IOException {
+    if (constraint == null) return;
+    scopeParameter.file.startScope();
+    scopeParameter.file.write("meander ");
+    scopeParameter.file.write(target);
+
+    if (constraint.maxAmplitude() != null || constraint.minAmplitude() != null) {
+      scopeParameter.file.newLine();
+      scopeParameter.file.write("(length_amplitude ");
+      double max =
+          constraint.maxAmplitude() != null
+              ? scopeParameter.coordinateTransform.boardToDsn(constraint.maxAmplitude())
+              : -1.0;
+      double min =
+          constraint.minAmplitude() != null
+              ? scopeParameter.coordinateTransform.boardToDsn(constraint.minAmplitude())
+              : -1.0;
+      scopeParameter.file.write(String.valueOf(max));
+      scopeParameter.file.write(" ");
+      scopeParameter.file.write(String.valueOf(min));
+      scopeParameter.file.write(")");
+    }
+    if (constraint.gap() != null) {
+      scopeParameter.file.newLine();
+      scopeParameter.file.write("(length_gap ");
+      scopeParameter.file.write(
+          String.valueOf(scopeParameter.coordinateTransform.boardToDsn(constraint.gap())));
+      scopeParameter.file.write(")");
+    }
+    if (constraint.singleSided() != null) {
+      scopeParameter.file.newLine();
+      scopeParameter.file.write("(single_sided ");
+      scopeParameter.file.write(constraint.singleSided() ? "on" : "off");
+      scopeParameter.file.write(")");
+    }
+    if (constraint.cornerStyle() != null || constraint.cornerRadiusPercentage() != null) {
+      scopeParameter.file.newLine();
+      scopeParameter.file.write("(corner_style ");
+      scopeParameter.file.write(
+          constraint.cornerStyle() != null ? constraint.cornerStyle().toDsn() : "auto");
+      if (constraint.cornerRadiusPercentage() != null) {
+        scopeParameter.file.write(" ");
+        scopeParameter.file.write(String.valueOf(constraint.cornerRadiusPercentage()));
+      }
+      scopeParameter.file.write(")");
+    }
     scopeParameter.file.endScope();
   }
 
@@ -344,6 +444,87 @@ public abstract class Rule {
     public LengthRule(double maxLength, double minLength) {
       this.maxLength = maxLength;
       this.minLength = minLength;
+    }
+  }
+
+  public static MeanderRule readMeanderRule(IJFlexScanner scanner) {
+    try {
+      String target = scanner.nextString();
+      double maxAmp = -1.0;
+      double minAmp = -1.0;
+      double gap = -1.0;
+      Boolean singleSided = null;
+      String cornerStyle = null;
+      Integer cornerRadius = null;
+
+      for (; ; ) {
+        Object nextToken = scanner.nextToken();
+        if (nextToken == Keyword.CLOSED_BRACKET) {
+          break;
+        }
+        if (nextToken == Keyword.OPEN_BRACKET) {
+          Object propToken = scanner.nextToken();
+          if (propToken == Keyword.LENGTH_AMPLITUDE) {
+            maxAmp = scanner.nextDouble();
+            minAmp = scanner.nextDouble();
+            scanner.nextClosingBracket();
+          } else if (propToken == Keyword.LENGTH_GAP) {
+            gap = scanner.nextDouble();
+            scanner.nextClosingBracket();
+          } else if (propToken == Keyword.SINGLE_SIDED) {
+            String sideStr = scanner.nextString();
+            singleSided = "on".equalsIgnoreCase(sideStr);
+            scanner.nextClosingBracket();
+          } else if (propToken == Keyword.CORNER_STYLE) {
+            cornerStyle = scanner.nextString();
+            Object rObj = scanner.nextToken();
+            if (rObj instanceof Double d) {
+              cornerRadius = d.intValue();
+              scanner.nextClosingBracket();
+            } else if (rObj == Keyword.CLOSED_BRACKET) {
+              // no radius
+            } else {
+              scanner.nextClosingBracket();
+            }
+          } else {
+            ScopeKeyword.skipScope(scanner);
+          }
+        } else {
+          FRLogger.warn("Rule.readMeanderRule: ( expected");
+          return null;
+        }
+      }
+      return new MeanderRule(target, maxAmp, minAmp, gap, singleSided, cornerStyle, cornerRadius);
+    } catch (IOException e) {
+      FRLogger.error("Rule.readMeanderRule: IO error scanning file", e);
+      return null;
+    }
+  }
+
+  public static class MeanderRule extends Rule {
+    public final String target;
+    public final double maxAmplitude;
+    public final double minAmplitude;
+    public final double gap;
+    public final Boolean singleSided;
+    public final String cornerStyle;
+    public final Integer cornerRadius;
+
+    public MeanderRule(
+        String target,
+        double maxAmplitude,
+        double minAmplitude,
+        double gap,
+        Boolean singleSided,
+        String cornerStyle,
+        Integer cornerRadius) {
+      this.target = target;
+      this.maxAmplitude = maxAmplitude;
+      this.minAmplitude = minAmplitude;
+      this.gap = gap;
+      this.singleSided = singleSided;
+      this.cornerStyle = cornerStyle;
+      this.cornerRadius = cornerRadius;
     }
   }
 

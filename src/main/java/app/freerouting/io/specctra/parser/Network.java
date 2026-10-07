@@ -494,6 +494,30 @@ public class Network extends ScopeKeyword {
         if (rule.minLength > 0) {
           boardNetClass.setMinimumTraceLength(coordinateTransform.dsnToBoard(rule.minLength));
         }
+      } else if (currentRule instanceof Rule.MeanderRule meanderRule) {
+        app.freerouting.rules.NetMeanderConstraint constraint =
+            new app.freerouting.rules.NetMeanderConstraint(
+                meanderRule.maxAmplitude >= 0
+                    ? coordinateTransform.dsnToBoard(meanderRule.maxAmplitude)
+                    : null,
+                meanderRule.minAmplitude >= 0
+                    ? coordinateTransform.dsnToBoard(meanderRule.minAmplitude)
+                    : null,
+                meanderRule.gap >= 0 ? coordinateTransform.dsnToBoard(meanderRule.gap) : null,
+                meanderRule.singleSided,
+                app.freerouting.rules.NetMeanderConstraint.CornerStyle.parse(
+                    meanderRule.cornerStyle),
+                meanderRule.cornerRadius);
+        if ("single_track".equals(meanderRule.target)) {
+          boardNetClass.singleTrackMeander = constraint;
+        } else if ("diff_pair".equals(meanderRule.target)) {
+          boardNetClass.diffPairMeander = constraint;
+        } else if ("diff_pair_skew".equals(meanderRule.target)) {
+          boardNetClass.diffPairSkewMeander = constraint;
+        } else {
+          FRLogger.warn(
+              "Network.insertNetClass: unknown meander target '" + meanderRule.target + "'");
+        }
       } else {
         FRLogger.warn(
             "Network.insert_net_class: rule type not yet implemented at '"
@@ -1479,6 +1503,30 @@ public class Network extends ScopeKeyword {
                 (rule.minLength > 0) ? coordinateTransform.dsnToBoard(rule.minLength) : 0.0;
             if (max > 0 || min > 0) {
               boardNet.setLengthConstraint(new app.freerouting.rules.NetLengthConstraint(min, max));
+            }
+          } else if (currentObject instanceof Rule.MeanderRule meanderRule) {
+            app.freerouting.rules.NetMeanderConstraint constraint =
+                new app.freerouting.rules.NetMeanderConstraint(
+                    meanderRule.maxAmplitude >= 0
+                        ? coordinateTransform.dsnToBoard(meanderRule.maxAmplitude)
+                        : null,
+                    meanderRule.minAmplitude >= 0
+                        ? coordinateTransform.dsnToBoard(meanderRule.minAmplitude)
+                        : null,
+                    meanderRule.gap >= 0 ? coordinateTransform.dsnToBoard(meanderRule.gap) : null,
+                    meanderRule.singleSided,
+                    app.freerouting.rules.NetMeanderConstraint.CornerStyle.parse(
+                        meanderRule.cornerStyle),
+                    meanderRule.cornerRadius);
+            if ("single_track".equals(meanderRule.target)) {
+              boardNet.singleTrackMeander = constraint;
+            } else if ("diff_pair".equals(meanderRule.target)) {
+              boardNet.diffPairMeander = constraint;
+            } else if ("diff_pair_skew".equals(meanderRule.target)) {
+              boardNet.diffPairSkewMeander = constraint;
+            } else {
+              FRLogger.warn(
+                  "Network.readNetScope: unknown meander target '" + meanderRule.target + "'");
             }
           } else {
             FRLogger.warn(
