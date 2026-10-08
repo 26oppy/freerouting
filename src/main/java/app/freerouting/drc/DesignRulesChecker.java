@@ -160,8 +160,8 @@ public class DesignRulesChecker {
         Collection<Item> startContacts = trace.getStartContacts();
         Collection<Item> endContacts = trace.getEndContacts();
 
-        // A trace is dangling if either its start or end has no contacts
-        if (startContacts.isEmpty() || endContacts.isEmpty()) {
+        // A trace is dangling if isTail() returns true (unconnected ends or isolated stub)
+        if (trace.isTail()) {
           // Only add if not already in the list
           if (!unconnectedItems.stream().anyMatch(ui -> ui.firstItem == trace)) {
             unconnectedItems.add(new UnconnectedItems(trace, null, "track_dangling"));

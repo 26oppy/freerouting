@@ -264,12 +264,15 @@ public abstract class Trace extends Item implements Connectable, Serializable {
   /** Returns true, if this trace is not contacted at its first or at its last point. */
   @Override
   public boolean isTail() {
-    Collection<Item> contactList = this.getStartContacts();
-    if (contactList.isEmpty()) {
+    Collection<Item> startContactList = this.getStartContacts();
+    if (startContactList.isEmpty()) {
       return true;
     }
-    contactList = this.getEndContacts();
-    return contactList.isEmpty();
+    Collection<Item> endContactList = this.getEndContacts();
+    if (endContactList.isEmpty()) {
+      return true;
+    }
+    return this.getNormalContacts().size() <= 1;
   }
 
   @Override
