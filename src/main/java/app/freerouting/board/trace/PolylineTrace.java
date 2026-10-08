@@ -119,6 +119,22 @@ public class PolylineTrace extends Trace implements Serializable {
     return PolylineTraceGeometry.boundingBox(lines, getHalfWidth());
   }
 
+  @Override
+  public boolean contains(Point point) {
+    if (!(point instanceof IntPoint)) {
+      return false;
+    }
+    Point first = firstCorner();
+    Point last = lastCorner();
+    if ((first != null && point.equals(first)) || (last != null && point.equals(last))) {
+      return true;
+    }
+    if (!point.isContainedIn(boundingBox())) {
+      return false;
+    }
+    return lines != null && lines.contains(point);
+  }
+
   /** Returns the polyline of this trace. */
   public Polyline polyline() {
     return lines;
