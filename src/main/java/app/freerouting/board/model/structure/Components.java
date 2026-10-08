@@ -3,6 +3,7 @@ package app.freerouting.board.model.structure;
 import app.freerouting.board.state.BoardObservers;
 import app.freerouting.core.library.Package;
 import app.freerouting.datastructures.UndoableObjects;
+import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.logger.FRLogger;
@@ -22,6 +23,35 @@ public class Components implements Serializable {
    */
   private boolean flipStyleRotateFirst;
 
+  /** Inserts a component into the list preserving high-precision exact location. */
+  public Component add(
+      String name,
+      Point location,
+      FloatPoint exactLocation,
+      double rotationInDegree,
+      boolean onFront,
+      Package packageFront,
+      Package packageBack,
+      boolean positionFixed,
+      String partNumber) {
+
+    Component newComponent =
+        new Component(
+            name,
+            location,
+            exactLocation,
+            rotationInDegree,
+            onFront,
+            packageFront,
+            packageBack,
+            componentArr.size() + 1,
+            positionFixed,
+            partNumber);
+    componentArr.add(newComponent);
+    undoList.insert(newComponent);
+    return newComponent;
+  }
+
   /**
    * Inserts a component into the list. The items of the component have to be inserted separately
    * into the board. If onFront is false, the component will be placed on the back side, and
@@ -37,20 +67,16 @@ public class Components implements Serializable {
       boolean positionFixed,
       String partNumber) {
 
-    Component newComponent =
-        new Component(
-            name,
-            location,
-            rotationInDegree,
-            onFront,
-            packageFront,
-            packageBack,
-            componentArr.size() + 1,
-            positionFixed,
-            partNumber);
-    componentArr.add(newComponent);
-    undoList.insert(newComponent);
-    return newComponent;
+    return add(
+        name,
+        location,
+        location != null ? location.toFloat() : null,
+        rotationInDegree,
+        onFront,
+        packageFront,
+        packageBack,
+        positionFixed,
+        partNumber);
   }
 
   /**

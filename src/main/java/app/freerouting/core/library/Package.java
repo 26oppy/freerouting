@@ -126,7 +126,6 @@ public class Package implements Comparable<Package>, ItemInfoPrinter.Printable, 
     printer.newline();
   }
 
-  /** Describes a pin padstack of a package. */
   public static class Pin implements Serializable {
 
     /** The name of the pin. */
@@ -141,12 +140,39 @@ public class Package implements Comparable<Package>, ItemInfoPrinter.Printable, 
     /** The rotation of the pin padstack. */
     public final double rotationInDegree;
 
+    /** The high-precision location of the pin relative to its package before rounding. */
+    public final app.freerouting.geometry.planar.FloatPoint exactRelativeLocation;
+
     /** Creates a new package pin with the input coordinates relative to the package location. */
     public Pin(String name, int padstackId, Vector relativeLocation, double rotationInDegree) {
+      this(
+          name,
+          padstackId,
+          relativeLocation,
+          rotationInDegree,
+          relativeLocation != null ? relativeLocation.toFloat() : null);
+    }
+
+    /** Creates a new package pin preserving exact floating-point relative coordinates. */
+    public Pin(
+        String name,
+        int padstackId,
+        Vector relativeLocation,
+        double rotationInDegree,
+        app.freerouting.geometry.planar.FloatPoint exactRelativeLocation) {
       this.name = name;
       this.padstackId = padstackId;
       this.relativeLocation = relativeLocation;
       this.rotationInDegree = rotationInDegree;
+      this.exactRelativeLocation =
+          exactRelativeLocation != null
+              ? exactRelativeLocation
+              : (relativeLocation != null ? relativeLocation.toFloat() : null);
+    }
+
+    /** Returns the high-precision relative location of this pin. */
+    public app.freerouting.geometry.planar.FloatPoint getExactRelativeLocation() {
+      return this.exactRelativeLocation;
     }
   }
 

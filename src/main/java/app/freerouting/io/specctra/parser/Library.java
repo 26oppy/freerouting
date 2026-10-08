@@ -313,10 +313,10 @@ public class Library extends ScopeKeyword {
           new app.freerouting.core.library.Package.Pin[currentPackage.pinInfoArr.length];
       for (int i = 0; i < pins.length; i++) {
         Package.PinInfo pinInfo = currentPackage.pinInfoArr[i];
-        int relX =
-            (int) Math.round(scopeParameter.coordinateTransform.dsnToBoard(pinInfo.relCoor[0]));
-        int relY =
-            (int) Math.round(scopeParameter.coordinateTransform.dsnToBoard(pinInfo.relCoor[1]));
+        app.freerouting.geometry.planar.FloatPoint exactRel =
+            scopeParameter.coordinateTransform.dsnToBoardRel(pinInfo.relCoor);
+        int relX = (int) Math.round(exactRel.x);
+        int relY = (int) Math.round(exactRel.y);
         Vector relCoor = new IntVector(relX, relY);
         String cleanedLookupName =
             pinInfo.padstackName != null ? pinInfo.padstackName.replaceAll("\\.\\d+", "") : null;
@@ -334,7 +334,7 @@ public class Library extends ScopeKeyword {
         }
         pins[i] =
             new app.freerouting.core.library.Package.Pin(
-                pinInfo.pinName, boardPadstack.id, relCoor, pinInfo.rotation);
+                pinInfo.pinName, boardPadstack.id, relCoor, pinInfo.rotation, exactRel);
       }
       app.freerouting.geometry.planar.Shape[] outlines =
           new app.freerouting.geometry.planar.Shape[currentPackage.outline.size()];

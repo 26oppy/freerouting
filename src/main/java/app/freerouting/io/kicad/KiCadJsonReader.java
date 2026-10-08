@@ -587,11 +587,11 @@ public final class KiCadJsonReader {
           if (padstack == null) {
             padstack = padstacks.add(padstackName, shapes, isDrillable, false);
           }
+          FloatPoint exactRel =
+              new FloatPoint(pad.offset.x * scaleFactor, -pad.offset.y * scaleFactor);
           IntVector relativeLoc =
-              new IntVector(
-                  (int) Math.round(pad.offset.x * scaleFactor),
-                  (int) Math.round(-pad.offset.y * scaleFactor));
-          packagePins.add(new Package.Pin(pad.name, padstack.id, relativeLoc, 0.0));
+              new IntVector((int) Math.round(exactRel.x), (int) Math.round(exactRel.y));
+          packagePins.add(new Package.Pin(pad.name, padstack.id, relativeLoc, 0.0, exactRel));
         }
 
         boolean isFront = !"B.Cu".equalsIgnoreCase(comp.layer);
@@ -642,15 +642,15 @@ public final class KiCadJsonReader {
           }
           suffix++;
         }
-        IntPoint position =
-            new IntPoint(
-                (int) Math.round(comp.position.x * scaleFactor),
-                (int) Math.round(-comp.position.y * scaleFactor));
+        FloatPoint exactPos =
+            new FloatPoint(comp.position.x * scaleFactor, -comp.position.y * scaleFactor);
+        IntPoint position = exactPos.round();
 
         Component boardComp =
             board.components.add(
                 comp.reference,
                 position,
+                exactPos,
                 comp.rotation,
                 isFront,
                 componentPackage,

@@ -4,6 +4,7 @@ import app.freerouting.board.actions.ItemInfoPrinter;
 import app.freerouting.core.library.LogicalPart;
 import app.freerouting.core.library.Package;
 import app.freerouting.datastructures.UndoableObjects;
+import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Vector;
@@ -38,6 +39,9 @@ public class Component
   /** The location of the component. */
   private Point location;
 
+  /** The high-precision location of the component before integer rounding. */
+  private FloatPoint exactLocation;
+
   /** The rotation of the library package of the component in degree. */
   private double rotationInDegree;
 
@@ -48,12 +52,13 @@ public class Component
   private boolean onFront;
 
   /**
-   * Creates a new instance of Component with the input parameters. If onFront is false, the
-   * component will be placed on the back side.
+   * Creates a new instance of Component with exact location. If onFront is false, the component
+   * will be placed on the back side.
    */
   Component(
       String name,
       Point location,
+      FloatPoint exactLocation,
       double rotationInDegree,
       boolean onFront,
       Package packageFront,
@@ -63,6 +68,8 @@ public class Component
       String partNumber) {
     this.name = name;
     this.location = location;
+    this.exactLocation =
+        exactLocation != null ? exactLocation : (location != null ? location.toFloat() : null);
     this.rotationInDegree = rotationInDegree;
     while (this.rotationInDegree >= 360) {
       this.rotationInDegree -= 360;
@@ -78,9 +85,43 @@ public class Component
     this.partNumber = partNumber;
   }
 
+  /**
+   * Creates a new instance of Component with the input parameters. If onFront is false, the
+   * component will be placed on the back side.
+   */
+  Component(
+      String name,
+      Point location,
+      double rotationInDegree,
+      boolean onFront,
+      Package packageFront,
+      Package packageBack,
+      int id,
+      boolean positionFixed,
+      String partNumber) {
+    this(
+        name,
+        location,
+        location != null ? location.toFloat() : null,
+        rotationInDegree,
+        onFront,
+        packageFront,
+        packageBack,
+        id,
+        positionFixed,
+        partNumber);
+  }
+
   /** Returns the location of this component. */
   public Point getLocation() {
     return location;
+  }
+
+  /** Returns the high-precision location of this component, or null if unplaced. */
+  public FloatPoint getExactLocation() {
+    return this.exactLocation != null
+        ? this.exactLocation
+        : (this.location != null ? this.location.toFloat() : null);
   }
 
   /** Returns the rotation of this component in degree. */
@@ -105,6 +146,10 @@ public class Component
     if (location != null) {
       location = location.translateBy(vector);
     }
+    if (exactLocation != null) {
+      FloatPoint vf = vector.toFloat();
+      exactLocation = new FloatPoint(exactLocation.x + vf.x, exactLocation.y + vf.y);
+    }
   }
 
   /** Turns this component by factor times 90 degree around pole. */
@@ -121,6 +166,9 @@ public class Component
     }
     if (location != null) {
       this.location = this.location.turn90Degree(factor, pole);
+    }
+    if (exactLocation != null) {
+      this.exactLocation = this.exactLocation.turn90Degree(factor, pole.toFloat());
     }
   }
 
@@ -145,6 +193,9 @@ public class Component
       this.location =
           this.location.toFloat().rotate(Math.toRadians(angleInDegree), pole.toFloat()).round();
     }
+    if (exactLocation != null) {
+      this.exactLocation = this.exactLocation.rotate(Math.toRadians(angleInDegree), pole.toFloat());
+    }
   }
 
   /**
@@ -153,6 +204,9 @@ public class Component
   public void changeSide(IntPoint pole) {
     this.onFront = !this.onFront;
     this.location = this.location.mirrorVertical(pole);
+    if (exactLocation != null) {
+      this.exactLocation = new FloatPoint(2 * pole.x - this.exactLocation.x, this.exactLocation.y);
+    }
   }
 
   /**
@@ -177,6 +231,7 @@ public class Component
         new Component(
             name,
             location,
+            exactLocation,
             rotationInDegree,
             onFront,
             libPackageFront,

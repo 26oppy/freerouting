@@ -9,6 +9,7 @@ import app.freerouting.core.library.Package;
 import app.freerouting.core.library.Padstack;
 import app.freerouting.datastructures.IdentifierType;
 import app.freerouting.datastructures.IndentFileWriter;
+import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Vector;
@@ -946,10 +947,13 @@ public class Network extends ScopeKeyword {
       return;
     }
 
+    FloatPoint exactLocation;
     IntPoint componentLocation;
     if (location.coor != null) {
-      componentLocation = scopeParameter.coordinateTransform.dsnToBoard(location.coor).round();
+      exactLocation = scopeParameter.coordinateTransform.dsnToBoard(location.coor);
+      componentLocation = exactLocation.round();
     } else {
+      exactLocation = null;
       componentLocation = null;
     }
     double rotationInDegree = location.rotation;
@@ -958,6 +962,7 @@ public class Network extends ScopeKeyword {
         routingBoard.components.add(
             location.name,
             componentLocation,
+            exactLocation,
             rotationInDegree,
             location.isFront,
             currentFrontPackage,
