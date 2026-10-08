@@ -66,10 +66,35 @@ public class Pin extends DrillItem implements Serializable {
     Component component = board.components.get(this.getComponentId());
     Package libPackage = component.getPackage();
     Package.Pin packagePin = libPackage.getPin(this.pinIndex);
-    Vector relLocation = packagePin.relativeLocation;
-    double componentRotation = component.getRotationInDegree();
-    if (!component.placedOnFront() && !board.components.getFlipStyleRotateFirst()) {
-      relLocation = packagePin.relativeLocation.mirrorAtYAxis();
+
+    FloatPoint compLoc = component != null ? component.getExactLocation() : null;
+    FloatPoint relLoc = packagePin != null ? packagePin.getExactRelativeLocation() : null;
+    double componentRotation = component != null ? component.getRotationInDegree() : 0.0;
+
+    if (compLoc != null && relLoc != null && component != null && component.getLocation() != null) {
+      if (!component.placedOnFront() && !board.components.getFlipStyleRotateFirst()) {
+        relLoc = new FloatPoint(-relLoc.x, relLoc.y);
+      }
+      if (componentRotation % 90 == 0) {
+        int componentNinetyDegreeFactor = ((int) componentRotation) / 90;
+        if (componentNinetyDegreeFactor != 0) {
+          relLoc = relLoc.turn90Degree(componentNinetyDegreeFactor);
+        }
+      } else {
+        relLoc = relLoc.rotate(Math.toRadians(componentRotation), FloatPoint.ZERO);
+      }
+      if (!component.placedOnFront() && board.components.getFlipStyleRotateFirst()) {
+        relLoc = new FloatPoint(-relLoc.x, relLoc.y);
+      }
+      FloatPoint exactCenter = new FloatPoint(compLoc.x + relLoc.x, compLoc.y + relLoc.y);
+      return exactCenter.round().differenceBy(component.getLocation());
+    }
+
+    Vector relLocation = packagePin != null ? packagePin.relativeLocation : Vector.ZERO;
+    if (component != null
+        && !component.placedOnFront()
+        && !board.components.getFlipStyleRotateFirst()) {
+      relLocation = relLocation.mirrorAtYAxis();
     }
     if (componentRotation % 90 == 0) {
       int componentNinetyDegreeFactor = ((int) componentRotation) / 90;
@@ -82,7 +107,9 @@ public class Pin extends DrillItem implements Serializable {
       locationApprox = locationApprox.rotate(Math.toRadians(componentRotation), FloatPoint.ZERO);
       relLocation = locationApprox.round().differenceBy(Point.ZERO);
     }
-    if (!component.placedOnFront() && board.components.getFlipStyleRotateFirst()) {
+    if (component != null
+        && !component.placedOnFront()
+        && board.components.getFlipStyleRotateFirst()) {
       relLocation = relLocation.mirrorAtYAxis();
     }
     return relLocation;
