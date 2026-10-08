@@ -269,10 +269,7 @@ public abstract class Trace extends Item implements Connectable, Serializable {
       return true;
     }
     Collection<Item> endContactList = this.getEndContacts();
-    if (endContactList.isEmpty()) {
-      return true;
-    }
-    return this.getNormalContacts().size() <= 1;
+    return endContactList.isEmpty();
   }
 
   @Override
