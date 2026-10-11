@@ -442,7 +442,13 @@ public class RatsNest {
    * @see GraphicsContext
    */
   public void draw(Graphics graphics, GraphicsContext graphicsContext) {
+    if (graphicsContext == null || graphicsContext.getIncompleteColorIntensity() <= 0.001) {
+      return;
+    }
     boolean drawLengthViolationsOnly = this.hidden;
+    if (drawLengthViolationsOnly && drc.getLengthViolationCount() == 0) {
+      return;
+    }
 
     for (int i = 0; i < isFiltered.length; i++) {
       // net index to net number: i -> i+1

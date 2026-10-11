@@ -231,7 +231,7 @@ public class GraphicsContext implements Serializable {
   /** Draws a polygon with the given corner points. */
   public void draw(
       FloatPoint[] points, double halfWidth, Color color, Graphics g, double translucencyFactor) {
-    if (color == null || points == null || points.length <= 1) {
+    if (color == null || points == null || points.length <= 1 || translucencyFactor <= 0.001) {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
@@ -290,7 +290,7 @@ public class GraphicsContext implements Serializable {
       Color color,
       Graphics g,
       double translucencyFactor) {
-    if (color == null) {
+    if (color == null || translucencyFactor <= 0.001) {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
@@ -321,7 +321,7 @@ public class GraphicsContext implements Serializable {
       Color color,
       Graphics g,
       double translucencyFactor) {
-    if (color == null) {
+    if (color == null || translucencyFactor <= 0.001) {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
@@ -343,6 +343,9 @@ public class GraphicsContext implements Serializable {
   /** Draws the boundary of shape. */
   public void drawBoundary(
       Shape shape, double drawHalfWidth, Color color, Graphics g, double translucencyFactor) {
+    if (shape == null || color == null || translucencyFactor <= 0.001) {
+      return;
+    }
     if (shape instanceof PolylineShape) {
       FloatPoint[] drawCorners = shape.cornerApproxArr();
       if (drawCorners.length <= 1) {
@@ -366,6 +369,9 @@ public class GraphicsContext implements Serializable {
   /** Draws the boundary of area. */
   public void drawBoundary(
       Area area, double drawHalfWidth, Color color, Graphics g, double translucencyFactor) {
+    if (area == null || color == null || translucencyFactor <= 0.001) {
+      return;
+    }
     drawBoundary(area.getBorder(), drawHalfWidth, color, g, translucencyFactor);
     Shape[] holes = area.getHoles();
     for (int i = 0; i < holes.length; i++) {
@@ -565,7 +571,7 @@ public class GraphicsContext implements Serializable {
 
   /** Draws the interior of a circle. */
   public void fillCircle(Circle circle, Graphics g, Color color, double translucencyFactor) {
-    if (color == null) {
+    if (color == null || circle == null || translucencyFactor <= 0.001) {
       return;
     }
     Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
@@ -596,7 +602,10 @@ public class GraphicsContext implements Serializable {
    */
   public void fillEllipseArr(
       Ellipse[] ellipseArr, Graphics g, Color color, double translucencyFactor) {
-    if (color == null || ellipseArr.length == 0) {
+    if (color == null
+        || ellipseArr == null
+        || ellipseArr.length == 0
+        || translucencyFactor <= 0.001) {
       return;
     }
     GeneralPath drawPath = new GeneralPath(GeneralPath.WIND_EVEN_ODD);
@@ -643,7 +652,7 @@ public class GraphicsContext implements Serializable {
 
   /** Fill the interior of the polygon shape represented by points. */
   public void fillShape(FloatPoint[] points, Graphics g, Color color, double translucencyFactor) {
-    if (color == null) {
+    if (color == null || points == null || points.length <= 2 || translucencyFactor <= 0.001) {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
@@ -665,7 +674,10 @@ public class GraphicsContext implements Serializable {
    */
   public void fillArea(
       FloatPoint[][] pointLists, Graphics g, Color color, double translucencyFactor) {
-    if (color == null) {
+    if (color == null
+        || pointLists == null
+        || pointLists.length == 0
+        || translucencyFactor <= 0.001) {
       return;
     }
     GeneralPath drawPath = new GeneralPath(GeneralPath.WIND_EVEN_ODD);
@@ -688,7 +700,7 @@ public class GraphicsContext implements Serializable {
 
   /** Draws the interior of a geometry {@link Area}. */
   public void fillArea(Area area, Graphics g, Color color, double translucencyFactor) {
-    if (color == null || area.isEmpty()) {
+    if (color == null || area == null || area.isEmpty() || translucencyFactor <= 0.001) {
       return;
     }
     if (area instanceof Circle circle) {
