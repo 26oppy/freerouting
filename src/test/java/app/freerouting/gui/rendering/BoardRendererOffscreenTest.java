@@ -104,4 +104,42 @@ class BoardRendererOffscreenTest {
         nonTransparentPixels > 0,
         "diagnostic adapter must draw a snapshot into the offscreen image");
   }
+
+  @Test
+  void rendersBoardWithSimplifiedPlaneRenderingWithoutError() throws Exception {
+    BasicBoard board;
+    try (FileInputStream in = new FileInputStream("fixtures/Issue754-avionics_hub.dsn")) {
+      BoardReadResult result = DsnReader.readBoard(in, null, null, "phase6-renderer");
+      board =
+          switch (result) {
+            case BoardReadResult.Success s -> (BasicBoard) s.board();
+            case BoardReadResult.OutlineMissing o -> (BasicBoard) o.board();
+            default -> throw new IllegalStateException("Failed to read board: " + result);
+          };
+    }
+    IntBox designBounds = board.getBoundingBox();
+    GraphicsContext graphicsContext =
+        new GraphicsContext(
+            designBounds,
+            new Dimension(IMAGE_WIDTH, IMAGE_HEIGHT),
+            board.layerStructure,
+            Locale.ENGLISH);
+    graphicsContext.setSimplifiedPlaneRendering(true);
+    BufferedImage image = new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+
+    Graphics2D graphics = image.createGraphics();
+    try {
+      graphics.setClip(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
+      BoardRenderer.draw(board, graphics, graphicsContext);
+    } finally {
+      graphics.dispose();
+    }
+
+    int[] pixels = image.getRGB(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, null, 0, IMAGE_WIDTH);
+    long nonTransparentPixels =
+        Arrays.stream(pixels).filter(pixel -> ((pixel >>> 24) & 0xFF) != 0).count();
+    assertTrue(
+        nonTransparentPixels > 0,
+        "renderer in simplified plane mode must draw visible pixels into the offscreen image");
+  }
 }

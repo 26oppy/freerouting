@@ -610,25 +610,29 @@ public final class BoardRenderer {
                   py.getY() - p0.getY(),
                   p0.getX(),
                   p0.getY());
-          java.awt.geom.Area screenArea = cachedFill.createTransformedArea(boardToScreen);
           java.awt.Graphics2D graphics2D = (java.awt.Graphics2D) graphics;
           java.awt.Paint oldPaint = graphics2D.getPaint();
           java.awt.Composite oldComposite = graphics2D.getComposite();
+          java.awt.geom.AffineTransform oldTransform = graphics2D.getTransform();
           graphics2D.setColor(color);
           graphics2D.setComposite(
               java.awt.AlphaComposite.getInstance(
                   java.awt.AlphaComposite.SRC_OVER, (float) fillOpacity));
           graphics2D.setRenderingHint(
               java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-          graphics2D.fill(screenArea);
+          graphics2D.transform(boardToScreen);
+          graphics2D.fill(cachedFill);
+          graphics2D.setTransform(oldTransform);
           graphics2D.setPaint(oldPaint);
           graphics2D.setComposite(oldComposite);
         }
       }
     }
-    double hatchPitch = 500.0 * area.board.communication.getResolution(Unit.UM);
-    graphicsContext.drawPlaneHatch(
-        area.getArea(), graphics, color, layerVisibility * intensity * 0.85, hatchPitch);
+    if (!graphicsContext.isSimplifiedPlaneRendering()) {
+      double hatchPitch = 500.0 * area.board.communication.getResolution(Unit.UM);
+      graphicsContext.drawPlaneHatch(
+          area.getArea(), graphics, color, layerVisibility * intensity * 0.85, hatchPitch);
+    }
     graphicsContext.drawBoundary(area.getArea(), 0.0, color, graphics, layerVisibility);
   }
 
