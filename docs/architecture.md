@@ -293,7 +293,7 @@ Application configuration, defaults, and the priority-based `SettingsMerger`. St
 
 ### `app.freerouting.datastructures`
 
-Reusable support structures that are shared across feature areas.
+Reusable support structures that are shared across feature areas. The `datastructures.spatial` subpackage provides generic 2D spatial indexing (such as `RTree` and `SpatialIndex`) for high-performance bounding-box queries.
 
 ### `app.freerouting.logger`
 
@@ -305,7 +305,7 @@ Diagnostics and debugging utilities.
 
 ### `app.freerouting.gui.rendering`
 
-GUI-owned board rendering: layer/virtual-layer ordering, viewport culling, draw-priority traversal,
+GUI-owned board rendering: layer/virtual-layer ordering, viewport culling via revision-aware `ItemSpatialIndex`, draw-priority traversal,
 component fabrication labels, dispatch to board-item paint strategies, and adaptation of opt-in
 headless autorouter diagnostic snapshots. `BoardRenderer` and `AutorouteDiagnosticRenderer` are the
 GUI rendering entry points; `BasicBoard` and `autoroute` remain headless and do not own GUI painting.

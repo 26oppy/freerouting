@@ -23,7 +23,6 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 /**
@@ -34,8 +33,8 @@ import java.util.List;
  */
 public final class BoardRenderer {
 
-  private static final int MIN_DRAW_PRIORITY = 1;
-  private static final int MAX_DRAW_PRIORITY = 3;
+  static final int MIN_DRAW_PRIORITY = 1;
+  static final int MAX_DRAW_PRIORITY = 3;
 
   private BoardRenderer() {}
 
@@ -50,26 +49,23 @@ public final class BoardRenderer {
         determineDominantSide(board, activeLayer, activeVirtualLayer);
     List<RenderStep> drawSteps =
         createDrawSteps(board.getLayerCount(), dominantSide, activeLayer, activeVirtualLayer);
-    Collection<Item> allItems = board.getItems();
 
-    @SuppressWarnings("unchecked")
-    List<Item>[] itemsByPriority = (List<Item>[]) new List[MAX_DRAW_PRIORITY + 1];
-    for (int priority = 0; priority <= MAX_DRAW_PRIORITY; priority++) {
-      itemsByPriority[priority] = new ArrayList<>();
-    }
-    for (Item item : allItems) {
-      int priority = drawPriority(item);
-      if (priority >= 0 && priority <= MAX_DRAW_PRIORITY) {
-        itemsByPriority[priority].add(item);
-      }
+    ItemSpatialIndex spatialIndex = ItemSpatialIndex.get(board);
+    if (spatialIndex != null) {
+      spatialIndex.updateIfStale();
     }
 
     java.awt.Rectangle clipRect = graphics.getClipBounds();
     IntBox clipBox =
         clipRect != null ? graphicsContext.coordinateTransform.screenToBoard(clipRect) : null;
     for (int priority = MIN_DRAW_PRIORITY; priority <= MAX_DRAW_PRIORITY; priority++) {
+      List<Item> candidateItems =
+          spatialIndex != null ? spatialIndex.query(priority, clipBox) : null;
+      if (candidateItems == null || candidateItems.isEmpty()) {
+        continue;
+      }
       for (RenderStep step : drawSteps) {
-        for (Item item : itemsByPriority[priority]) {
+        for (Item item : candidateItems) {
           if (!isItemOnStep(item, step)) {
             continue;
           }
@@ -146,7 +142,7 @@ public final class BoardRenderer {
   }
 
   /** Returns the renderer-owned draw priority for an item family. */
-  private static int drawPriority(Item item) {
+  static int drawPriority(Item item) {
     return switch (item.getBoardItemType()) {
       case BOARD_OUTLINE, COMPONENT_OUTLINE, TRACE, PIN, VIA -> MAX_DRAW_PRIORITY;
       default -> MIN_DRAW_PRIORITY;
