@@ -23,6 +23,7 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -43,14 +44,13 @@ public final class BoardRenderer {
     if (board == null || graphics == null || graphicsContext == null) {
       return;
     }
-
     int activeLayer = graphicsContext.getFullyVisibleLayer();
     int activeVirtualLayer = graphicsContext.getFullyVisibleVirtualLayer();
     BasicBoard.DominantSide dominantSide =
         determineDominantSide(board, activeLayer, activeVirtualLayer);
     List<RenderStep> drawSteps =
         createDrawSteps(board.getLayerCount(), dominantSide, activeLayer, activeVirtualLayer);
-    List<Item> allItems = new ArrayList<>(board.getItems());
+    Collection<Item> allItems = board.getItems();
 
     @SuppressWarnings("unchecked")
     List<Item>[] itemsByPriority = (List<Item>[]) new List[MAX_DRAW_PRIORITY + 1];
@@ -70,6 +70,9 @@ public final class BoardRenderer {
     for (int priority = MIN_DRAW_PRIORITY; priority <= MAX_DRAW_PRIORITY; priority++) {
       for (RenderStep step : drawSteps) {
         for (Item item : itemsByPriority[priority]) {
+          if (!isItemOnStep(item, step)) {
+            continue;
+          }
           if (clipBox != null && !clipBox.intersects(item.boundingBox())) {
             continue;
           }
@@ -305,6 +308,29 @@ public final class BoardRenderer {
       drawSteps.add(selectedStep);
     }
     return drawSteps;
+  }
+
+  private static boolean isItemOnStep(Item item, RenderStep step) {
+    if (step.virtual()) {
+      return (item instanceof ComponentOutline outline && virtualLayerFor(outline) == step.index())
+          || (item instanceof ComponentObstacleArea area && virtualLayerFor(area) == step.index());
+    }
+    if (item instanceof ComponentOutline || item instanceof ComponentObstacleArea) {
+      return false;
+    }
+    if (item instanceof PolylineTrace trace) {
+      return trace.getLayer() == step.index();
+    }
+    if (item instanceof DrillItem drillItem) {
+      return drillItem.firstLayer() <= step.index() && step.index() <= drillItem.lastLayer();
+    }
+    if (item instanceof ObstacleArea obstacleArea) {
+      return obstacleArea.getLayer() == step.index();
+    }
+    if (item instanceof ConductionArea conductionArea) {
+      return conductionArea.getLayer() == step.index();
+    }
+    return true;
   }
 
   private static void renderItem(
