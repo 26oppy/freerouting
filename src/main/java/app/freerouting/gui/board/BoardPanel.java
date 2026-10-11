@@ -326,6 +326,11 @@ public class BoardPanel extends JPanel {
   private int pendingWheelRotation;
   private Point2D pendingWheelPoint;
 
+  private long lastMouseMoveTime;
+  private Point pendingMouseMovePoint;
+  private final javax.swing.Timer mouseMoveCoalesceTimer =
+      new javax.swing.Timer((int) CURSOR_REPAINT_THROTTLE_MS, evt -> flushPendingMouseMove());
+
   /**
    * Creates a new BoardPanel within a GUI application context.
    *
@@ -377,6 +382,7 @@ public class BoardPanel extends JPanel {
   private void defaultInit(
       GlobalSettings globalSettings, RoutingJob routingJob, SettingsMerger settingMerger) {
     zoomGestureEndTimer.setRepeats(false);
+    mouseMoveCoalesceTimer.setRepeats(false);
     setLayout(new BorderLayout());
 
     setBackground(new Color(0, 0, 0));
@@ -608,7 +614,16 @@ public class BoardPanel extends JPanel {
     zoomGestureEndTimer.restart();
   }
 
+  private void flushPendingMouseMove() {
+    if (pendingMouseMovePoint != null && boardHandling != null) {
+      Point point = pendingMouseMovePoint;
+      pendingMouseMovePoint = null;
+      boardHandling.mouseMoved(point);
+    }
+  }
+
   private void mousePressedAction(MouseEvent evt) {
+    flushPendingMouseMove();
     if (evt.getButton() == 1) {
       boardHandling.mousePressed(evt.getPoint());
     } else if (evt.getButton() == 2 && middleDragPosition == null) {
@@ -634,15 +649,29 @@ public class BoardPanel extends JPanel {
 
   private void mouseMovedAction(MouseEvent event) {
     this.requestFocusInWindow(); // to enable keyboard aliases
-    if (boardHandling != null) {
-      boardHandling.mouseMoved(event.getPoint());
+    long now = System.currentTimeMillis();
+    boolean isInteractive = boardHandling != null && boardHandling.isInInteractiveAction();
+    if (isInteractive) {
+      if (now - this.lastMouseMoveTime >= CURSOR_REPAINT_THROTTLE_MS) {
+        this.lastMouseMoveTime = now;
+        pendingMouseMovePoint = null;
+        mouseMoveCoalesceTimer.stop();
+        boardHandling.mouseMoved(event.getPoint());
+      } else {
+        pendingMouseMovePoint = event.getPoint();
+        mouseMoveCoalesceTimer.restart();
+      }
+    } else {
+      pendingMouseMovePoint = null;
+      if (boardHandling != null) {
+        boardHandling.mouseMoved(event.getPoint());
+      }
     }
     if (this.customCursor != null) {
       this.customCursor.setLocation(event.getPoint());
       // Throttle repaints to avoid flooding the AWT event queue with full board redraws
       // during rapid mouse motion. High-DPI mice can generate 100+ events/second, and
       // each repaint triggers a full board render + cursor overlay.
-      long now = System.currentTimeMillis();
       if (now - this.lastCursorRepaintTime >= CURSOR_REPAINT_THROTTLE_MS) {
         this.lastCursorRepaintTime = now;
         this.repaint();
@@ -651,6 +680,7 @@ public class BoardPanel extends JPanel {
   }
 
   private void mouseClickedAction(MouseEvent evt) {
+    flushPendingMouseMove();
     if (evt.getButton() == 1) {
       boardHandling.leftButtonClicked(evt.getPoint());
     } else if (evt.getButton() == 3) {

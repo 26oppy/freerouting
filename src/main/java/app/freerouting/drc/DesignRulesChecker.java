@@ -1066,6 +1066,23 @@ public class DesignRulesChecker {
   }
 
   /**
+   * Recalculates length matching violations for a specific net.
+   *
+   * @param netNumber the net number to recalculate (1-based)
+   * @return true if the violation status of the net changed
+   */
+  public boolean recalculateLengthViolation(int netNumber) {
+    if (netIncompletes == null) {
+      calculateAllIncompletes();
+      return true;
+    }
+    if (netNumber <= 0 || netNumber > netIncompletes.length) {
+      return false;
+    }
+    return netIncompletes[netNumber - 1].calcLengthViolation();
+  }
+
+  /**
    * Recalculates length matching violations for all nets.
    *
    * @return true if the status of any length violation has changed.

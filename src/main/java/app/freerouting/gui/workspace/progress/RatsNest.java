@@ -349,6 +349,17 @@ public class RatsNest {
   }
 
   /**
+   * Recalculates length matching violations for a specific net.
+   *
+   * @param netNumber the net number to check
+   * @return true if the violation status changed, false otherwise
+   * @see DesignRulesChecker#recalculateLengthViolation(int)
+   */
+  public boolean recalculateLengthViolation(int netNumber) {
+    return drc.recalculateLengthViolation(netNumber);
+  }
+
+  /**
    * Recalculates length matching violations for all nets with length constraints.
    *
    * <p>This method:

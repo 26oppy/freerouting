@@ -319,12 +319,12 @@ public class RouteState extends InteractiveState {
       for (int currentNetNumber : this.route.netNumbers) {
         hdlg.updateRatsnest(currentNetNumber);
       }
-      hdlg.recalculateLengthViolations();
+      hdlg.recalculateLengthViolations(this.route.netNumbers);
       hdlg.getRoutingBoard().resetGraphicsUpdateBox();
       hdlg.repaint();
     } else {
       result = this;
-      hdlg.recalculateLengthViolations();
+      hdlg.recalculateLengthViolations(this.route.netNumbers);
       hdlg.repaint(hdlg.getGraphicsUpdateRectangle());
     }
     return result;

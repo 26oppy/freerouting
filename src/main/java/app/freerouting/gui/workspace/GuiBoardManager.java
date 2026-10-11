@@ -390,6 +390,22 @@ public class GuiBoardManager extends HeadlessBoardManager implements WorkspaceCo
   }
 
   /** GUI workspace member. */
+  public void recalculateLengthViolation(int netNumber) {
+    analysisController.recalculateLengthViolation(netNumber);
+  }
+
+  /** GUI workspace member. */
+  public void recalculateLengthViolations(int[] netNumbers) {
+    if (netNumbers == null || netNumbers.length == 0) {
+      recalculateLengthViolations();
+      return;
+    }
+    for (int netNumber : netNumbers) {
+      analysisController.recalculateLengthViolation(netNumber);
+    }
+  }
+
+  /** GUI workspace member. */
   public void recalculateLengthViolations() {
     analysisController.recalculateLengthViolations();
   }

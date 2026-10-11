@@ -113,6 +113,14 @@ public final class GuiBoardAnalysisController {
     return ratsnest;
   }
 
+  public void recalculateLengthViolation(int netNumber) {
+    if (ratsnest != null
+        && ratsnest.recalculateLengthViolation(netNumber)
+        && !ratsnest.isHidden()) {
+      manager.repaint();
+    }
+  }
+
   public void recalculateLengthViolations() {
     if (ratsnest != null && ratsnest.recalculateLengthViolations() && !ratsnest.isHidden()) {
       manager.repaint();
