@@ -24,6 +24,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.Line2D;
+import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
@@ -98,11 +99,26 @@ public class GraphicsContext implements Serializable {
     return new boolean[] {true, true, true, true, true, true};
   }
 
+  private static final int MAX_STROKE_CACHE_SIZE = 256;
+  private static final java.util.Map<Float, BasicStroke> STROKE_CACHE =
+      new java.util.LinkedHashMap<>(MAX_STROKE_CACHE_SIZE, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<Float, BasicStroke> eldest) {
+          return size() > MAX_STROKE_CACHE_SIZE;
+        }
+      };
+
+  private static BasicStroke getRoundStroke(float width) {
+    float clampedWidth = Math.max(width, 0.0f);
+    synchronized (STROKE_CACHE) {
+      return STROKE_CACHE.computeIfAbsent(
+          clampedWidth, w -> new BasicStroke(w, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    }
+  }
+
   /** Initializes stroke and color settings on the given graphics context. */
   private static void initDrawGraphics(Graphics2D graphics, Color color, float width) {
-    BasicStroke bs =
-        new BasicStroke(Math.max(width, 0), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
-    graphics.setStroke(bs);
+    graphics.setStroke(getRoundStroke(width));
     graphics.setColor(color);
     graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
   }
@@ -215,7 +231,7 @@ public class GraphicsContext implements Serializable {
   /** Draws a polygon with the given corner points. */
   public void draw(
       FloatPoint[] points, double halfWidth, Color color, Graphics g, double translucencyFactor) {
-    if (color == null) {
+    if (color == null || points == null || points.length <= 1) {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
@@ -224,30 +240,41 @@ public class GraphicsContext implements Serializable {
     initDrawGraphics(g2, color, (float) scaledWidth * 2);
     setTranslucency(g2, translucencyFactor);
 
-    GeneralPath drawPath = null;
-    if (!show_line_segments) {
-      drawPath = new GeneralPath();
-    }
-
     Rectangle clipShape = g.getClip().getBounds();
     IntBox clipBox = coordinateTransform.screenToBoard(clipShape);
+
+    if (show_line_segments) {
+      for (int i = 0; i < (points.length - 1); i++) {
+        if (lineOutsideUpdateBox(points[i], points[i + 1], halfWidth + update_offset, clipBox)) {
+          continue;
+        }
+        Point2D p1 = coordinateTransform.boardToScreen(points[i]);
+        Point2D p2 = coordinateTransform.boardToScreen(points[i + 1]);
+        g2.draw(new Line2D.Double(p1, p2));
+      }
+      return;
+    }
+
+    Path2D.Double drawPath = new Path2D.Double();
+    Point2D lastPoint = null;
+    boolean hasVisibleSegments = false;
     for (int i = 0; i < (points.length - 1); i++) {
       if (lineOutsideUpdateBox(points[i], points[i + 1], halfWidth + update_offset, clipBox)) {
-        // this check should be unnecessary here,
-        // the system should do it in the draw(line) function
+        lastPoint = null;
         continue;
       }
       Point2D p1 = coordinateTransform.boardToScreen(points[i]);
       Point2D p2 = coordinateTransform.boardToScreen(points[i + 1]);
-      Line2D line = new Line2D.Double(p1, p2);
-
-      if (show_line_segments) {
-        g2.draw(line);
+      if (lastPoint != null && lastPoint.equals(p1)) {
+        drawPath.lineTo(p2.getX(), p2.getY());
       } else {
-        drawPath.append(line, false);
+        drawPath.moveTo(p1.getX(), p1.getY());
+        drawPath.lineTo(p2.getX(), p2.getY());
       }
+      lastPoint = p2;
+      hasVisibleSegments = true;
     }
-    if (!show_line_segments) {
+    if (hasVisibleSegments) {
       g2.draw(drawPath);
     }
   }
