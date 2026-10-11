@@ -597,6 +597,17 @@ public class BoardPanel extends JPanel {
     return zoomGestureEndTimer.isRunning();
   }
 
+  /**
+   * Activates low-res simplified plane rendering during scrollbar adjustment and restarts the
+   * debounce timer to restore high-res rendering once scrolling stops.
+   */
+  public void triggerScrollAdjustment() {
+    if (boardHandling != null && boardHandling.graphicsContext != null) {
+      boardHandling.graphicsContext.setSimplifiedPlaneRendering(true);
+    }
+    zoomGestureEndTimer.restart();
+  }
+
   private void mousePressedAction(MouseEvent evt) {
     if (evt.getButton() == 1) {
       boardHandling.mousePressed(evt.getPoint());

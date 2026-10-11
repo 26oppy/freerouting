@@ -118,23 +118,36 @@ public final class GuiBoardPresentationController {
       return;
     }
 
-    BoardRenderer.draw(board, graphics, graphicsContext);
-    if (manager.getPresentationRatsNest() != null) {
-      manager.getPresentationRatsNest().draw(graphics, graphicsContext);
+    boolean wasSimplifiedPlanes = graphicsContext.isSimplifiedPlaneRendering();
+    boolean interactiveAction =
+        manager.getPresentationEditorStateController() != null
+            && manager.getPresentationEditorStateController().isInteractiveAction();
+    if (interactiveAction) {
+      graphicsContext.setSimplifiedPlaneRendering(true);
     }
-    if (manager.getPresentationClearanceViolations() != null) {
-      manager.getPresentationClearanceViolations().draw(graphics, graphicsContext);
-    }
-    if (manager.getPresentationEditorStateController() != null) {
-      manager.getPresentationEditorStateController().draw(graphics);
-    }
-    if (manager.getPresentationInteractiveActionThread() != null) {
-      manager.getPresentationInteractiveActionThread().draw(graphics);
-    }
+    try {
+      BoardRenderer.draw(board, graphics, graphicsContext);
+      if (manager.getPresentationRatsNest() != null) {
+        manager.getPresentationRatsNest().draw(graphics, graphicsContext);
+      }
+      if (manager.getPresentationClearanceViolations() != null) {
+        manager.getPresentationClearanceViolations().draw(graphics, graphicsContext);
+      }
+      if (manager.getPresentationEditorStateController() != null) {
+        manager.getPresentationEditorStateController().draw(graphics);
+      }
+      if (manager.getPresentationInteractiveActionThread() != null) {
+        manager.getPresentationInteractiveActionThread().draw(graphics);
+      }
 
-    Point[] impactedPoints = manager.getImpactedPoints();
-    if (impactedPoints != null && impactedPoints.length > 0) {
-      drawImpactedPointsIndicators(graphics, board, graphicsContext, impactedPoints);
+      Point[] impactedPoints = manager.getImpactedPoints();
+      if (impactedPoints != null && impactedPoints.length > 0) {
+        drawImpactedPointsIndicators(graphics, board, graphicsContext, impactedPoints);
+      }
+    } finally {
+      if (interactiveAction) {
+        graphicsContext.setSimplifiedPlaneRendering(wasSimplifiedPlanes);
+      }
     }
   }
 

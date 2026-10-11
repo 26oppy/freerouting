@@ -276,6 +276,15 @@ public class BoardFrame extends WindowBase {
         new BoardPanel(screenMessages, this, globalSettings, routingJob, settingsMerger);
     this.scrollPane.setViewportView(boardPanel);
 
+    java.awt.event.AdjustmentListener scrollListener =
+        e -> {
+          if (e.getValueIsAdjusting() && this.boardPanel != null) {
+            this.boardPanel.triggerScrollAdjustment();
+          }
+        };
+    this.scrollPane.getHorizontalScrollBar().addAdjustmentListener(scrollListener);
+    this.scrollPane.getVerticalScrollBar().addAdjustmentListener(scrollListener);
+
     this.addWindowListener(new WindowStateListener());
 
     this.addBoardLoadedEventListener(
