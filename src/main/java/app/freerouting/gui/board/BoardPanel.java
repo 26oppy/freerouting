@@ -18,7 +18,6 @@ import app.freerouting.gui.workspace.progress.ScreenMessages;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.GlobalSettings;
 import app.freerouting.settings.SettingsMerger;
-import java.awt.AWTException;
 import java.awt.AlphaComposite;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -121,6 +120,17 @@ public class BoardPanel extends JPanel {
    * events/second).
    */
   private static final long CURSOR_REPAINT_THROTTLE_MS = 16; // ~60 fps max
+
+  /**
+   * Debounce delay (in milliseconds) after the last mouse wheel notch before ending the zoom
+   * gesture and restoring detailed high-resolution rendering.
+   */
+  private static final int ZOOM_GESTURE_DEBOUNCE_MS = 200;
+
+  /**
+   * Minimum interval (in milliseconds) between viewport updates during rapid mouse wheel scrolling.
+   */
+  private static final long WHEEL_ZOOM_THROTTLE_MS = 16; // ~60 fps max
 
   /**
    * Message display component showing status information and coordinates.
@@ -305,6 +315,18 @@ public class BoardPanel extends JPanel {
   private long lastCursorRepaintTime;
 
   /**
+   * Non-repeating timer that fires when mouse wheel scrolling has ceased for {@link
+   * #ZOOM_GESTURE_DEBOUNCE_MS}, restoring high-detail copper pour rendering and revalidating
+   * layout.
+   */
+  private final javax.swing.Timer zoomGestureEndTimer =
+      new javax.swing.Timer(ZOOM_GESTURE_DEBOUNCE_MS, evt -> onZoomGestureEnded());
+
+  private long lastWheelZoomTime;
+  private int pendingWheelRotation;
+  private Point2D pendingWheelPoint;
+
+  /**
    * Creates a new BoardPanel within a GUI application context.
    *
    * <p>Initialization includes:
@@ -337,12 +359,15 @@ public class BoardPanel extends JPanel {
     try {
       // used to be able to change the location of the mouse pointer
       robot = new Robot();
-    } catch (AWTException _) {
+    } catch (Exception _) {
       FRLogger.warn("unable to create robot");
     }
     this.boardFrame = boardFrame;
     this.globalSettings = globalSettings;
-    this.scrollPane = boardFrame.scrollPane;
+    this.scrollPane =
+        boardFrame != null && boardFrame.scrollPane != null
+            ? boardFrame.scrollPane
+            : new JScrollPane(this);
     this.sessionPort =
         new WorkspacePortAdapter(
             () -> this.boardHandling, () -> this.boardFrame, EdtExecutor.swing());
@@ -351,6 +376,7 @@ public class BoardPanel extends JPanel {
 
   private void defaultInit(
       GlobalSettings globalSettings, RoutingJob routingJob, SettingsMerger settingMerger) {
+    zoomGestureEndTimer.setRepeats(false);
     setLayout(new BorderLayout());
 
     setBackground(new Color(0, 0, 0));
@@ -392,8 +418,11 @@ public class BoardPanel extends JPanel {
           public void mouseReleased(MouseEvent evt) {
             boardHandling.buttonReleased();
             if (middleDragPosition != null) {
-              // Restore the detailed copper-pour rendering now that panning has ended.
-              if (boardHandling != null && boardHandling.graphicsContext != null) {
+              // Restore the detailed copper-pour rendering now that panning has ended,
+              // unless a mouse-wheel zoom gesture is still in progress.
+              if (boardHandling != null
+                  && boardHandling.graphicsContext != null
+                  && !zoomGestureEndTimer.isRunning()) {
                 boardHandling.graphicsContext.setSimplifiedPlaneRendering(false);
               }
               repaint();
@@ -412,8 +441,14 @@ public class BoardPanel extends JPanel {
     this.setCursor(new java.awt.Cursor(java.awt.Cursor.CROSSHAIR_CURSOR));
 
     // Initialize drag-and-drop support for file loading
-    dropTargetListener = new BoardPanelDropTargetListener(this);
-    new DropTarget(this, dropTargetListener);
+    if (!java.awt.GraphicsEnvironment.isHeadless()) {
+      try {
+        dropTargetListener = new BoardPanelDropTargetListener(this);
+        new DropTarget(this, dropTargetListener);
+      } catch (java.awt.HeadlessException _) {
+        // Headless environment
+      }
+    }
   }
 
   /**
@@ -443,6 +478,9 @@ public class BoardPanel extends JPanel {
     SettingsMerger settingsMerger = boardHandling != null ? boardHandling.settingsMerger : null;
 
     // Dispose the old boardHandling instance before creating a new one
+    zoomGestureEndTimer.stop();
+    pendingWheelRotation = 0;
+    pendingWheelPoint = null;
     if (boardHandling != null) {
       boardHandling.dispose();
     }
@@ -515,9 +553,48 @@ public class BoardPanel extends JPanel {
     if (this.middleDragPosition != null || wheelRotation == 0) {
       return; // scrolling with the middle mouse button in progress
     }
-    double zoomFactor = 1 - 0.1 * wheelRotation;
-    zoomFactor = Math.max(zoomFactor, 0.5);
-    zoom(zoomFactor, point);
+    if (boardHandling != null && boardHandling.graphicsContext != null) {
+      boardHandling.graphicsContext.setSimplifiedPlaneRendering(true);
+    }
+    zoomGestureEndTimer.restart();
+
+    pendingWheelRotation += wheelRotation;
+    pendingWheelPoint = point;
+
+    long now = System.currentTimeMillis();
+    if (now - lastWheelZoomTime >= WHEEL_ZOOM_THROTTLE_MS) {
+      lastWheelZoomTime = now;
+      flushPendingWheelZoom();
+    }
+  }
+
+  private void flushPendingWheelZoom() {
+    if (pendingWheelRotation != 0 && pendingWheelPoint != null) {
+      double zoomFactor = 1 - 0.1 * pendingWheelRotation;
+      zoomFactor = Math.max(zoomFactor, 0.5);
+      pendingWheelRotation = 0;
+      zoom(zoomFactor, pendingWheelPoint);
+    }
+  }
+
+  private void onZoomGestureEnded() {
+    flushPendingWheelZoom();
+    if (boardHandling != null
+        && boardHandling.graphicsContext != null
+        && middleDragPosition == null) {
+      boardHandling.graphicsContext.setSimplifiedPlaneRendering(false);
+    }
+    revalidate();
+    repaint();
+  }
+
+  /**
+   * Checks if an active mouse-wheel zoom gesture is in progress.
+   *
+   * @return true while mouse-wheel scrolling is ongoing within the debounce window
+   */
+  public boolean isZoomGestureActive() {
+    return zoomGestureEndTimer.isRunning();
   }
 
   private void mousePressedAction(MouseEvent evt) {
@@ -854,7 +931,9 @@ public class BoardPanel extends JPanel {
     boardHandling.graphicsContext.changePanelSize(newSize);
     setPreferredSize(newSize);
     setSize(newSize);
-    revalidate();
+    if (!zoomGestureEndTimer.isRunning()) {
+      revalidate();
+    }
 
     Point2D newCursor = new Point2D.Double(location.getX() * factor, location.getY() * factor);
     double dx = newCursor.getX() - location.getX();
