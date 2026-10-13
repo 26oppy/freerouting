@@ -8,6 +8,7 @@ import app.freerouting.board.model.structure.Unit;
 import app.freerouting.board.searchtree.SearchTreeObject;
 import app.freerouting.board.searchtree.ShapeSearchTree;
 import app.freerouting.geometry.planar.Area;
+import app.freerouting.geometry.planar.AwtAreas;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntPoint;
@@ -228,14 +229,10 @@ public class ConductionArea extends ObstacleArea implements Connectable {
         }
       }
 
-      for (java.awt.geom.Area fa : foreignClearances) {
-        fillArea.subtract(fa);
-      }
-      for (java.awt.geom.Area sa : sameNetClearances) {
-        fillArea.subtract(sa);
-      }
-      for (java.awt.geom.Area sp : sameNetSpokesList) {
-        fillArea.add(sp);
+      AwtAreas.subtractAll(fillArea, foreignClearances);
+      AwtAreas.subtractAll(fillArea, sameNetClearances);
+      if (!sameNetSpokesList.isEmpty()) {
+        fillArea.add(AwtAreas.unionAll(sameNetSpokesList));
       }
     }
     cachedBoardFillArea = fillArea;
@@ -274,11 +271,15 @@ public class ConductionArea extends ObstacleArea implements Connectable {
     java.awt.geom.Area awtArea = new java.awt.geom.Area(borderPath);
 
     Shape[] holes = area.getHoles();
-    for (Shape hole : holes) {
-      java.awt.geom.Area holeArea = getAwtAreaFromShapeInBoardUnits(hole);
-      if (holeArea != null) {
-        awtArea.subtract(holeArea);
+    if (holes.length > 0) {
+      java.util.List<java.awt.geom.Area> holeAreas = new java.util.ArrayList<>(holes.length);
+      for (Shape hole : holes) {
+        java.awt.geom.Area holeArea = getAwtAreaFromShapeInBoardUnits(hole);
+        if (holeArea != null) {
+          holeAreas.add(holeArea);
+        }
       }
+      AwtAreas.subtractAll(awtArea, holeAreas);
     }
     return awtArea;
   }

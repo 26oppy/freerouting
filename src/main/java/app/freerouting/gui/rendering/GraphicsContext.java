@@ -485,20 +485,26 @@ public class GraphicsContext implements Serializable {
 
     // Subtract foreign clearances
     if (clearances != null) {
+      java.util.List<java.awt.geom.Area> foreignAreas =
+          new java.util.ArrayList<>(clearances.size());
       for (ClearanceItem item : clearances) {
         if (item != null && item.area != null) {
-          fillArea.subtract(item.area);
+          foreignAreas.add(item.area);
         }
       }
+      AwtAreas.subtractAll(fillArea, foreignAreas);
     }
 
     // Process thermal reliefs
     if (thermals != null) {
+      java.util.List<java.awt.geom.Area> thermalClearances =
+          new java.util.ArrayList<>(thermals.size());
+      java.util.List<java.awt.geom.Area> thermalSpokes = new java.util.ArrayList<>(thermals.size());
       for (ThermalReliefItem thermal : thermals) {
         if (thermal == null || thermal.clearanceArea == null) {
           continue;
         }
-        fillArea.subtract(thermal.clearanceArea);
+        thermalClearances.add(thermal.clearanceArea);
 
         // Create 4 diagonal spokes at 45 degrees
         double halfSpoke = thermal.spokeWidthPx / 2.0;
@@ -521,7 +527,11 @@ public class GraphicsContext implements Serializable {
         // Restrict spokes to the clearance gap
         spokes.intersect(thermal.clearanceArea);
 
-        fillArea.add(spokes);
+        thermalSpokes.add(spokes);
+      }
+      AwtAreas.subtractAll(fillArea, thermalClearances);
+      if (!thermalSpokes.isEmpty()) {
+        fillArea.add(AwtAreas.unionAll(thermalSpokes));
       }
     }
 
