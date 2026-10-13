@@ -74,13 +74,32 @@ public class ScreenTransform implements Serializable {
     return val * scaleFactor;
   }
 
+  /** Transforms a board {@link FloatPoint} to its screen X coordinate without object allocation. */
+  public double boardToScreenX(FloatPoint point) {
+    double rx = this.rotation == 0 ? point.x : point.rotate(this.rotation, this.rotationPole).x;
+    if (this.mirrorLeftRight) {
+      return (designBoxWithOffset.width() - rx - 1) * scaleFactor + displayXoffset;
+    }
+    return rx * scaleFactor - displayXoffset;
+  }
+
+  /** Transforms a board {@link FloatPoint} to its screen Y coordinate without object allocation. */
+  public double boardToScreenY(FloatPoint point) {
+    double ry = this.rotation == 0 ? point.y : point.rotate(this.rotation, this.rotationPole).y;
+    if (this.mirrorTopBottom) {
+      return (designBoxWithOffset.height() - ry - 1) * scaleFactor + displayYoffset;
+    }
+    return ry * scaleFactor - displayYoffset;
+  }
+
   /** Transforms a board {@link FloatPoint} to screen coordinates. */
   public Point2D boardToScreen(FloatPoint point) {
     if (point == null) {
       return null;
     }
 
-    FloatPoint rotatedPoint = point.rotate(this.rotation, this.rotationPole);
+    FloatPoint rotatedPoint =
+        this.rotation == 0 ? point : point.rotate(this.rotation, this.rotationPole);
 
     double x;
     double y;

@@ -33,9 +33,6 @@ public class ClearanceViolations {
 
   /** Draws each clearance violation using the supplied graphics context. */
   public void draw(Graphics graphics, GraphicsContext graphicsContext) {
-    if (graphicsContext.getViolationColorIntensity() <= 0.001) {
-      return;
-    }
     Color drawColor = graphicsContext.getViolationsColor();
     for (ClearanceViolation currentViolation : list) {
       double intensity = graphicsContext.getLayerVisibility(currentViolation.layer);

@@ -252,30 +252,34 @@ public class GraphicsContext implements Serializable {
     initDrawGraphics(g2, color, (float) scaledWidth * 2);
     setTranslucency(g2, translucencyFactor);
 
-    GeneralPath drawPath = null;
+    java.awt.geom.Path2D.Double drawPath = null;
     if (!show_line_segments) {
-      drawPath = new GeneralPath();
+      drawPath = new java.awt.geom.Path2D.Double();
     }
 
     Rectangle clipShape = g.getClip().getBounds();
     IntBox clipBox = coordinateTransform.screenToBoard(clipShape);
+    boolean hasSegments = false;
     for (int i = 0; i < (points.length - 1); i++) {
       if (lineOutsideUpdateBox(points[i], points[i + 1], halfWidth + update_offset, clipBox)) {
         // this check should be unnecessary here,
         // the system should do it in the draw(line) function
         continue;
       }
-      Point2D p1 = coordinateTransform.boardToScreen(points[i]);
-      Point2D p2 = coordinateTransform.boardToScreen(points[i + 1]);
-      Line2D line = new Line2D.Double(p1, p2);
+      double x1 = coordinateTransform.boardToScreenX(points[i]);
+      double y1 = coordinateTransform.boardToScreenY(points[i]);
+      double x2 = coordinateTransform.boardToScreenX(points[i + 1]);
+      double y2 = coordinateTransform.boardToScreenY(points[i + 1]);
 
       if (show_line_segments) {
-        g2.draw(line);
+        g2.draw(new Line2D.Double(x1, y1, x2, y2));
       } else {
-        drawPath.append(line, false);
+        drawPath.moveTo(x1, y1);
+        drawPath.lineTo(x2, y2);
+        hasSegments = true;
       }
     }
-    if (!show_line_segments) {
+    if (!show_line_segments && hasSegments) {
       g2.draw(drawPath);
     }
   }
@@ -295,17 +299,14 @@ public class GraphicsContext implements Serializable {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
-    Point2D screenCenter = coordinateTransform.boardToScreen(center);
+    double cx = coordinateTransform.boardToScreenX(center);
+    double cy = coordinateTransform.boardToScreenY(center);
 
     double screenRadius = coordinateTransform.boardToScreen(radius);
     double diameter = 2 * screenRadius;
     float drawWidth = (float) (2 * coordinateTransform.boardToScreen(drawHalfWidth));
     Ellipse2D circle =
-        new Ellipse2D.Double(
-            screenCenter.getX() - screenRadius,
-            screenCenter.getY() - screenRadius,
-            diameter,
-            diameter);
+        new Ellipse2D.Double(cx - screenRadius, cy - screenRadius, diameter, diameter);
     setTranslucency(g2, translucencyFactor);
     initDrawGraphics(g2, color, drawWidth);
     g2.draw(circle);
@@ -326,15 +327,17 @@ public class GraphicsContext implements Serializable {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
-    Point2D screenCorner1 = coordinateTransform.boardToScreen(corner1);
-    Point2D screenCorner2 = coordinateTransform.boardToScreen(corner2);
+    double x1 = coordinateTransform.boardToScreenX(corner1);
+    double y1 = coordinateTransform.boardToScreenY(corner1);
+    double x2 = coordinateTransform.boardToScreenX(corner2);
+    double y2 = coordinateTransform.boardToScreenY(corner2);
 
-    double xmin = Math.min(screenCorner1.getX(), screenCorner2.getX());
-    double ymin = Math.min(screenCorner1.getY(), screenCorner2.getY());
+    double xmin = Math.min(x1, x2);
+    double ymin = Math.min(y1, y2);
 
     float drawWidth = (float) (2 * coordinateTransform.boardToScreen(drawHalfWidth));
-    double width = Math.abs(screenCorner2.getX() - screenCorner1.getX());
-    double height = Math.abs(screenCorner2.getY() - screenCorner1.getY());
+    double width = Math.abs(x2 - x1);
+    double height = Math.abs(y2 - y1);
     Rectangle2D rectangle = new Rectangle2D.Double(xmin, ymin, width, height);
     setTranslucency(g2, translucencyFactor);
     initDrawGraphics(g2, color, drawWidth);
@@ -386,11 +389,13 @@ public class GraphicsContext implements Serializable {
       return null;
     }
     if (area instanceof Circle circle) {
-      Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+      FloatPoint centerPt = circle.center.toFloat();
+      double cx = coordinateTransform.boardToScreenX(centerPt);
+      double cy = coordinateTransform.boardToScreenY(centerPt);
       double radius = coordinateTransform.boardToScreen(circle.radius);
       double diameter = 2 * radius;
       return new java.awt.geom.Area(
-          new Ellipse2D.Double(center.getX() - radius, center.getY() - radius, diameter, diameter));
+          new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter));
     }
 
     Shape borderShape = area.getBorder();
@@ -401,11 +406,13 @@ public class GraphicsContext implements Serializable {
     java.awt.geom.Path2D.Double borderPath = new java.awt.geom.Path2D.Double();
     int count = border.borderLineCount();
     if (count > 0) {
-      Point2D p0 = coordinateTransform.boardToScreen(border.cornerApprox(0));
-      borderPath.moveTo(p0.getX(), p0.getY());
+      FloatPoint c0 = border.cornerApprox(0);
+      borderPath.moveTo(
+          coordinateTransform.boardToScreenX(c0), coordinateTransform.boardToScreenY(c0));
       for (int i = 1; i < count; i++) {
-        Point2D pi = coordinateTransform.boardToScreen(border.cornerApprox(i));
-        borderPath.lineTo(pi.getX(), pi.getY());
+        FloatPoint ci = border.cornerApprox(i);
+        borderPath.lineTo(
+            coordinateTransform.boardToScreenX(ci), coordinateTransform.boardToScreenY(ci));
       }
       borderPath.closePath();
     }
@@ -417,23 +424,26 @@ public class GraphicsContext implements Serializable {
         int holeCount = holePoly.borderLineCount();
         if (holeCount > 0) {
           java.awt.geom.Path2D.Double holePath = new java.awt.geom.Path2D.Double();
-          Point2D hp0 = coordinateTransform.boardToScreen(holePoly.cornerApprox(0));
-          holePath.moveTo(hp0.getX(), hp0.getY());
+          FloatPoint hc0 = holePoly.cornerApprox(0);
+          holePath.moveTo(
+              coordinateTransform.boardToScreenX(hc0), coordinateTransform.boardToScreenY(hc0));
           for (int i = 1; i < holeCount; i++) {
-            Point2D hpi = coordinateTransform.boardToScreen(holePoly.cornerApprox(i));
-            holePath.lineTo(hpi.getX(), hpi.getY());
+            FloatPoint hci = holePoly.cornerApprox(i);
+            holePath.lineTo(
+                coordinateTransform.boardToScreenX(hci), coordinateTransform.boardToScreenY(hci));
           }
           holePath.closePath();
           holeAreas.add(new java.awt.geom.Area(holePath));
         }
       } else if (hole instanceof Circle circle) {
-        Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+        FloatPoint centerPt = circle.center.toFloat();
+        double cx = coordinateTransform.boardToScreenX(centerPt);
+        double cy = coordinateTransform.boardToScreenY(centerPt);
         double radius = coordinateTransform.boardToScreen(circle.radius);
         double diameter = 2 * radius;
         holeAreas.add(
             new java.awt.geom.Area(
-                new Ellipse2D.Double(
-                    center.getX() - radius, center.getY() - radius, diameter, diameter)));
+                new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter)));
       }
     }
     AwtAreas.subtractAll(awtArea, holeAreas);
@@ -449,11 +459,12 @@ public class GraphicsContext implements Serializable {
       return null;
     }
     if (area instanceof Circle circle) {
-      Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+      FloatPoint centerPt = circle.center.toFloat();
+      double cx = coordinateTransform.boardToScreenX(centerPt);
+      double cy = coordinateTransform.boardToScreenY(centerPt);
       double radius = coordinateTransform.boardToScreen(circle.radius);
       double diameter = 2 * radius;
-      return new Ellipse2D.Double(
-          center.getX() - radius, center.getY() - radius, diameter, diameter);
+      return new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter);
     }
 
     Shape borderShape = area.getBorder();
@@ -468,11 +479,11 @@ public class GraphicsContext implements Serializable {
 
     java.awt.geom.Path2D.Double path =
         new java.awt.geom.Path2D.Double(java.awt.geom.Path2D.WIND_EVEN_ODD);
-    Point2D p0 = coordinateTransform.boardToScreen(border.cornerApprox(0));
-    path.moveTo(p0.getX(), p0.getY());
+    FloatPoint c0 = border.cornerApprox(0);
+    path.moveTo(coordinateTransform.boardToScreenX(c0), coordinateTransform.boardToScreenY(c0));
     for (int i = 1; i < count; i++) {
-      Point2D pi = coordinateTransform.boardToScreen(border.cornerApprox(i));
-      path.lineTo(pi.getX(), pi.getY());
+      FloatPoint ci = border.cornerApprox(i);
+      path.lineTo(coordinateTransform.boardToScreenX(ci), coordinateTransform.boardToScreenY(ci));
     }
     path.closePath();
 
@@ -480,22 +491,23 @@ public class GraphicsContext implements Serializable {
       if (hole instanceof PolylineShape holePoly) {
         int holeCount = holePoly.borderLineCount();
         if (holeCount > 0) {
-          Point2D hp0 = coordinateTransform.boardToScreen(holePoly.cornerApprox(0));
-          path.moveTo(hp0.getX(), hp0.getY());
+          FloatPoint hc0 = holePoly.cornerApprox(0);
+          path.moveTo(
+              coordinateTransform.boardToScreenX(hc0), coordinateTransform.boardToScreenY(hc0));
           for (int i = 1; i < holeCount; i++) {
-            Point2D hpi = coordinateTransform.boardToScreen(holePoly.cornerApprox(i));
-            path.lineTo(hpi.getX(), hpi.getY());
+            FloatPoint hci = holePoly.cornerApprox(i);
+            path.lineTo(
+                coordinateTransform.boardToScreenX(hci), coordinateTransform.boardToScreenY(hci));
           }
           path.closePath();
         }
       } else if (hole instanceof Circle circle) {
-        Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+        FloatPoint centerPt = circle.center.toFloat();
+        double cx = coordinateTransform.boardToScreenX(centerPt);
+        double cy = coordinateTransform.boardToScreenY(centerPt);
         double radius = coordinateTransform.boardToScreen(circle.radius);
         double diameter = 2 * radius;
-        path.append(
-            new Ellipse2D.Double(
-                center.getX() - radius, center.getY() - radius, diameter, diameter),
-            false);
+        path.append(new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter), false);
       }
     }
     return path;
@@ -537,11 +549,13 @@ public class GraphicsContext implements Serializable {
       return null;
     }
     if (shape instanceof Circle circle) {
-      Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+      FloatPoint centerPt = circle.center.toFloat();
+      double cx = coordinateTransform.boardToScreenX(centerPt);
+      double cy = coordinateTransform.boardToScreenY(centerPt);
       double radius = coordinateTransform.boardToScreen(circle.radius);
       double diameter = 2 * radius;
       return new java.awt.geom.Area(
-          new Ellipse2D.Double(center.getX() - radius, center.getY() - radius, diameter, diameter));
+          new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter));
     }
     if (shape instanceof PolylineShape poly) {
       int count = poly.borderLineCount();
@@ -549,11 +563,11 @@ public class GraphicsContext implements Serializable {
         return null;
       }
       java.awt.geom.Path2D.Double path = new java.awt.geom.Path2D.Double();
-      Point2D p0 = coordinateTransform.boardToScreen(poly.cornerApprox(0));
-      path.moveTo(p0.getX(), p0.getY());
+      FloatPoint c0 = poly.cornerApprox(0);
+      path.moveTo(coordinateTransform.boardToScreenX(c0), coordinateTransform.boardToScreenY(c0));
       for (int i = 1; i < count; i++) {
-        Point2D pi = coordinateTransform.boardToScreen(poly.cornerApprox(i));
-        path.lineTo(pi.getX(), pi.getY());
+        FloatPoint ci = poly.cornerApprox(i);
+        path.lineTo(coordinateTransform.boardToScreenX(ci), coordinateTransform.boardToScreenY(ci));
       }
       path.closePath();
       return new java.awt.geom.Area(path);
@@ -646,18 +660,18 @@ public class GraphicsContext implements Serializable {
     if (color == null || Math.abs(translucencyFactor) <= 0.001) {
       return;
     }
-    Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+    FloatPoint centerPt = circle.center.toFloat();
+    double cx = coordinateTransform.boardToScreenX(centerPt);
+    double cy = coordinateTransform.boardToScreenY(centerPt);
     double radius = coordinateTransform.boardToScreen(circle.radius);
-    if (!pointNearRectangle(center.getX(), center.getY(), g.getClip().getBounds(), radius)) {
+    if (!pointNearRectangle(cx, cy, g.getClip().getBounds(), radius)) {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
     g2.setColor(color);
     setTranslucency(g2, translucencyFactor);
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    g2.fill(
-        new Ellipse2D.Double(
-            center.getX() - radius, center.getY() - radius, 2 * radius, 2 * radius));
+    g2.fill(new Ellipse2D.Double(cx - radius, cy - radius, 2 * radius, 2 * radius));
   }
 
   /** Draws the interior of an ellipse. */
@@ -727,9 +741,9 @@ public class GraphicsContext implements Serializable {
     Graphics2D g2 = (Graphics2D) g;
     Polygon drawPolygon = new Polygon();
     for (int i = 0; i < points.length; i++) {
-      Point2D currentCorner = coordinateTransform.boardToScreen(points[i]);
-      drawPolygon.addPoint(
-          (int) Math.round(currentCorner.getX()), (int) Math.round(currentCorner.getY()));
+      double cx = coordinateTransform.boardToScreenX(points[i]);
+      double cy = coordinateTransform.boardToScreenY(points[i]);
+      drawPolygon.addPoint((int) Math.round(cx), (int) Math.round(cy));
     }
     g2.setColor(color);
     setTranslucency(g2, translucencyFactor);
@@ -751,9 +765,9 @@ public class GraphicsContext implements Serializable {
       Polygon drawPolygon = new Polygon();
       FloatPoint[] currentPointList = pointLists[j];
       for (int i = 0; i < currentPointList.length; i++) {
-        Point2D currentCorner = coordinateTransform.boardToScreen(currentPointList[i]);
-        drawPolygon.addPoint(
-            (int) Math.round(currentCorner.getX()), (int) Math.round(currentCorner.getY()));
+        double cx = coordinateTransform.boardToScreenX(currentPointList[i]);
+        double cy = coordinateTransform.boardToScreenY(currentPointList[i]);
+        drawPolygon.addPoint((int) Math.round(cx), (int) Math.round(cy));
       }
       drawPath.append(drawPolygon, false);
     }

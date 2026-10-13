@@ -258,9 +258,7 @@ final class BoardSpatialIndex {
       int j = end - 1;
       while (i <= j) {
         long val2 =
-            splitX
-                ? ((long) leafMinX[i] + leafMaxX[i])
-                : ((long) leafMinY[i] + leafMaxY[i]);
+            splitX ? ((long) leafMinX[i] + leafMaxX[i]) : ((long) leafMinY[i] + leafMaxY[i]);
         if (val2 < splitVal2) {
           i++;
         } else {
@@ -333,8 +331,7 @@ final class BoardSpatialIndex {
       return mask;
     }
 
-    private void queryNode(
-        int nodeIdx, int cMinX, int cMinY, int cMaxX, int cMaxY, long[] mask) {
+    private void queryNode(int nodeIdx, int cMinX, int cMinY, int cMaxX, int cMaxY, long[] mask) {
       int nMinX = nodeMinX[nodeIdx];
       int nMinY = nodeMinY[nodeIdx];
       int nMaxX = nodeMaxX[nodeIdx];
