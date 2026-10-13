@@ -59,7 +59,11 @@ public final class GuiBoardPresentationController {
       return;
     }
     if (manager.isPaintImmediately()) {
-      panel.paintImmediately(new Rectangle(0, 0, Integer.MAX_VALUE, Integer.MAX_VALUE));
+      Rectangle visibleRect = panel.getVisibleRect();
+      panel.paintImmediately(
+          visibleRect.isEmpty()
+              ? new Rectangle(0, 0, panel.getWidth(), panel.getHeight())
+              : visibleRect);
       return;
     }
 
@@ -79,10 +83,15 @@ public final class GuiBoardPresentationController {
     if (panel == null || rectangle == null || rectangle.width <= 0 || rectangle.height <= 0) {
       return;
     }
+    Rectangle visibleRect = panel.getVisibleRect();
+    Rectangle clamped = visibleRect.isEmpty() ? rectangle : rectangle.intersection(visibleRect);
+    if (clamped.width <= 0 || clamped.height <= 0) {
+      return;
+    }
     if (manager.isPaintImmediately()) {
-      panel.paintImmediately(rectangle);
+      panel.paintImmediately(clamped);
     } else {
-      panel.repaint(rectangle);
+      panel.repaint(clamped);
     }
   }
 

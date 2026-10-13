@@ -557,7 +557,12 @@ public class BoardPanel extends JPanel {
       long now = System.currentTimeMillis();
       if (now - this.lastCursorRepaintTime >= CURSOR_REPAINT_THROTTLE_MS) {
         this.lastCursorRepaintTime = now;
-        this.repaint();
+        Rectangle visibleRect = getVisibleRect();
+        if (!visibleRect.isEmpty()) {
+          this.repaint(visibleRect);
+        } else {
+          this.repaint();
+        }
       }
     }
   }
@@ -619,9 +624,10 @@ public class BoardPanel extends JPanel {
     if (isGhostingActive()) {
       Graphics2D g2d = (Graphics2D) graphics.create();
       try {
+        Rectangle bounds = getVisibleOverlayBounds(g2d);
         g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.3f));
         g2d.setColor(new Color(128, 128, 128, 180));
-        g2d.fillRect(0, 0, getWidth(), getHeight());
+        g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
       } finally {
         g2d.dispose();
       }
@@ -634,6 +640,18 @@ public class BoardPanel extends JPanel {
     if (this.customCursor != null) {
       this.customCursor.draw(graphics);
     }
+  }
+
+  private Rectangle getVisibleOverlayBounds(Graphics2D g2d) {
+    Rectangle visibleRect = getVisibleRect();
+    if (!visibleRect.isEmpty()) {
+      return visibleRect;
+    }
+    Rectangle clipBounds = g2d.getClipBounds();
+    if (clipBounds != null && !clipBounds.isEmpty()) {
+      return clipBounds;
+    }
+    return new Rectangle(0, 0, getWidth(), getHeight());
   }
 
   /**
@@ -660,9 +678,10 @@ public class BoardPanel extends JPanel {
   private void drawRenderingOverlay(Graphics graphics) {
     Graphics2D g2d = (Graphics2D) graphics.create();
     try {
+      Rectangle bounds = getVisibleOverlayBounds(g2d);
       g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
       g2d.setColor(new Color(240, 240, 240, 220));
-      g2d.fillRect(0, 0, getWidth(), getHeight());
+      g2d.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
 
       g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
       g2d.setColor(new Color(60, 60, 60));
@@ -670,8 +689,8 @@ public class BoardPanel extends JPanel {
       g2d.setFont(font);
       FontMetrics metrics = g2d.getFontMetrics(font);
       int textWidth = metrics.stringWidth(renderingOverlayMessage);
-      int x = Math.max(8, (getWidth() - textWidth) / 2);
-      int y = Math.max(metrics.getAscent() + 8, getHeight() / 2);
+      int x = bounds.x + Math.max(8, (bounds.width - textWidth) / 2);
+      int y = bounds.y + Math.max(metrics.getAscent() + 8, bounds.height / 2);
       g2d.drawString(renderingOverlayMessage, x, y);
     } finally {
       g2d.dispose();
