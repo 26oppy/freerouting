@@ -232,7 +232,7 @@ mutators still require callers to manage board search trees and connectivity.
 
 ### `app.freerouting.geometry.planar`
 
-Planar geometry primitives and helper classes used throughout routing and board operations.
+Planar geometry primitives and helper classes used throughout routing and board operations, including `AwtAreas` for balanced divide-and-conquer boolean CSG unions and subtractions over `java.awt.geom.Area` collections.
 
 ### `app.freerouting.gui`
 
@@ -305,10 +305,12 @@ Diagnostics and debugging utilities.
 
 ### `app.freerouting.gui.rendering`
 
-GUI-owned board rendering: layer/virtual-layer ordering, viewport culling, draw-priority traversal,
-component fabrication labels, dispatch to board-item paint strategies, and adaptation of opt-in
-headless autorouter diagnostic snapshots. `BoardRenderer` and `AutorouteDiagnosticRenderer` are the
-GUI rendering entry points; `BasicBoard` and `autoroute` remain headless and do not own GUI painting.
+GUI-owned board rendering: layer/virtual-layer ordering, `BoardSpatialIndex` revision-aware 2D BVH
+spatial indexing with incremental bucket reuse and bitmask-ordered viewport culling, `GraphicsContext`
+primitive coordinate transforms and stroke/hatch/path caching, component fabrication labels,
+dispatch to board-item paint strategies, and adaptation of opt-in headless autorouter diagnostic
+snapshots. `BoardRenderer` and `AutorouteDiagnosticRenderer` are the GUI rendering entry points;
+`BasicBoard` and `autoroute` remain headless and do not own GUI painting.
 
 ### Notable Nested Packages
 
@@ -442,10 +444,17 @@ The interactive editor is split between GUI window/shell packages, `gui.workspac
 When diagnosing user interaction, rendering, or editor state, begin here.
 
 The GUI rendering path is intentionally one-way: `GuiBoardManager` invokes `gui.rendering.BoardRenderer`,
-which reads the headless board model and paints the current view. The opt-in expansion-test view
-passes headless `AutorouteDiagnostic` snapshots to `AutorouteDiagnosticRenderer`; normal autorouting
-does not collect snapshots. Board traversal and presentation ordering do not belong in `BasicBoard`,
-and autoroute does not import AWT or `gui.rendering`.
+which queries `BoardSpatialIndex` to traverse visible board items in deterministic `(priority, step)`
+order with BVH viewport culling. `ConductionArea` caches board-space clearance and thermal-relief
+`java.awt.geom.Area` geometry (built via `AwtAreas` balanced CSG merges and validated via overlap
+fingerprinting across board revisions), which `BoardRenderer` paints directly through the active
+board-to-screen `AffineTransform`. During continuous camera gestures (middle-mouse panning,
+debounced mouse-wheel zoom) and interactive item dragging (`DragState`), the presentation layer
+temporarily enables simplified plane rendering (`EVEN_ODD` solid fills without hatching) and
+restores full copper-pour detail as soon as the interaction completes. The opt-in expansion-test
+view passes headless `AutorouteDiagnostic` snapshots to `AutorouteDiagnosticRenderer`; normal
+autorouting does not collect snapshots. Board traversal and presentation ordering do not belong in
+`BasicBoard`, and autoroute does not import AWT or `gui.rendering`.
 
 ### API and Headless Path
 
