@@ -35,6 +35,7 @@ public final class BoardRenderer {
 
   private static final int MIN_DRAW_PRIORITY = 1;
   private static final int MAX_DRAW_PRIORITY = 3;
+  private static final int VIRTUAL_LAYER_COUNT = 6;
 
   private BoardRenderer() {}
 
@@ -44,25 +45,14 @@ public final class BoardRenderer {
       return;
     }
 
+    int layerCount = board.getLayerCount();
     int activeLayer = graphicsContext.getFullyVisibleLayer();
     int activeVirtualLayer = graphicsContext.getFullyVisibleVirtualLayer();
     BasicBoard.DominantSide dominantSide =
         determineDominantSide(board, activeLayer, activeVirtualLayer);
     List<RenderStep> drawSteps =
-        createDrawSteps(board.getLayerCount(), dominantSide, activeLayer, activeVirtualLayer);
-    List<Item> allItems = new ArrayList<>(board.getItems());
-
-    @SuppressWarnings("unchecked")
-    List<Item>[] itemsByPriority = (List<Item>[]) new List[MAX_DRAW_PRIORITY + 1];
-    for (int priority = 0; priority <= MAX_DRAW_PRIORITY; priority++) {
-      itemsByPriority[priority] = new ArrayList<>();
-    }
-    for (Item item : allItems) {
-      int priority = drawPriority(item);
-      if (priority >= 0 && priority <= MAX_DRAW_PRIORITY) {
-        itemsByPriority[priority].add(item);
-      }
-    }
+        createDrawSteps(layerCount, dominantSide, activeLayer, activeVirtualLayer);
+    List<Item>[][] buckets = partitionItemsByPriorityAndStep(board, layerCount);
 
     java.awt.Rectangle clipRect = graphics.getClipBounds();
     IntBox clipBox =
@@ -75,12 +65,16 @@ public final class BoardRenderer {
         break;
       }
     }
-    if (primaryPhysicalLayer == -1 && board.getLayerCount() > 0) {
+    if (primaryPhysicalLayer == -1 && layerCount > 0) {
       primaryPhysicalLayer = 0;
     }
 
     for (int priority = MIN_DRAW_PRIORITY; priority <= MAX_DRAW_PRIORITY; priority++) {
       for (RenderStep step : drawSteps) {
+        List<Item> stepItems = buckets[priority][stepBucketIndex(step, layerCount)];
+        if (stepItems == null || stepItems.isEmpty()) {
+          continue;
+        }
         double stepVisibility =
             step.virtual()
                 ? graphicsContext.getVirtualLayerVisibility(step.index())
@@ -92,8 +86,11 @@ public final class BoardRenderer {
             continue;
           }
         }
-        for (Item item : itemsByPriority[priority]) {
+        for (Item item : stepItems) {
           if (item instanceof BoardOutline && step.index() != primaryPhysicalLayer) {
+            continue;
+          }
+          if (stepVisibility <= 0.001 && !(item instanceof BoardOutline)) {
             continue;
           }
           if (clipBox != null && !clipBox.intersects(item.boundingBox())) {
@@ -105,6 +102,62 @@ public final class BoardRenderer {
     }
 
     drawComponentPartNumbers(board, graphics, graphicsContext);
+  }
+
+  private static int stepBucketIndex(RenderStep step, int layerCount) {
+    return step.virtual() ? layerCount + step.index() : step.index();
+  }
+
+  private static List<Item>[][] partitionItemsByPriorityAndStep(BasicBoard board, int layerCount) {
+    int totalSteps = layerCount + VIRTUAL_LAYER_COUNT;
+    @SuppressWarnings("unchecked")
+    List<Item>[][] buckets = (List<Item>[][]) new List[MAX_DRAW_PRIORITY + 1][totalSteps];
+    for (Item item : board.getItems()) {
+      int priority = drawPriority(item);
+      if (priority < MIN_DRAW_PRIORITY || priority > MAX_DRAW_PRIORITY) {
+        continue;
+      }
+      switch (item.getBoardItemType()) {
+        case COMPONENT_OUTLINE -> {
+          int stepIdx = layerCount + virtualLayerFor((ComponentOutline) item);
+          addToBucket(buckets, priority, stepIdx, item);
+        }
+        case COMPONENT_OBSTACLE_AREA -> {
+          int stepIdx = layerCount + virtualLayerFor((ComponentObstacleArea) item);
+          addToBucket(buckets, priority, stepIdx, item);
+        }
+        case BOARD_OUTLINE -> {
+          for (int layer = 0; layer < layerCount; layer++) {
+            addToBucket(buckets, priority, layer, item);
+          }
+        }
+        case PIN, VIA -> {
+          int fromLayer = Math.max(0, item.firstLayer());
+          int toLayer = Math.min(layerCount - 1, item.lastLayer());
+          for (int layer = fromLayer; layer <= toLayer; layer++) {
+            addToBucket(buckets, priority, layer, item);
+          }
+        }
+        case TRACE, CONDUCTION_AREA, OBSTACLE_AREA, VIA_OBSTACLE_AREA -> {
+          int layer = item.firstLayer();
+          if (layer >= 0 && layer < layerCount) {
+            addToBucket(buckets, priority, layer, item);
+          }
+        }
+        default -> {}
+      }
+    }
+    return buckets;
+  }
+
+  private static void addToBucket(
+      List<Item>[][] buckets, int priority, int stepIdx, Item item) {
+    List<Item> list = buckets[priority][stepIdx];
+    if (list == null) {
+      list = new ArrayList<>();
+      buckets[priority][stepIdx] = list;
+    }
+    list.add(item);
   }
 
   /**
