@@ -37,6 +37,11 @@ public final class BoardRenderer {
   private static final int MAX_DRAW_PRIORITY = 3;
   private static final int VIRTUAL_LAYER_COUNT = 6;
 
+  private record CachedPartition(
+      java.lang.ref.WeakReference<BasicBoard> boardRef, long revision, List<Item>[][] buckets) {}
+
+  private static volatile CachedPartition cachedPartition;
+
   private BoardRenderer() {}
 
   /** Draws the complete board using renderer-owned traversal and ordering. */
@@ -52,7 +57,7 @@ public final class BoardRenderer {
         determineDominantSide(board, activeLayer, activeVirtualLayer);
     List<RenderStep> drawSteps =
         createDrawSteps(layerCount, dominantSide, activeLayer, activeVirtualLayer);
-    List<Item>[][] buckets = partitionItemsByPriorityAndStep(board, layerCount);
+    List<Item>[][] buckets = getOrBuildPartition(board, layerCount);
 
     java.awt.Rectangle clipRect = graphics.getClipBounds();
     IntBox clipBox =
@@ -106,6 +111,18 @@ public final class BoardRenderer {
 
   private static int stepBucketIndex(RenderStep step, int layerCount) {
     return step.virtual() ? layerCount + step.index() : step.index();
+  }
+
+  private static List<Item>[][] getOrBuildPartition(BasicBoard board, int layerCount) {
+    long currentRevision = board.getRevision();
+    CachedPartition current = cachedPartition;
+    if (current != null && current.revision() == currentRevision && current.boardRef().get() == board) {
+      return current.buckets();
+    }
+    List<Item>[][] buckets = partitionItemsByPriorityAndStep(board, layerCount);
+    cachedPartition =
+        new CachedPartition(new java.lang.ref.WeakReference<>(board), currentRevision, buckets);
+    return buckets;
   }
 
   private static List<Item>[][] partitionItemsByPriorityAndStep(BasicBoard board, int layerCount) {
