@@ -28,12 +28,17 @@ import org.junit.jupiter.api.Test;
 class BoardRendererOffscreenTest {
 
   private static final String FIXTURE = "Issue575-drc_dev-board_4_hole_clearance_violations.dsn";
+  private static final String PLANE_FIXTURE = "Issue754-avionics_hub.dsn";
   private static final int IMAGE_WIDTH = 800;
   private static final int IMAGE_HEIGHT = 600;
 
   private static BasicBoard loadBoard() throws Exception {
+    return loadBoard(FIXTURE);
+  }
+
+  private static BasicBoard loadBoard(String fixture) throws Exception {
     BoardReadResult result;
-    try (FileInputStream in = new FileInputStream("fixtures/" + FIXTURE)) {
+    try (FileInputStream in = new FileInputStream("fixtures/" + fixture)) {
       result = DsnReader.readBoard(in, null, null, "phase6-renderer");
     }
     return switch (result) {
@@ -69,6 +74,65 @@ class BoardRendererOffscreenTest {
     assertTrue(
         nonTransparentPixels > 0,
         "renderer must draw at least one visible pixel into the offscreen image");
+  }
+
+  @Test
+  void rendersConductionAreaDetailedAndSimplifiedModes() throws Exception {
+    BasicBoard board = loadBoard(PLANE_FIXTURE);
+    IntBox designBounds = board.getBoundingBox();
+    GraphicsContext graphicsContext =
+        new GraphicsContext(
+            designBounds,
+            new Dimension(IMAGE_WIDTH * 3, IMAGE_HEIGHT * 3),
+            board.layerStructure,
+            Locale.ENGLISH);
+
+    BufferedImage detailedImage =
+        new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D detailedGraphics = detailedImage.createGraphics();
+    java.awt.geom.AffineTransform expectedTransform;
+    java.awt.geom.AffineTransform actualTransform;
+    try {
+      detailedGraphics.translate(-IMAGE_WIDTH, -IMAGE_HEIGHT);
+      detailedGraphics.setClip(IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_HEIGHT);
+      expectedTransform = detailedGraphics.getTransform();
+      BoardRenderer.draw(board, detailedGraphics, graphicsContext);
+      actualTransform = detailedGraphics.getTransform();
+    } finally {
+      detailedGraphics.dispose();
+    }
+
+    assertTrue(
+        expectedTransform.equals(actualTransform),
+        "BoardRenderer must restore Graphics2D transform after rendering detailed conduction areas");
+    int[] detailedPixels =
+        detailedImage.getRGB(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, null, 0, IMAGE_WIDTH);
+    long detailedVisible =
+        Arrays.stream(detailedPixels).filter(pixel -> ((pixel >>> 24) & 0xFF) != 0).count();
+    assertTrue(
+        detailedVisible > 0,
+        "zoomed detailed conduction area render must draw visible pixels into the offscreen image");
+
+    BufferedImage simplifiedImage =
+        new BufferedImage(IMAGE_WIDTH, IMAGE_HEIGHT, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D simplifiedGraphics = simplifiedImage.createGraphics();
+    try {
+      simplifiedGraphics.translate(-IMAGE_WIDTH, -IMAGE_HEIGHT);
+      simplifiedGraphics.setClip(IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_HEIGHT);
+      graphicsContext.setSimplifiedPlaneRendering(true);
+      BoardRenderer.draw(board, simplifiedGraphics, graphicsContext);
+    } finally {
+      graphicsContext.setSimplifiedPlaneRendering(false);
+      simplifiedGraphics.dispose();
+    }
+
+    int[] simplifiedPixels =
+        simplifiedImage.getRGB(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, null, 0, IMAGE_WIDTH);
+    long simplifiedVisible =
+        Arrays.stream(simplifiedPixels).filter(pixel -> ((pixel >>> 24) & 0xFF) != 0).count();
+    assertTrue(
+        simplifiedVisible > 0,
+        "simplified conduction area render must draw visible pixels into the offscreen image");
   }
 
   @Test
