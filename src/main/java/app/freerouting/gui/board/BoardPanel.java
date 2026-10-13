@@ -27,6 +27,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Robot;
@@ -41,6 +42,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JViewport;
+import javax.swing.Timer;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 
@@ -121,6 +123,12 @@ public class BoardPanel extends JPanel {
    * events/second).
    */
   private static final long CURSOR_REPAINT_THROTTLE_MS = 16; // ~60 fps max
+
+  /**
+   * Debounce interval (in milliseconds) after the last mouse-wheel zoom step before restoring
+   * detailed copper-pour rendering.
+   */
+  static final int ZOOM_INTERACTION_DEBOUNCE_MS = 180;
 
   /**
    * Message display component showing status information and coordinates.
@@ -304,6 +312,12 @@ public class BoardPanel extends JPanel {
    */
   private long lastCursorRepaintTime;
 
+  /** True while a debounced mouse-wheel zoom interaction is active. */
+  private boolean zoomInteractionActive;
+
+  /** Single-shot timer that restores detailed plane rendering after mouse-wheel zooming settles. */
+  private Timer zoomInteractionTimer;
+
   /**
    * Creates a new BoardPanel within a GUI application context.
    *
@@ -342,7 +356,10 @@ public class BoardPanel extends JPanel {
     }
     this.boardFrame = boardFrame;
     this.globalSettings = globalSettings;
-    this.scrollPane = boardFrame.scrollPane;
+    this.scrollPane =
+        boardFrame != null && boardFrame.scrollPane != null
+            ? boardFrame.scrollPane
+            : new JScrollPane();
     this.sessionPort =
         new WorkspacePortAdapter(
             () -> this.boardHandling, () -> this.boardFrame, EdtExecutor.swing());
@@ -357,6 +374,8 @@ public class BoardPanel extends JPanel {
     setMaximumSize(new Dimension(30000, 20000));
     setMinimumSize(new Dimension(90, 60));
     setPreferredSize(new Dimension(1200, 900));
+    zoomInteractionTimer = new Timer(ZOOM_INTERACTION_DEBOUNCE_MS, _ -> finishZoomInteraction());
+    zoomInteractionTimer.setRepeats(false);
     addMouseMotionListener(
         new MouseMotionAdapter() {
           @Override
@@ -392,13 +411,12 @@ public class BoardPanel extends JPanel {
           public void mouseReleased(MouseEvent evt) {
             boardHandling.buttonReleased();
             if (middleDragPosition != null) {
-              // Restore the detailed copper-pour rendering now that panning has ended.
-              if (boardHandling != null && boardHandling.graphicsContext != null) {
-                boardHandling.graphicsContext.setSimplifiedPlaneRendering(false);
-              }
+              middleDragPosition = null;
+              // Restore the detailed copper-pour rendering now that panning has ended
+              // (unless a mouse-wheel zoom gesture is still active).
+              updateSimplifiedPlaneRendering();
               repaint();
             }
-            middleDragPosition = null;
           }
         });
     addMouseWheelListener(
@@ -413,7 +431,9 @@ public class BoardPanel extends JPanel {
 
     // Initialize drag-and-drop support for file loading
     dropTargetListener = new BoardPanelDropTargetListener(this);
-    new DropTarget(this, dropTargetListener);
+    if (!GraphicsEnvironment.isHeadless()) {
+      new DropTarget(this, dropTargetListener);
+    }
   }
 
   /**
@@ -439,6 +459,12 @@ public class BoardPanel extends JPanel {
    * @see GuiBoardManager#dispose()
    */
   public void resetBoardHandling(RoutingJob routingJob) {
+    if (zoomInteractionTimer != null && zoomInteractionTimer.isRunning()) {
+      zoomInteractionTimer.stop();
+    }
+    zoomInteractionActive = false;
+    middleDragPosition = null;
+
     // Save the settingsMerger reference before disposing the old instance
     SettingsMerger settingsMerger = boardHandling != null ? boardHandling.settingsMerger : null;
 
@@ -515,6 +541,7 @@ public class BoardPanel extends JPanel {
     if (this.middleDragPosition != null || wheelRotation == 0) {
       return; // scrolling with the middle mouse button in progress
     }
+    beginZoomInteraction();
     double zoomFactor = 1 - 0.1 * wheelRotation;
     zoomFactor = Math.max(zoomFactor, 0.5);
     zoom(zoomFactor, point);
@@ -529,9 +556,7 @@ public class BoardPanel extends JPanel {
       // for the first paint after load) so that the expensive per-frame clearance
       // CSG / transformed-area fill is skipped during the drag. The detailed view
       // is restored on mouse release.
-      if (boardHandling != null && boardHandling.graphicsContext != null) {
-        boardHandling.graphicsContext.setSimplifiedPlaneRendering(true);
-      }
+      updateSimplifiedPlaneRendering();
     }
   }
 
@@ -892,6 +917,36 @@ public class BoardPanel extends JPanel {
     return new Point2D.Double(
         newCursor.getX() + adjustmentVector.getX() + 0.5,
         newCursor.getY() + adjustmentVector.getY() + 0.5);
+  }
+
+  void beginZoomInteraction() {
+    zoomInteractionActive = true;
+    updateSimplifiedPlaneRendering();
+    if (zoomInteractionTimer != null) {
+      zoomInteractionTimer.restart();
+    }
+  }
+
+  void finishZoomInteraction() {
+    if (zoomInteractionTimer != null && zoomInteractionTimer.isRunning()) {
+      zoomInteractionTimer.stop();
+    }
+    if (zoomInteractionActive) {
+      zoomInteractionActive = false;
+      updateSimplifiedPlaneRendering();
+      repaint();
+    }
+  }
+
+  boolean isZoomInteractionActive() {
+    return zoomInteractionActive;
+  }
+
+  private void updateSimplifiedPlaneRendering() {
+    if (boardHandling != null && boardHandling.graphicsContext != null) {
+      boardHandling.graphicsContext.setSimplifiedPlaneRendering(
+          middleDragPosition != null || zoomInteractionActive);
+    }
   }
 
   /**

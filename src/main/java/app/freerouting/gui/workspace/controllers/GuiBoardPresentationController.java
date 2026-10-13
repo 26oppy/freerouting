@@ -61,7 +61,7 @@ public final class GuiBoardPresentationController {
     if (manager.isPaintImmediately()) {
       Rectangle visibleRect = panel.getVisibleRect();
       panel.paintImmediately(
-          visibleRect.isEmpty()
+          visibleRect == null || visibleRect.isEmpty()
               ? new Rectangle(0, 0, panel.getWidth(), panel.getHeight())
               : visibleRect);
       return;
@@ -84,7 +84,10 @@ public final class GuiBoardPresentationController {
       return;
     }
     Rectangle visibleRect = panel.getVisibleRect();
-    Rectangle clamped = visibleRect.isEmpty() ? rectangle : rectangle.intersection(visibleRect);
+    Rectangle clamped =
+        visibleRect == null || visibleRect.isEmpty()
+            ? rectangle
+            : rectangle.intersection(visibleRect);
     if (clamped.width <= 0 || clamped.height <= 0) {
       return;
     }
