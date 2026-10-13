@@ -62,9 +62,19 @@ public class GraphicsContext implements Serializable {
   /** When true, copper pours use fast solid fills (used during the first paint after load). */
   private transient boolean simplifiedPlaneRendering;
 
-  private transient java.awt.TexturePaint cachedHatchPaint;
-  private transient double cachedHatchPitchPx = -1.0;
-  private transient Color cachedHatchColor;
+  private record HatchKey(int pitchPixels, int rgb) {}
+
+  private static final int HATCH_CACHE_CAPACITY = 32;
+  private static final java.util.Map<HatchKey, java.awt.TexturePaint> HATCH_PAINT_CACHE =
+      java.util.Collections.synchronizedMap(
+          new java.util.LinkedHashMap<HatchKey, java.awt.TexturePaint>(
+              HATCH_CACHE_CAPACITY, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(
+                java.util.Map.Entry<HatchKey, java.awt.TexturePaint> eldest) {
+              return size() > HATCH_CACHE_CAPACITY;
+            }
+          });
 
   /** Creates a graphics context for the given board bounds and layer structure. */
   public GraphicsContext(
@@ -137,7 +147,7 @@ public class GraphicsContext implements Serializable {
 
   private void prepareAndDrawHatch(
       Graphics2D g2,
-      java.awt.geom.Area outerArea,
+      java.awt.Shape outerShape,
       Color color,
       double translucencyFactor,
       double pitchPx,
@@ -145,9 +155,9 @@ public class GraphicsContext implements Serializable {
     setTranslucency(g2, translucencyFactor);
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    if (cachedHatchPaint == null
-        || cachedHatchPitchPx != pitchPx
-        || !color.equals(cachedHatchColor)) {
+    HatchKey key = new HatchKey(pitchPixels, color.getRGB());
+    java.awt.TexturePaint hatchPaint = HATCH_PAINT_CACHE.get(key);
+    if (hatchPaint == null) {
       java.awt.image.BufferedImage bi =
           new java.awt.image.BufferedImage(
               pitchPixels, pitchPixels, java.awt.image.BufferedImage.TYPE_INT_ARGB);
@@ -158,17 +168,16 @@ public class GraphicsContext implements Serializable {
       g2t.drawLine(0, pitchPixels, pitchPixels, 0);
       g2t.drawLine(-1, pitchPixels + 1, pitchPixels + 1, -1);
       g2t.dispose();
-      cachedHatchPaint =
+      hatchPaint =
           new java.awt.TexturePaint(bi, new Rectangle2D.Double(0, 0, pitchPixels, pitchPixels));
-      cachedHatchPitchPx = pitchPx;
-      cachedHatchColor = color;
+      HATCH_PAINT_CACHE.put(key, hatchPaint);
     }
 
-    g2.clip(outerArea);
-    g2.setPaint(cachedHatchPaint);
+    g2.clip(outerShape);
+    g2.setPaint(hatchPaint);
     g2.setStroke(
         new BasicStroke((float) (2 * pitchPx), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
-    g2.draw(outerArea);
+    g2.draw(outerShape);
   }
 
   private static void fillWithColor(
@@ -406,6 +415,67 @@ public class GraphicsContext implements Serializable {
     return awtArea;
   }
 
+  /**
+   * Builds a screen-space {@link java.awt.Shape} using {@link java.awt.geom.Path2D#WIND_EVEN_ODD}
+   * without expensive CSG boolean hole subtractions.
+   */
+  private java.awt.Shape getAwtShape(Area area) {
+    if (area == null || area.isEmpty()) {
+      return null;
+    }
+    if (area instanceof Circle circle) {
+      Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+      double radius = coordinateTransform.boardToScreen(circle.radius);
+      double diameter = 2 * radius;
+      return new Ellipse2D.Double(
+          center.getX() - radius, center.getY() - radius, diameter, diameter);
+    }
+
+    Shape borderShape = area.getBorder();
+    if (!(borderShape instanceof PolylineShape border) || !border.isBounded()) {
+      return null;
+    }
+
+    int count = border.borderLineCount();
+    if (count <= 0) {
+      return null;
+    }
+
+    java.awt.geom.Path2D.Double path =
+        new java.awt.geom.Path2D.Double(java.awt.geom.Path2D.WIND_EVEN_ODD);
+    Point2D p0 = coordinateTransform.boardToScreen(border.cornerApprox(0));
+    path.moveTo(p0.getX(), p0.getY());
+    for (int i = 1; i < count; i++) {
+      Point2D pi = coordinateTransform.boardToScreen(border.cornerApprox(i));
+      path.lineTo(pi.getX(), pi.getY());
+    }
+    path.closePath();
+
+    for (Shape hole : area.getHoles()) {
+      if (hole instanceof PolylineShape holePoly) {
+        int holeCount = holePoly.borderLineCount();
+        if (holeCount > 0) {
+          Point2D hp0 = coordinateTransform.boardToScreen(holePoly.cornerApprox(0));
+          path.moveTo(hp0.getX(), hp0.getY());
+          for (int i = 1; i < holeCount; i++) {
+            Point2D hpi = coordinateTransform.boardToScreen(holePoly.cornerApprox(i));
+            path.lineTo(hpi.getX(), hpi.getY());
+          }
+          path.closePath();
+        }
+      } else if (hole instanceof Circle circle) {
+        Point2D center = coordinateTransform.boardToScreen(circle.center.toFloat());
+        double radius = coordinateTransform.boardToScreen(circle.radius);
+        double diameter = 2 * radius;
+        path.append(
+            new Ellipse2D.Double(
+                center.getX() - radius, center.getY() - radius, diameter, diameter),
+            false);
+      }
+    }
+    return path;
+  }
+
   /** Draws a hatched fill pattern inside a copper pour area. */
   public void drawPlaneHatch(
       Area area, Graphics g, Color color, double translucencyFactor, double pitchBoardUnits) {
@@ -420,8 +490,8 @@ public class GraphicsContext implements Serializable {
       pitchPx = 1000.0;
     }
 
-    java.awt.geom.Area outerArea = getAwtArea(area);
-    if (outerArea == null || outerArea.isEmpty()) {
+    java.awt.Shape outerShape = getAwtShape(area);
+    if (outerShape == null) {
       return;
     }
 
@@ -432,7 +502,7 @@ public class GraphicsContext implements Serializable {
     java.awt.Composite oldComposite = g2.getComposite();
     java.awt.Shape oldClip = g2.getClip();
     java.awt.Stroke oldStroke = g2.getStroke();
-    prepareAndDrawHatch(g2, outerArea, color, translucencyFactor, pitchPx, pitchPixels);
+    prepareAndDrawHatch(g2, outerShape, color, translucencyFactor, pitchPx, pitchPixels);
     restoreGraphics2dState(g2, oldStroke, oldClip, oldPaint, oldComposite);
   }
 

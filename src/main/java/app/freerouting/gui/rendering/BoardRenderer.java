@@ -626,9 +626,11 @@ public final class BoardRenderer {
         }
       }
     }
-    double hatchPitch = 500.0 * area.board.communication.getResolution(Unit.UM);
-    graphicsContext.drawPlaneHatch(
-        area.getArea(), graphics, color, layerVisibility * intensity * 0.85, hatchPitch);
+    if (!graphicsContext.isSimplifiedPlaneRendering()) {
+      double hatchPitch = 500.0 * area.board.communication.getResolution(Unit.UM);
+      graphicsContext.drawPlaneHatch(
+          area.getArea(), graphics, color, layerVisibility * intensity * 0.85, hatchPitch);
+    }
     graphicsContext.drawBoundary(area.getArea(), 0.0, color, graphics, layerVisibility);
   }
 
