@@ -108,11 +108,30 @@ public class GraphicsContext implements Serializable {
     return new boolean[] {true, true, true, true, true, true};
   }
 
+  private static final int STROKE_CACHE_CAPACITY = 256;
+  private static final java.util.Map<Integer, BasicStroke> STROKE_CACHE =
+      java.util.Collections.synchronizedMap(
+          new java.util.LinkedHashMap<Integer, BasicStroke>(STROKE_CACHE_CAPACITY, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(java.util.Map.Entry<Integer, BasicStroke> eldest) {
+              return size() > STROKE_CACHE_CAPACITY;
+            }
+          });
+
+  private static BasicStroke getRoundStroke(float width) {
+    float clamped = Math.max(width, 0.0f);
+    int key = Float.floatToIntBits(clamped);
+    BasicStroke stroke = STROKE_CACHE.get(key);
+    if (stroke == null) {
+      stroke = new BasicStroke(clamped, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+      STROKE_CACHE.put(key, stroke);
+    }
+    return stroke;
+  }
+
   /** Initializes stroke and color settings on the given graphics context. */
   private static void initDrawGraphics(Graphics2D graphics, Color color, float width) {
-    BasicStroke bs =
-        new BasicStroke(Math.max(width, 0), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
-    graphics.setStroke(bs);
+    graphics.setStroke(getRoundStroke(width));
     graphics.setColor(color);
     graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
   }
