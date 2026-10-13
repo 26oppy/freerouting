@@ -2,14 +2,12 @@ package app.freerouting.gui.rendering;
 
 import app.freerouting.board.model.structure.LayerStructure;
 import app.freerouting.geometry.planar.Area;
-import app.freerouting.geometry.planar.AwtAreas;
 import app.freerouting.geometry.planar.Circle;
 import app.freerouting.geometry.planar.Ellipse;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.PolylineShape;
 import app.freerouting.geometry.planar.Shape;
-import app.freerouting.geometry.planar.TileShape;
 import app.freerouting.logger.FRLogger;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
@@ -22,7 +20,6 @@ import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.GeneralPath;
-import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
@@ -36,8 +33,6 @@ public class GraphicsContext implements Serializable {
 
   private static final int update_offset = 10000;
   private static final int virtual_layer_count = 6;
-  private static final boolean show_line_segments = false;
-  private static final boolean show_area_division = false;
   public transient ItemColorTableModel itemColorTable;
   public transient OtherColorTableModel otherColorTable;
   public ColorIntensityTable colorIntensityTable;
@@ -157,12 +152,6 @@ public class GraphicsContext implements Serializable {
     g2.setComposite(composite);
   }
 
-  private static void restorePaintAndComposite(
-      Graphics2D g2, java.awt.Paint paint, java.awt.Composite composite) {
-    g2.setPaint(paint);
-    g2.setComposite(composite);
-  }
-
   private void prepareAndDrawHatch(
       Graphics2D g2,
       java.awt.Shape outerShape,
@@ -196,14 +185,6 @@ public class GraphicsContext implements Serializable {
     g2.setStroke(
         new BasicStroke((float) (2 * pitchPx), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER));
     g2.draw(outerShape);
-  }
-
-  private static void fillWithColor(
-      Graphics2D g2, java.awt.geom.Area fillArea, Color color, double translucencyFactor) {
-    g2.setColor(color);
-    setTranslucency(g2, translucencyFactor);
-    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    g2.fill(fillArea);
   }
 
   private boolean[] getVirtualLayerVisibilityArr() {
@@ -263,11 +244,7 @@ public class GraphicsContext implements Serializable {
     initDrawGraphics(g2, color, (float) scaledWidth * 2);
     setTranslucency(g2, translucencyFactor);
 
-    java.awt.geom.Path2D.Double drawPath = null;
-    if (!show_line_segments) {
-      drawPath = acquireScratchPath(java.awt.geom.Path2D.WIND_NON_ZERO);
-    }
-
+    java.awt.geom.Path2D.Double drawPath = acquireScratchPath(java.awt.geom.Path2D.WIND_NON_ZERO);
     Rectangle clipShape = g.getClip().getBounds();
     IntBox clipBox = coordinateTransform.screenToBoard(clipShape);
     boolean hasSegments = false;
@@ -282,15 +259,11 @@ public class GraphicsContext implements Serializable {
       double x2 = coordinateTransform.boardToScreenX(points[i + 1]);
       double y2 = coordinateTransform.boardToScreenY(points[i + 1]);
 
-      if (show_line_segments) {
-        g2.draw(new Line2D.Double(x1, y1, x2, y2));
-      } else {
-        drawPath.moveTo(x1, y1);
-        drawPath.lineTo(x2, y2);
-        hasSegments = true;
-      }
+      drawPath.moveTo(x1, y1);
+      drawPath.lineTo(x2, y2);
+      hasSegments = true;
     }
-    if (!show_line_segments && hasSegments) {
+    if (hasSegments) {
       g2.draw(drawPath);
     }
   }
@@ -394,73 +367,6 @@ public class GraphicsContext implements Serializable {
     }
   }
 
-  /** GetAwtArea. */
-  public java.awt.geom.Area getAwtArea(Area area) {
-    if (area == null || area.isEmpty()) {
-      return null;
-    }
-    if (area instanceof Circle circle) {
-      FloatPoint centerPt = circle.center.toFloat();
-      double cx = coordinateTransform.boardToScreenX(centerPt);
-      double cy = coordinateTransform.boardToScreenY(centerPt);
-      double radius = coordinateTransform.boardToScreen(circle.radius);
-      double diameter = 2 * radius;
-      return new java.awt.geom.Area(
-          new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter));
-    }
-
-    Shape borderShape = area.getBorder();
-    if (!(borderShape instanceof PolylineShape border) || !border.isBounded()) {
-      return null;
-    }
-
-    java.awt.geom.Path2D.Double borderPath = new java.awt.geom.Path2D.Double();
-    int count = border.borderLineCount();
-    if (count > 0) {
-      FloatPoint c0 = border.cornerApprox(0);
-      borderPath.moveTo(
-          coordinateTransform.boardToScreenX(c0), coordinateTransform.boardToScreenY(c0));
-      for (int i = 1; i < count; i++) {
-        FloatPoint ci = border.cornerApprox(i);
-        borderPath.lineTo(
-            coordinateTransform.boardToScreenX(ci), coordinateTransform.boardToScreenY(ci));
-      }
-      borderPath.closePath();
-    }
-    java.awt.geom.Area awtArea = new java.awt.geom.Area(borderPath);
-
-    java.util.List<java.awt.geom.Area> holeAreas = new java.util.ArrayList<>();
-    for (Shape hole : area.getHoles()) {
-      if (hole instanceof PolylineShape holePoly) {
-        int holeCount = holePoly.borderLineCount();
-        if (holeCount > 0) {
-          java.awt.geom.Path2D.Double holePath = new java.awt.geom.Path2D.Double();
-          FloatPoint hc0 = holePoly.cornerApprox(0);
-          holePath.moveTo(
-              coordinateTransform.boardToScreenX(hc0), coordinateTransform.boardToScreenY(hc0));
-          for (int i = 1; i < holeCount; i++) {
-            FloatPoint hci = holePoly.cornerApprox(i);
-            holePath.lineTo(
-                coordinateTransform.boardToScreenX(hci), coordinateTransform.boardToScreenY(hci));
-          }
-          holePath.closePath();
-          holeAreas.add(new java.awt.geom.Area(holePath));
-        }
-      } else if (hole instanceof Circle circle) {
-        FloatPoint centerPt = circle.center.toFloat();
-        double cx = coordinateTransform.boardToScreenX(centerPt);
-        double cy = coordinateTransform.boardToScreenY(centerPt);
-        double radius = coordinateTransform.boardToScreen(circle.radius);
-        double diameter = 2 * radius;
-        holeAreas.add(
-            new java.awt.geom.Area(
-                new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter)));
-      }
-    }
-    AwtAreas.subtractAll(awtArea, holeAreas);
-    return awtArea;
-  }
-
   /**
    * Builds a screen-space {@link java.awt.Shape} using {@link java.awt.geom.Path2D#WIND_EVEN_ODD}
    * without expensive CSG boolean hole subtractions.
@@ -552,118 +458,6 @@ public class GraphicsContext implements Serializable {
     java.awt.Stroke oldStroke = g2.getStroke();
     prepareAndDrawHatch(g2, outerShape, color, translucencyFactor, pitchPx, pitchPixels);
     restoreGraphics2dState(g2, oldStroke, oldClip, oldPaint, oldComposite);
-  }
-
-  /** GetAwtAreaFromShape. */
-  public java.awt.geom.Area getAwtAreaFromShape(Shape shape) {
-    if (shape == null) {
-      return null;
-    }
-    if (shape instanceof Circle circle) {
-      FloatPoint centerPt = circle.center.toFloat();
-      double cx = coordinateTransform.boardToScreenX(centerPt);
-      double cy = coordinateTransform.boardToScreenY(centerPt);
-      double radius = coordinateTransform.boardToScreen(circle.radius);
-      double diameter = 2 * radius;
-      return new java.awt.geom.Area(
-          new Ellipse2D.Double(cx - radius, cy - radius, diameter, diameter));
-    }
-    if (shape instanceof PolylineShape poly) {
-      int count = poly.borderLineCount();
-      if (count <= 0) {
-        return null;
-      }
-      java.awt.geom.Path2D.Double path = new java.awt.geom.Path2D.Double();
-      FloatPoint c0 = poly.cornerApprox(0);
-      path.moveTo(coordinateTransform.boardToScreenX(c0), coordinateTransform.boardToScreenY(c0));
-      for (int i = 1; i < count; i++) {
-        FloatPoint ci = poly.cornerApprox(i);
-        path.lineTo(coordinateTransform.boardToScreenX(ci), coordinateTransform.boardToScreenY(ci));
-      }
-      path.closePath();
-      return new java.awt.geom.Area(path);
-    }
-    return null;
-  }
-
-  /** FillPlaneArea. */
-  public void fillPlaneArea(
-      Area area,
-      Graphics g,
-      Color color,
-      double translucencyFactor,
-      java.util.List<ClearanceItem> clearances,
-      java.util.List<ThermalReliefItem> thermals) {
-    if (color == null || area == null || area.isEmpty() || translucencyFactor <= 0) {
-      return;
-    }
-
-    java.awt.geom.Area fillArea = getAwtArea(area);
-    if (fillArea == null || fillArea.isEmpty()) {
-      return;
-    }
-
-    // Subtract foreign clearances
-    if (clearances != null) {
-      java.util.List<java.awt.geom.Area> foreignAreas =
-          new java.util.ArrayList<>(clearances.size());
-      for (ClearanceItem item : clearances) {
-        if (item != null && item.area != null) {
-          foreignAreas.add(item.area);
-        }
-      }
-      AwtAreas.subtractAll(fillArea, foreignAreas);
-    }
-
-    // Process thermal reliefs
-    if (thermals != null) {
-      java.util.List<java.awt.geom.Area> thermalClearances =
-          new java.util.ArrayList<>(thermals.size());
-      java.util.List<java.awt.geom.Area> thermalSpokes = new java.util.ArrayList<>(thermals.size());
-      for (ThermalReliefItem thermal : thermals) {
-        if (thermal == null || thermal.clearanceArea == null) {
-          continue;
-        }
-        thermalClearances.add(thermal.clearanceArea);
-
-        // Create 4 diagonal spokes at 45 degrees
-        double halfSpoke = thermal.spokeWidthPx / 2.0;
-        double r = thermal.expansionRadiusPx;
-
-        // Rotated rectangles (NE-SW and NW-SE)
-        Rectangle2D.Double baseSpoke =
-            new Rectangle2D.Double(
-                thermal.cx - halfSpoke, thermal.cy - r, thermal.spokeWidthPx, 2 * r);
-
-        AffineTransform rotP45 =
-            AffineTransform.getRotateInstance(Math.PI / 4.0, thermal.cx, thermal.cy);
-        AffineTransform rotM45 =
-            AffineTransform.getRotateInstance(-Math.PI / 4.0, thermal.cx, thermal.cy);
-
-        java.awt.geom.Area spokes =
-            new java.awt.geom.Area(rotP45.createTransformedShape(baseSpoke));
-        spokes.add(new java.awt.geom.Area(rotM45.createTransformedShape(baseSpoke)));
-
-        // Restrict spokes to the clearance gap
-        spokes.intersect(thermal.clearanceArea);
-
-        thermalSpokes.add(spokes);
-      }
-      AwtAreas.subtractAll(fillArea, thermalClearances);
-      if (!thermalSpokes.isEmpty()) {
-        fillArea.add(AwtAreas.unionAll(thermalSpokes));
-      }
-    }
-
-    if (fillArea.isEmpty()) {
-      return;
-    }
-
-    Graphics2D g2 = (Graphics2D) g;
-    java.awt.Paint oldPaint = g2.getPaint();
-    java.awt.Composite oldComposite = g2.getComposite();
-    fillWithColor(g2, fillArea, color, translucencyFactor);
-    restorePaintAndComposite(g2, oldPaint, oldComposite);
   }
 
   /** Draws the interior of a circle. */
@@ -843,18 +637,6 @@ public class GraphicsContext implements Serializable {
       setTranslucency(g2, translucencyFactor);
       g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
       g2.fill(drawPath);
-    }
-    if (show_area_division) {
-      TileShape[] tiles = area.splitToConvex();
-      for (int i = 0; i < tiles.length; i++) {
-        FloatPoint[] corners = new FloatPoint[tiles[i].borderLineCount() + 1];
-        TileShape currentTile = tiles[i];
-        for (int j = 0; j < corners.length - 1; j++) {
-          corners[j] = currentTile.cornerApprox(j);
-        }
-        corners[corners.length - 1] = corners[0];
-        draw(corners, 1, Color.white, g, 0.7);
-      }
     }
   }
 
@@ -1217,15 +999,4 @@ public class GraphicsContext implements Serializable {
     this.itemColorTable = new ItemColorTableModel(stream);
     this.otherColorTable = new OtherColorTableModel(stream);
   }
-
-  /** Clearance shape used during thermal-relief rendering. */
-  public record ClearanceItem(java.awt.geom.Area area) {}
-
-  /** Thermal relief geometry used during plane fill rendering. */
-  public record ThermalReliefItem(
-      java.awt.geom.Area clearanceArea,
-      double cx,
-      double cy,
-      double expansionRadiusPx,
-      double spokeWidthPx) {}
 }

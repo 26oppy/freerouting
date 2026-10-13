@@ -35,6 +35,9 @@ public final class BoardRenderer {
 
   private static final int MIN_DRAW_PRIORITY = 1;
   private static final int MAX_DRAW_PRIORITY = 3;
+  private static final double HATCH_INTENSITY_FACTOR = 0.85;
+  private static final java.awt.Font PART_NUMBER_FONT =
+      new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 12);
 
   private BoardRenderer() {}
 
@@ -122,7 +125,7 @@ public final class BoardRenderer {
       }
     }
 
-    drawComponentPartNumbers(board, graphics, graphicsContext);
+    drawComponentPartNumbers(board, graphics, graphicsContext, clipRect);
   }
 
   private static int stepBucketIndex(RenderStep step, int layerCount) {
@@ -171,6 +174,14 @@ public final class BoardRenderer {
     if (item != null && graphics != null && graphicsContext != null) {
       if (intensity <= 0.001) {
         return;
+      }
+      java.awt.Rectangle clipRect = graphics.getClipBounds();
+      if (clipRect != null) {
+        IntBox itemBox = item.boundingBox();
+        if (itemBox != null
+            && !itemBox.intersects(graphicsContext.coordinateTransform.screenToBoard(clipRect))) {
+          return;
+        }
       }
       RenderStyle style = new RenderStyle(colors, intensity);
       switch (item.getBoardItemType()) {
@@ -634,12 +645,7 @@ public final class BoardRenderer {
       if (shape == null) {
         continue;
       }
-      var drawCorners = shape.cornerApproxArr();
-      var closedDrawCorners =
-          new app.freerouting.geometry.planar.FloatPoint[drawCorners.length + 1];
-      System.arraycopy(drawCorners, 0, closedDrawCorners, 0, drawCorners.length);
-      closedDrawCorners[closedDrawCorners.length - 1] = drawCorners[0];
-      graphicsContext.draw(closedDrawCorners, 100, color, graphics, 1);
+      graphicsContext.drawBoundary(shape, 100, color, graphics, 1);
     }
   }
 
@@ -716,7 +722,11 @@ public final class BoardRenderer {
     if (!graphicsContext.isSimplifiedPlaneRendering()) {
       double hatchPitch = 500.0 * area.board.communication.getResolution(Unit.UM);
       graphicsContext.drawPlaneHatch(
-          area.getArea(), graphics, color, layerVisibility * intensity * 0.85, hatchPitch);
+          area.getArea(),
+          graphics,
+          color,
+          layerVisibility * intensity * HATCH_INTENSITY_FACTOR,
+          hatchPitch);
     }
     graphicsContext.drawBoundary(area.getArea(), 0.0, color, graphics, layerVisibility);
   }
@@ -736,7 +746,10 @@ public final class BoardRenderer {
   }
 
   private static void drawComponentPartNumbers(
-      BasicBoard board, Graphics graphics, GraphicsContext graphicsContext) {
+      BasicBoard board,
+      Graphics graphics,
+      GraphicsContext graphicsContext,
+      java.awt.Rectangle clipRect) {
     double frontIntensity = graphicsContext.getVirtualLayerVisibility(4);
     double backIntensity = graphicsContext.getVirtualLayerVisibility(5);
     if (frontIntensity <= 0 && backIntensity <= 0) {
@@ -746,7 +759,11 @@ public final class BoardRenderer {
     Graphics2D graphics2D = (Graphics2D) graphics;
     java.awt.Font originalFont = graphics2D.getFont();
     java.awt.Composite originalComposite = graphics2D.getComposite();
-    graphics2D.setFont(new java.awt.Font("SansSerif", java.awt.Font.PLAIN, 12));
+    graphics2D.setFont(PART_NUMBER_FONT);
+    java.awt.FontMetrics metrics = graphics2D.getFontMetrics();
+    int textHeight = metrics.getAscent();
+    java.awt.Color frontColor = graphicsContext.otherColorTable.getFabColor(true);
+    java.awt.Color backColor = graphicsContext.otherColorTable.getFabColor(false);
     try {
       for (var component : board.components.getAll()) {
         if (!component.isPlaced()
@@ -759,26 +776,29 @@ public final class BoardRenderer {
         if (intensity <= 0) {
           continue;
         }
-        java.awt.Color color =
-            front
-                ? graphicsContext.otherColorTable.getFabColor(true)
-                : graphicsContext.otherColorTable.getFabColor(false);
+        java.awt.Color color = front ? frontColor : backColor;
         if (color == null) {
+          continue;
+        }
+        FloatPoint location = component.getLocation().toFloat();
+        double sx = graphicsContext.coordinateTransform.boardToScreenX(location);
+        double sy = graphicsContext.coordinateTransform.boardToScreenY(location);
+        if (clipRect != null
+            && (sx < clipRect.x - 100
+                || sx > clipRect.x + clipRect.width + 100
+                || sy < clipRect.y - 40
+                || sy > clipRect.y + clipRect.height + 40)) {
           continue;
         }
         graphics2D.setColor(color);
         graphics2D.setComposite(
             java.awt.AlphaComposite.getInstance(
                 java.awt.AlphaComposite.SRC_OVER, (float) Math.min(1.0, intensity)));
-        java.awt.geom.Point2D screenLocation =
-            graphicsContext.coordinateTransform.boardToScreen(component.getLocation().toFloat());
-        java.awt.FontMetrics metrics = graphics2D.getFontMetrics();
         int textWidth = metrics.stringWidth(component.getPartNumber());
-        int textHeight = metrics.getAscent();
         graphics2D.drawString(
             component.getPartNumber(),
-            (float) (screenLocation.getX() - textWidth / 2.0),
-            (float) (screenLocation.getY() + textHeight / 2.0));
+            (float) (sx - textWidth / 2.0),
+            (float) (sy + textHeight / 2.0));
       }
     } finally {
       graphics2D.setComposite(originalComposite);
