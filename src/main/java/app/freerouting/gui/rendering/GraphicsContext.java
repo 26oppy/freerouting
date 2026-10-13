@@ -17,7 +17,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
@@ -240,6 +239,18 @@ public class GraphicsContext implements Serializable {
     coordinateTransform = updatedTransform;
   }
 
+  private transient java.awt.geom.Path2D.Double scratchPath = new java.awt.geom.Path2D.Double();
+
+  private java.awt.geom.Path2D.Double acquireScratchPath(int windingRule) {
+    if (scratchPath == null) {
+      scratchPath = new java.awt.geom.Path2D.Double(windingRule);
+    } else {
+      scratchPath.reset();
+      scratchPath.setWindingRule(windingRule);
+    }
+    return scratchPath;
+  }
+
   /** Draws a polygon with the given corner points. */
   public void draw(
       FloatPoint[] points, double halfWidth, Color color, Graphics g, double translucencyFactor) {
@@ -254,7 +265,7 @@ public class GraphicsContext implements Serializable {
 
     java.awt.geom.Path2D.Double drawPath = null;
     if (!show_line_segments) {
-      drawPath = new java.awt.geom.Path2D.Double();
+      drawPath = acquireScratchPath(java.awt.geom.Path2D.WIND_NON_ZERO);
     }
 
     Rectangle clipShape = g.getClip().getBounds();
@@ -735,20 +746,16 @@ public class GraphicsContext implements Serializable {
 
   /** Fill the interior of the polygon shape represented by points. */
   public void fillShape(FloatPoint[] points, Graphics g, Color color, double translucencyFactor) {
-    if (color == null || Math.abs(translucencyFactor) <= 0.001) {
+    if (color == null || points.length == 0 || Math.abs(translucencyFactor) <= 0.001) {
       return;
     }
     Graphics2D g2 = (Graphics2D) g;
-    Polygon drawPolygon = new Polygon();
-    for (int i = 0; i < points.length; i++) {
-      double cx = coordinateTransform.boardToScreenX(points[i]);
-      double cy = coordinateTransform.boardToScreenY(points[i]);
-      drawPolygon.addPoint((int) Math.round(cx), (int) Math.round(cy));
-    }
+    java.awt.geom.Path2D.Double drawPath = acquireScratchPath(java.awt.geom.Path2D.WIND_EVEN_ODD);
+    appendPointsToPath(drawPath, points);
     g2.setColor(color);
     setTranslucency(g2, translucencyFactor);
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    g2.fill(drawPolygon);
+    g2.fill(drawPath);
   }
 
   /**
@@ -757,25 +764,52 @@ public class GraphicsContext implements Serializable {
    */
   public void fillArea(
       FloatPoint[][] pointLists, Graphics g, Color color, double translucencyFactor) {
-    if (color == null || Math.abs(translucencyFactor) <= 0.001) {
+    if (color == null || pointLists.length == 0 || Math.abs(translucencyFactor) <= 0.001) {
       return;
     }
-    GeneralPath drawPath = new GeneralPath(GeneralPath.WIND_EVEN_ODD);
+    java.awt.geom.Path2D.Double drawPath = acquireScratchPath(java.awt.geom.Path2D.WIND_EVEN_ODD);
     for (int j = 0; j < pointLists.length; j++) {
-      Polygon drawPolygon = new Polygon();
-      FloatPoint[] currentPointList = pointLists[j];
-      for (int i = 0; i < currentPointList.length; i++) {
-        double cx = coordinateTransform.boardToScreenX(currentPointList[i]);
-        double cy = coordinateTransform.boardToScreenY(currentPointList[i]);
-        drawPolygon.addPoint((int) Math.round(cx), (int) Math.round(cy));
-      }
-      drawPath.append(drawPolygon, false);
+      appendPointsToPath(drawPath, pointLists[j]);
     }
     Graphics2D g2 = (Graphics2D) g;
     g2.setColor(color);
     setTranslucency(g2, translucencyFactor);
     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     g2.fill(drawPath);
+  }
+
+  private void appendPointsToPath(java.awt.geom.Path2D.Double path, FloatPoint[] points) {
+    if (points == null || points.length == 0) {
+      return;
+    }
+    double x0 = Math.round(coordinateTransform.boardToScreenX(points[0]));
+    double y0 = Math.round(coordinateTransform.boardToScreenY(points[0]));
+    path.moveTo(x0, y0);
+    for (int i = 1; i < points.length; i++) {
+      double xi = Math.round(coordinateTransform.boardToScreenX(points[i]));
+      double yi = Math.round(coordinateTransform.boardToScreenY(points[i]));
+      path.lineTo(xi, yi);
+    }
+    path.closePath();
+  }
+
+  private void appendPolylineShapeToPath(
+      java.awt.geom.Path2D.Double path, PolylineShape polylineShape) {
+    int count = polylineShape.borderLineCount();
+    if (count <= 0) {
+      return;
+    }
+    FloatPoint c0 = polylineShape.cornerApprox(0);
+    path.moveTo(
+        Math.round(coordinateTransform.boardToScreenX(c0)),
+        Math.round(coordinateTransform.boardToScreenY(c0)));
+    for (int i = 1; i < count; i++) {
+      FloatPoint ci = polylineShape.cornerApprox(i);
+      path.lineTo(
+          Math.round(coordinateTransform.boardToScreenX(ci)),
+          Math.round(coordinateTransform.boardToScreenY(ci)));
+    }
+    path.closePath();
   }
 
   /** Draws the interior of a geometry {@link Area}. */
@@ -796,25 +830,19 @@ public class GraphicsContext implements Serializable {
       if (!border.boundingBox().intersects(clipBox)) {
         return;
       }
+      java.awt.geom.Path2D.Double drawPath = acquireScratchPath(java.awt.geom.Path2D.WIND_EVEN_ODD);
+      appendPolylineShapeToPath(drawPath, border);
       Shape[] holes = area.getHoles();
-
-      FloatPoint[][] drawPolygons = new FloatPoint[holes.length + 1][];
-      for (int j = 0; j < drawPolygons.length; j++) {
-        PolylineShape currentDrawShape;
-        if (j == 0) {
-          currentDrawShape = border;
-        } else {
-          currentDrawShape = (PolylineShape) holes[j - 1];
+      for (int j = 0; j < holes.length; j++) {
+        if (holes[j] instanceof PolylineShape holeShape) {
+          appendPolylineShapeToPath(drawPath, holeShape);
         }
-        drawPolygons[j] = new FloatPoint[currentDrawShape.borderLineCount() + 1];
-        FloatPoint[] currentDrawPolygon = drawPolygons[j];
-        for (int i = 0; i < currentDrawPolygon.length - 1; i++) {
-          currentDrawPolygon[i] = currentDrawShape.cornerApprox(i);
-        }
-        // close the polygon
-        currentDrawPolygon[currentDrawPolygon.length - 1] = currentDrawPolygon[0];
       }
-      fillArea(drawPolygons, g, color, translucencyFactor);
+      Graphics2D g2 = (Graphics2D) g;
+      g2.setColor(color);
+      setTranslucency(g2, translucencyFactor);
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      g2.fill(drawPath);
     }
     if (show_area_division) {
       TileShape[] tiles = area.splitToConvex();
