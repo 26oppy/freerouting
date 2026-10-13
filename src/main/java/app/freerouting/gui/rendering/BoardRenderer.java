@@ -35,12 +35,6 @@ public final class BoardRenderer {
 
   private static final int MIN_DRAW_PRIORITY = 1;
   private static final int MAX_DRAW_PRIORITY = 3;
-  private static final int VIRTUAL_LAYER_COUNT = 6;
-
-  private record CachedPartition(
-      java.lang.ref.WeakReference<BasicBoard> boardRef, long revision, List<Item>[][] buckets) {}
-
-  private static volatile CachedPartition cachedPartition;
 
   private BoardRenderer() {}
 
@@ -57,7 +51,7 @@ public final class BoardRenderer {
         determineDominantSide(board, activeLayer, activeVirtualLayer);
     List<RenderStep> drawSteps =
         createDrawSteps(layerCount, dominantSide, activeLayer, activeVirtualLayer);
-    List<Item>[][] buckets = getOrBuildPartition(board, layerCount);
+    BoardSpatialIndex spatialIndex = BoardSpatialIndex.getOrBuild(board);
 
     java.awt.Rectangle clipRect = graphics.getClipBounds();
     IntBox clipBox =
@@ -76,8 +70,9 @@ public final class BoardRenderer {
 
     for (int priority = MIN_DRAW_PRIORITY; priority <= MAX_DRAW_PRIORITY; priority++) {
       for (RenderStep step : drawSteps) {
-        List<Item> stepItems = buckets[priority][stepBucketIndex(step, layerCount)];
-        if (stepItems == null || stepItems.isEmpty()) {
+        BoardSpatialIndex.BucketIndex bucket =
+            spatialIndex.getBucket(priority, stepBucketIndex(step, layerCount));
+        if (bucket == null || bucket.isEmpty()) {
           continue;
         }
         double stepVisibility =
@@ -91,17 +86,38 @@ public final class BoardRenderer {
             continue;
           }
         }
-        for (Item item : stepItems) {
-          if (item instanceof BoardOutline && step.index() != primaryPhysicalLayer) {
-            continue;
+        if (clipBox != null && bucket.isDisjoint(clipBox)) {
+          continue;
+        }
+        Item[] items = bucket.items;
+        if (clipBox == null || bucket.isContainedIn(clipBox)) {
+          for (Item item : items) {
+            if (item instanceof BoardOutline && step.index() != primaryPhysicalLayer) {
+              continue;
+            }
+            if (stepVisibility <= 0.001 && !(item instanceof BoardOutline)) {
+              continue;
+            }
+            renderItem(item, step, graphics, graphicsContext, null);
           }
-          if (stepVisibility <= 0.001 && !(item instanceof BoardOutline)) {
-            continue;
+        } else {
+          long[] visibleMask = bucket.computeVisibleMask(clipBox);
+          for (int w = 0; w < visibleMask.length; w++) {
+            long word = visibleMask[w];
+            int baseIdx = w << 6;
+            while (word != 0) {
+              int idx = baseIdx + Long.numberOfTrailingZeros(word);
+              word &= word - 1;
+              Item item = items[idx];
+              if (item instanceof BoardOutline && step.index() != primaryPhysicalLayer) {
+                continue;
+              }
+              if (stepVisibility <= 0.001 && !(item instanceof BoardOutline)) {
+                continue;
+              }
+              renderItem(item, step, graphics, graphicsContext, null);
+            }
           }
-          if (clipBox != null && !clipBox.intersects(item.boundingBox())) {
-            continue;
-          }
-          renderItem(item, step, graphics, graphicsContext, null);
         }
       }
     }
@@ -111,70 +127,6 @@ public final class BoardRenderer {
 
   private static int stepBucketIndex(RenderStep step, int layerCount) {
     return step.virtual() ? layerCount + step.index() : step.index();
-  }
-
-  private static List<Item>[][] getOrBuildPartition(BasicBoard board, int layerCount) {
-    long currentRevision = board.getRevision();
-    CachedPartition current = cachedPartition;
-    if (current != null && current.revision() == currentRevision && current.boardRef().get() == board) {
-      return current.buckets();
-    }
-    List<Item>[][] buckets = partitionItemsByPriorityAndStep(board, layerCount);
-    cachedPartition =
-        new CachedPartition(new java.lang.ref.WeakReference<>(board), currentRevision, buckets);
-    return buckets;
-  }
-
-  private static List<Item>[][] partitionItemsByPriorityAndStep(BasicBoard board, int layerCount) {
-    int totalSteps = layerCount + VIRTUAL_LAYER_COUNT;
-    @SuppressWarnings("unchecked")
-    List<Item>[][] buckets = (List<Item>[][]) new List[MAX_DRAW_PRIORITY + 1][totalSteps];
-    for (Item item : board.getItems()) {
-      int priority = drawPriority(item);
-      if (priority < MIN_DRAW_PRIORITY || priority > MAX_DRAW_PRIORITY) {
-        continue;
-      }
-      switch (item.getBoardItemType()) {
-        case COMPONENT_OUTLINE -> {
-          int stepIdx = layerCount + virtualLayerFor((ComponentOutline) item);
-          addToBucket(buckets, priority, stepIdx, item);
-        }
-        case COMPONENT_OBSTACLE_AREA -> {
-          int stepIdx = layerCount + virtualLayerFor((ComponentObstacleArea) item);
-          addToBucket(buckets, priority, stepIdx, item);
-        }
-        case BOARD_OUTLINE -> {
-          for (int layer = 0; layer < layerCount; layer++) {
-            addToBucket(buckets, priority, layer, item);
-          }
-        }
-        case PIN, VIA -> {
-          int fromLayer = Math.max(0, item.firstLayer());
-          int toLayer = Math.min(layerCount - 1, item.lastLayer());
-          for (int layer = fromLayer; layer <= toLayer; layer++) {
-            addToBucket(buckets, priority, layer, item);
-          }
-        }
-        case TRACE, CONDUCTION_AREA, OBSTACLE_AREA, VIA_OBSTACLE_AREA -> {
-          int layer = item.firstLayer();
-          if (layer >= 0 && layer < layerCount) {
-            addToBucket(buckets, priority, layer, item);
-          }
-        }
-        default -> {}
-      }
-    }
-    return buckets;
-  }
-
-  private static void addToBucket(
-      List<Item>[][] buckets, int priority, int stepIdx, Item item) {
-    List<Item> list = buckets[priority][stepIdx];
-    if (list == null) {
-      list = new ArrayList<>();
-      buckets[priority][stepIdx] = list;
-    }
-    list.add(item);
   }
 
   /**
@@ -262,7 +214,7 @@ public final class BoardRenderer {
   }
 
   /** Returns the renderer-owned draw priority for an item family. */
-  private static int drawPriority(Item item) {
+  static int drawPriority(Item item) {
     return switch (item.getBoardItemType()) {
       case BOARD_OUTLINE, COMPONENT_OUTLINE, TRACE, PIN, VIA -> MAX_DRAW_PRIORITY;
       default -> MIN_DRAW_PRIORITY;
@@ -769,7 +721,7 @@ public final class BoardRenderer {
     graphicsContext.drawBoundary(area.getArea(), 0.0, color, graphics, layerVisibility);
   }
 
-  private static int virtualLayerFor(ComponentOutline outline) {
+  static int virtualLayerFor(ComponentOutline outline) {
     if (outline.isCourtyard()) {
       return outline.isFront() ? 2 : 3;
     }
@@ -779,7 +731,7 @@ public final class BoardRenderer {
     return outline.isFront() ? 0 : 1;
   }
 
-  private static int virtualLayerFor(ComponentObstacleArea area) {
+  static int virtualLayerFor(ComponentObstacleArea area) {
     return area.isFront() ? 2 : 3;
   }
 
