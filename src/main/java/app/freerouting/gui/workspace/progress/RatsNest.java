@@ -442,6 +442,9 @@ public class RatsNest {
    * @see GraphicsContext
    */
   public void draw(Graphics graphics, GraphicsContext graphicsContext) {
+    if (graphicsContext.getIncompleteColorIntensity() <= 0.001) {
+      return;
+    }
     boolean drawLengthViolationsOnly = this.hidden;
 
     for (int i = 0; i < isFiltered.length; i++) {

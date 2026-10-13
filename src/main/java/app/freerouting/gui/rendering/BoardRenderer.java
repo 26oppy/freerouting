@@ -67,9 +67,35 @@ public final class BoardRenderer {
     java.awt.Rectangle clipRect = graphics.getClipBounds();
     IntBox clipBox =
         clipRect != null ? graphicsContext.coordinateTransform.screenToBoard(clipRect) : null;
+    int primaryPhysicalLayer = -1;
+    for (int i = drawSteps.size() - 1; i >= 0; i--) {
+      RenderStep candidate = drawSteps.get(i);
+      if (!candidate.virtual() && graphicsContext.getLayerVisibility(candidate.index()) > 0.001) {
+        primaryPhysicalLayer = candidate.index();
+        break;
+      }
+    }
+    if (primaryPhysicalLayer == -1 && board.getLayerCount() > 0) {
+      primaryPhysicalLayer = 0;
+    }
+
     for (int priority = MIN_DRAW_PRIORITY; priority <= MAX_DRAW_PRIORITY; priority++) {
       for (RenderStep step : drawSteps) {
+        double stepVisibility =
+            step.virtual()
+                ? graphicsContext.getVirtualLayerVisibility(step.index())
+                : graphicsContext.getLayerVisibility(step.index());
+        if (stepVisibility <= 0.001) {
+          if (priority != MAX_DRAW_PRIORITY
+              || step.virtual()
+              || step.index() != primaryPhysicalLayer) {
+            continue;
+          }
+        }
         for (Item item : itemsByPriority[priority]) {
+          if (item instanceof BoardOutline && step.index() != primaryPhysicalLayer) {
+            continue;
+          }
           if (clipBox != null && !clipBox.intersects(item.boundingBox())) {
             continue;
           }
@@ -121,12 +147,35 @@ public final class BoardRenderer {
       Color[] colors,
       double intensity) {
     if (item != null && graphics != null && graphicsContext != null) {
-      RenderStyle style = new RenderStyle(colors, intensity);
-      for (int layer = 0; layer < item.board.getLayerCount(); layer++) {
-        renderItem(item, new RenderStep(false, layer), graphics, graphicsContext, style);
+      if (intensity <= 0.001) {
+        return;
       }
-      for (int virtualLayer = 0; virtualLayer < 6; virtualLayer++) {
-        renderItem(item, new RenderStep(true, virtualLayer), graphics, graphicsContext, style);
+      RenderStyle style = new RenderStyle(colors, intensity);
+      switch (item.getBoardItemType()) {
+        case COMPONENT_OUTLINE ->
+            renderComponentOutline(
+                (ComponentOutline) item,
+                new RenderStep(true, virtualLayerFor((ComponentOutline) item)),
+                graphics,
+                graphicsContext,
+                style);
+        case COMPONENT_OBSTACLE_AREA ->
+            renderComponentObstacleArea(
+                (ComponentObstacleArea) item,
+                new RenderStep(true, virtualLayerFor((ComponentObstacleArea) item)),
+                graphics,
+                graphicsContext,
+                style);
+        case BOARD_OUTLINE ->
+            renderBoardOutline(
+                (BoardOutline) item, new RenderStep(false, 0), graphics, graphicsContext, style);
+        default -> {
+          int fromLayer = Math.max(0, item.firstLayer());
+          int toLayer = Math.min(item.board.getLayerCount() - 1, item.lastLayer());
+          for (int layer = fromLayer; layer <= toLayer; layer++) {
+            renderItem(item, new RenderStep(false, layer), graphics, graphicsContext, style);
+          }
+        }
       }
     }
   }
@@ -343,12 +392,15 @@ public final class BoardRenderer {
       return;
     }
     int layer = trace.getLayer();
-    Color[] colors =
-        style == null ? graphicsContext.getTraceColors(trace.isUserFixed()) : style.colors();
-    Color color = colors[layer];
     double intensity =
         (style == null ? graphicsContext.getTraceColorIntensity() : style.intensity())
             * graphicsContext.getLayerVisibility(layer);
+    if (intensity <= 0.001) {
+      return;
+    }
+    Color[] colors =
+        style == null ? graphicsContext.getTraceColors(trace.isUserFixed()) : style.colors();
+    Color color = colors[layer];
     graphicsContext.draw(
         trace.polyline().cornerApproxArr(), trace.getHalfWidth(), color, graphics, intensity);
   }
@@ -373,7 +425,7 @@ public final class BoardRenderer {
     final Color[] colors = style == null ? drillColors(drillItem, graphicsContext) : style.colors();
     double intensity =
         style == null ? drillIntensity(drillItem, graphicsContext) : style.intensity();
-    if (intensity <= 0) {
+    if (intensity <= 0.001) {
       return;
     }
     boolean isLastPhysicalLayer = false;
@@ -404,13 +456,15 @@ public final class BoardRenderer {
     if (isLastPhysicalLayer) {
       Padstack padstack = drillItem.getPadstack();
       if (padstack != null && padstack.getDrillRadius() > 0) {
-        java.awt.Color drillColor = graphicsContext.otherColorTable.getDrillHoleColor();
         double drillIntensity =
             graphicsContext.colorIntensityTable.getValue(
                 ColorIntensityTable.ObjectNames.DRILL_HOLES.ordinal());
-        IntPoint centerPoint = drillItem.getCenter().toFloat().round();
-        Circle drillCircle = new Circle(centerPoint, (int) Math.round(padstack.getDrillRadius()));
-        graphicsContext.fillCircle(drillCircle, graphics, drillColor, drillIntensity);
+        if (drillIntensity > 0.001) {
+          java.awt.Color drillColor = graphicsContext.otherColorTable.getDrillHoleColor();
+          IntPoint centerPoint = drillItem.getCenter().toFloat().round();
+          Circle drillCircle = new Circle(centerPoint, (int) Math.round(padstack.getDrillRadius()));
+          graphicsContext.fillCircle(drillCircle, graphics, drillColor, drillIntensity);
+        }
       }
     }
   }
@@ -452,17 +506,20 @@ public final class BoardRenderer {
       GraphicsContext graphicsContext,
       RenderStyle style) {
     if (step.virtual() && virtualLayerFor(outline) == step.index()) {
-      Color[] colors = style == null ? null : style.colors();
-      Color color =
-          colors == null
-              ? componentOutlineColor(outline, graphicsContext)
-              : colors[outline.getLayer()];
       double visibility = graphicsContext.getVirtualLayerVisibility(step.index());
       double intensity =
           visibility
               * (style == null
                   ? graphicsContext.getComponentOutlineColorIntensity()
                   : style.intensity());
+      if (intensity <= 0.001) {
+        return;
+      }
+      Color[] colors = style == null ? null : style.colors();
+      Color color =
+          colors == null
+              ? componentOutlineColor(outline, graphicsContext)
+              : colors[outline.getLayer()];
       double drawWidth = Math.min(outline.board.communication.getResolution(Unit.MIL), 100);
       if (outline.isCourtyard() || outline.isClosed()) {
         graphicsContext.drawBoundary(outline.getArea(), drawWidth, color, graphics, intensity);
@@ -479,6 +536,15 @@ public final class BoardRenderer {
       GraphicsContext graphicsContext,
       RenderStyle style) {
     if (step.virtual() && virtualLayerFor(area) == step.index()) {
+      double visibility = graphicsContext.getVirtualLayerVisibility(step.index());
+      double intensity =
+          visibility
+              * (style == null
+                  ? graphicsContext.getComponentOutlineColorIntensity()
+                  : style.intensity());
+      if (intensity <= 0.001) {
+        return;
+      }
       Color[] colors = style == null ? null : style.colors();
       Color color =
           colors == null
@@ -486,12 +552,6 @@ public final class BoardRenderer {
                   ? graphicsContext.otherColorTable.getCourtyardColor(true)
                   : graphicsContext.otherColorTable.getCourtyardColor(false)
               : colors[area.getLayer()];
-      double visibility = graphicsContext.getVirtualLayerVisibility(step.index());
-      double intensity =
-          visibility
-              * (style == null
-                  ? graphicsContext.getComponentOutlineColorIntensity()
-                  : style.intensity());
       double drawWidth = Math.min(area.board.communication.getResolution(Unit.MIL), 100);
       graphicsContext.drawBoundary(area.getArea(), drawWidth, color, graphics, intensity);
     }
@@ -517,6 +577,16 @@ public final class BoardRenderer {
     if (step.virtual() || area.getLayer() != step.index()) {
       return;
     }
+    double intensity =
+        (style == null
+                ? area instanceof ViaObstacleArea
+                    ? graphicsContext.getViaObstacleColorIntensity()
+                    : graphicsContext.getObstacleColorIntensity()
+                : style.intensity())
+            * graphicsContext.getLayerVisibility(step.index());
+    if (intensity <= 0.001) {
+      return;
+    }
     Color[] colors =
         style == null
             ? area instanceof ViaObstacleArea
@@ -524,17 +594,7 @@ public final class BoardRenderer {
                 : graphicsContext.getObstacleColors()
             : style.colors();
     Color color = colors[step.index()];
-    double intensity =
-        style == null
-            ? area instanceof ViaObstacleArea
-                ? graphicsContext.getViaObstacleColorIntensity()
-                : graphicsContext.getObstacleColorIntensity()
-            : style.intensity();
-    graphicsContext.fillArea(
-        area.getArea(),
-        graphics,
-        color,
-        intensity * graphicsContext.getLayerVisibility(step.index()));
+    graphicsContext.fillArea(area.getArea(), graphics, color, intensity);
   }
 
   private static void renderBoardOutline(
@@ -572,13 +632,16 @@ public final class BoardRenderer {
     }
     int layer = step.index();
     double layerVisibility = graphicsContext.getLayerVisibility(layer);
-    if (layerVisibility <= 0) {
+    if (layerVisibility <= 0.001) {
+      return;
+    }
+    double intensity =
+        style == null ? graphicsContext.getConductionColorIntensity() : style.intensity();
+    if (intensity <= 0.001) {
       return;
     }
     Color[] colors = style == null ? graphicsContext.getTraceColors(true) : style.colors();
     Color color = colors[layer];
-    double intensity =
-        style == null ? graphicsContext.getConductionColorIntensity() : style.intensity();
     if (area.getIsFilled()) {
       double fillOpacity = Math.min(layerVisibility * intensity * 2.5, 1.0);
       double maxClearanceLookupBoard = 2000.0 * area.board.communication.getResolution(Unit.UM);
