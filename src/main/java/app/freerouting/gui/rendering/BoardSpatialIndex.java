@@ -4,9 +4,11 @@ import app.freerouting.board.facade.BasicBoard;
 import app.freerouting.board.model.items.ComponentObstacleArea;
 import app.freerouting.board.model.items.ComponentOutline;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.datastructures.UndoableObjects;
 import app.freerouting.geometry.planar.IntBox;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -31,24 +33,25 @@ final class BoardSpatialIndex {
   private final int layerCount;
   private final BucketIndex[][] buckets;
 
-  private BoardSpatialIndex(BasicBoard board, long revision, int layerCount) {
+  private BoardSpatialIndex(
+      BasicBoard board, long revision, int layerCount, BoardSpatialIndex previousIndex) {
     this.boardRef = new WeakReference<>(board);
     this.revision = revision;
     this.layerCount = layerCount;
-    this.buckets = buildBuckets(board, layerCount);
+    this.buckets = buildBuckets(board, layerCount, previousIndex);
   }
 
   static BoardSpatialIndex getOrBuild(BasicBoard board) {
     long currentRevision = board.getRevision();
     int layers = board.getLayerCount();
     BoardSpatialIndex current = cachedIndex;
-    if (current != null
-        && current.revision == currentRevision
-        && current.layerCount == layers
-        && current.boardRef.get() == board) {
+    boolean sameBoardAndLayerCount =
+        current != null && current.layerCount == layers && current.boardRef.get() == board;
+    if (sameBoardAndLayerCount && current.revision == currentRevision) {
       return current;
     }
-    BoardSpatialIndex built = new BoardSpatialIndex(board, currentRevision, layers);
+    BoardSpatialIndex previous = sameBoardAndLayerCount ? current : null;
+    BoardSpatialIndex built = new BoardSpatialIndex(board, currentRevision, layers, previous);
     cachedIndex = built;
     return built;
   }
@@ -64,11 +67,17 @@ final class BoardSpatialIndex {
     return priorityBuckets[stepBucketIndex];
   }
 
-  private static BucketIndex[][] buildBuckets(BasicBoard board, int layerCount) {
+  private static BucketIndex[][] buildBuckets(
+      BasicBoard board, int layerCount, BoardSpatialIndex previousIndex) {
     int totalSteps = layerCount + VIRTUAL_LAYER_COUNT;
     @SuppressWarnings("unchecked")
     List<Item>[][] rawLists = (List<Item>[][]) new List[MAX_DRAW_PRIORITY + 1][totalSteps];
-    for (Item item : board.getItems()) {
+    Iterator<UndoableObjects.UndoableObjectNode> it = board.itemList.startReadObject();
+    for (; ; ) {
+      Item item = (Item) board.itemList.readObject(it);
+      if (item == null) {
+        break;
+      }
       int priority = BoardRenderer.drawPriority(item);
       if (priority < MIN_DRAW_PRIORITY || priority > MAX_DRAW_PRIORITY) {
         continue;
@@ -109,7 +118,13 @@ final class BoardSpatialIndex {
       for (int step = 0; step < totalSteps; step++) {
         List<Item> list = rawLists[priority][step];
         if (list != null && !list.isEmpty()) {
-          result[priority][step] = new BucketIndex(list);
+          BucketIndex prevBucket =
+              previousIndex != null ? previousIndex.getBucket(priority, step) : null;
+          if (prevBucket != null && prevBucket.matches(list)) {
+            result[priority][step] = prevBucket;
+          } else {
+            result[priority][step] = new BucketIndex(list);
+          }
         }
       }
     }
@@ -293,6 +308,28 @@ final class BoardSpatialIndex {
 
     boolean isEmpty() {
       return items.length == 0;
+    }
+
+    boolean matches(List<Item> candidateList) {
+      int n = items.length;
+      if (candidateList.size() != n) {
+        return false;
+      }
+      for (int k = 0; k < n; k++) {
+        int origIdx = leafOrigIdx[k];
+        Item candidate = candidateList.get(origIdx);
+        if (candidate != items[origIdx]) {
+          return false;
+        }
+        IntBox box = candidate.boundingBox();
+        if (box.ll.x != leafMinX[k]
+            || box.ll.y != leafMinY[k]
+            || box.ur.x != leafMaxX[k]
+            || box.ur.y != leafMaxY[k]) {
+          return false;
+        }
+      }
+      return true;
     }
 
     boolean isDisjoint(IntBox clipBox) {

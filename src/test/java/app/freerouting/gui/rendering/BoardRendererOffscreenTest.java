@@ -168,4 +168,48 @@ class BoardRendererOffscreenTest {
         nonTransparentPixels > 0,
         "diagnostic adapter must draw a snapshot into the offscreen image");
   }
+
+  @Test
+  void reusesUnchangedBucketsAndConductionFillAcrossUnrelatedBoardEdits() throws Exception {
+    BasicBoard board = loadBoard(PLANE_FIXTURE);
+    BoardSpatialIndex indexBefore = BoardSpatialIndex.getOrBuild(board);
+
+    app.freerouting.board.model.items.ConductionArea conductionArea = null;
+    for (app.freerouting.board.model.items.Item item : board.getItems()) {
+      if (item instanceof app.freerouting.board.model.items.ConductionArea ca && ca.getIsFilled()) {
+        conductionArea = ca;
+        break;
+      }
+    }
+    assertTrue(conductionArea != null, "fixture must contain at least one filled ConductionArea");
+    java.awt.geom.Area fillBefore = conductionArea.getDetailedFillArea();
+    assertTrue(fillBefore != null && !fillBefore.isEmpty(), "detailed fill area must not be empty");
+
+    // Insert a tiny trace far outside the board bounds on a different layer (or non-overlapping)
+    int otherLayer = (conductionArea.getLayer() + 1) % board.getLayerCount();
+    IntBox bounds = board.getBoundingBox();
+    app.freerouting.geometry.planar.Point[] points =
+        new app.freerouting.geometry.planar.Point[] {
+          new app.freerouting.geometry.planar.IntPoint(bounds.ur.x + 50000, bounds.ur.y + 50000),
+          new app.freerouting.geometry.planar.IntPoint(bounds.ur.x + 60000, bounds.ur.y + 50000)
+        };
+    board.insertTrace(
+        new app.freerouting.geometry.planar.Polyline(points),
+        otherLayer,
+        100,
+        new int[] {1},
+        0,
+        app.freerouting.board.model.structure.FixedState.UNFIXED);
+
+    BoardSpatialIndex indexAfter = BoardSpatialIndex.getOrBuild(board);
+    assertTrue(
+        indexAfter != indexBefore, "spatial index wrapper must update when board revision changes");
+    assertTrue(
+        indexAfter.getBucket(3, conductionArea.getLayer())
+            == indexBefore.getBucket(3, conductionArea.getLayer()),
+        "unmodified layer bucket must reuse its existing BucketIndex and BVH without rebuilding");
+    assertTrue(
+        conductionArea.getDetailedFillArea() == fillBefore,
+        "ConductionArea must reuse cachedBoardFillArea when overlapping obstacles on its layer are unchanged");
+  }
 }

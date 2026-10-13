@@ -25,8 +25,6 @@ import java.util.TreeSet;
 /** A ObstacleArea, which can be electrically connected to other items. */
 public class ConductionArea extends ObstacleArea implements Connectable {
 
-  private static final double PLANE_HATCH_OPACITY = 0.85;
-
   private boolean isObstacle;
   private boolean isFilled = true;
 
@@ -41,6 +39,8 @@ public class ConductionArea extends ObstacleArea implements Connectable {
   }
 
   private transient int cachedBoardRevision = -1;
+  private transient long cachedOverlapFingerprint = 0L;
+  private transient boolean hasCachedOverlapFingerprint = false;
   private transient java.awt.geom.Area cachedBoardFillArea;
 
   /** Creates a new instance of ConductionArea. */
@@ -78,6 +78,8 @@ public class ConductionArea extends ObstacleArea implements Connectable {
   public void clearDerivedData() {
     super.clearDerivedData();
     this.cachedBoardRevision = -1;
+    this.cachedOverlapFingerprint = 0L;
+    this.hasCachedOverlapFingerprint = false;
     this.cachedBoardFillArea = null;
   }
 
@@ -125,24 +127,41 @@ public class ConductionArea extends ObstacleArea implements Connectable {
       return;
     }
 
-    java.awt.geom.Area fillArea = getAwtAreaInBoardUnits(this.getArea());
+    Area currentArea = this.getArea();
+    if (currentArea == null || currentArea.isEmpty()) {
+      cachedBoardFillArea = new java.awt.geom.Area();
+      cachedOverlapFingerprint = 0L;
+      hasCachedOverlapFingerprint = true;
+      cachedBoardRevision = this.board.getRevision();
+      return;
+    }
+
+    IntBox bbox = this.boundingBox();
+    int maxCl = (int) Math.round(maxClearanceLookupBoard);
+    IntBox inflatedBbox =
+        new IntBox(
+            new IntPoint(bbox.ll.x - maxCl, bbox.ll.y - maxCl),
+            new IntPoint(bbox.ur.x + maxCl, bbox.ur.y + maxCl));
+    Set<SearchTreeObject> overlaps = this.board.overlappingObjects(inflatedBbox, layerIndex);
+    long overlapFingerprint = computeOverlapFingerprint(overlaps, bbox, layerIndex, maxCl);
+    if (cachedBoardFillArea != null
+        && hasCachedOverlapFingerprint
+        && overlapFingerprint == cachedOverlapFingerprint) {
+      cachedBoardRevision = this.board.getRevision();
+      return;
+    }
+
+    java.awt.geom.Area fillArea = getAwtAreaInBoardUnits(currentArea);
     if (fillArea == null) {
       fillArea = new java.awt.geom.Area();
     }
     if (!fillArea.isEmpty()) {
-      IntBox bbox = this.boundingBox();
       double spokeWidth = 400.0 * this.board.communication.getResolution(Unit.UM);
-      int maxCl = (int) Math.round(maxClearanceLookupBoard);
-      IntBox inflatedBbox =
-          new IntBox(
-              new IntPoint(bbox.ll.x - maxCl, bbox.ll.y - maxCl),
-              new IntPoint(bbox.ur.x + maxCl, bbox.ur.y + maxCl));
 
       java.util.List<java.awt.geom.Area> foreignClearances = new java.util.ArrayList<>();
       java.util.List<java.awt.geom.Area> sameNetClearances = new java.util.ArrayList<>();
       java.util.List<java.awt.geom.Area> sameNetSpokesList = new java.util.ArrayList<>();
 
-      Set<SearchTreeObject> overlaps = this.board.overlappingObjects(inflatedBbox, layerIndex);
       for (SearchTreeObject ob : overlaps) {
         if (!(ob instanceof Item currentItem) || currentItem == this) {
           continue;
@@ -236,7 +255,63 @@ public class ConductionArea extends ObstacleArea implements Connectable {
       }
     }
     cachedBoardFillArea = fillArea;
+    cachedOverlapFingerprint = overlapFingerprint;
+    hasCachedOverlapFingerprint = true;
     cachedBoardRevision = this.board.getRevision();
+  }
+
+  private long computeOverlapFingerprint(
+      Set<SearchTreeObject> overlaps, IntBox bbox, int layerIndex, int maxCl) {
+    int clClass1 = this.clearanceClassIndex();
+    long sumHash = 0L;
+    long xorHash = 0L;
+    int count = 0;
+    for (SearchTreeObject ob : overlaps) {
+      if (!(ob instanceof Item currentItem) || currentItem == this) {
+        continue;
+      }
+      if (!currentItem.sharesLayer(this)) {
+        continue;
+      }
+      boolean sameNet = currentItem.sharesNet(this);
+      if ((currentItem instanceof Trace || currentItem instanceof ConductionArea) && sameNet) {
+        continue;
+      }
+      int clClass2 = currentItem.clearanceClassIndex();
+      double clearanceDist = this.board.clearanceValue(clClass1, clClass2, layerIndex);
+      IntBox itemBox = currentItem.boundingBox();
+      long h = currentItem.getId() * 0x9e3779b97f4a7c15L;
+      h = h * 31 + clClass2;
+      h = h * 31 + (sameNet ? 1 : 0);
+      h = h * 31 + Double.doubleToLongBits(clearanceDist);
+      if (itemBox != null) {
+        h = h * 31 + itemBox.ll.x;
+        h = h * 31 + itemBox.ll.y;
+        h = h * 31 + itemBox.ur.x;
+        h = h * 31 + itemBox.ur.y;
+      }
+      if (currentItem instanceof Trace trace) {
+        h = h * 31 + trace.getHalfWidth();
+        h = h * 31 + trace.firstCorner().hashCode();
+        h = h * 31 + trace.lastCorner().hashCode();
+      }
+      h = (h ^ (h >>> 30)) * 0xbf58476d1ce4e5b9L;
+      h = (h ^ (h >>> 27)) * 0x94d049bb133111ebL;
+      h = h ^ (h >>> 31);
+      sumHash += h;
+      xorHash ^= h;
+      count++;
+    }
+    long result = sumHash * 0x9e3779b97f4a7c15L ^ xorHash;
+    result = result * 31 + count;
+    result = result * 31 + clClass1;
+    result = result * 31 + layerIndex;
+    result = result * 31 + maxCl;
+    result = result * 31 + bbox.ll.x;
+    result = result * 31 + bbox.ll.y;
+    result = result * 31 + bbox.ur.x;
+    result = result * 31 + bbox.ur.y;
+    return result;
   }
 
   private static java.awt.geom.Area getAwtAreaInBoardUnits(Area area) {
