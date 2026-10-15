@@ -75,9 +75,10 @@ public class PreservedTraceJunctionTest {
 
     RoutingBoard routingBoard =
         new RoutingBoard(
-            new IntBox(0, 0, 10000000, 10000000),
+            new IntBox(-10000, -10000, 10000000, 10000000),
             layerStructure,
-            new PolylineShape[] {TileShape.getInstance(0, 0, 10000000, 10000000)},
+            // Leave room for trace widths and clearance around junctions on the axes.
+            new PolylineShape[] {TileShape.getInstance(-10000, -10000, 10000000, 10000000)},
             0,
             boardRules,
             communication);
