@@ -69,6 +69,26 @@ class MeanderGeneratorTest {
     }
 
     @Test
+    void generatesMeanderOnDiagonalBaselineWithStrictFortyFiveDegreeCompliance() {
+      // (0, 0) to (10000, 10000) (45-degree diagonal)
+      Point start = new IntPoint(0, 0);
+      Point end = new IntPoint(10000, 10000);
+      double targetExtra = 2000.0;
+
+      NetMeanderConstraint constraint =
+          new NetMeanderConstraint(200.0, 1000.0, 600.0, CornerStyle.CHAMFER, 80.0, false);
+
+      Point[] meanderPoints =
+          MeanderGenerator.generateMeander(start, end, targetExtra, constraint, null, 1000.0, true);
+
+      assertNotNull(meanderPoints);
+      Polyline polyline = new Polyline(meanderPoints);
+      assertTrue(
+          polyline.isMultipleOf45Degree(), "Every segment must strictly satisfy 45-degree rule");
+      assertTrue(polyline.lengthApprox() > 14142.0);
+    }
+
+    @Test
     void generatesSkewBumpForDifferentialPairEqualization() {
       Point start = new IntPoint(0, 0);
       Point end = new IntPoint(6000, 0);

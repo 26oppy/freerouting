@@ -13,6 +13,7 @@ import java.util.List;
 public final class MeanderGenerator implements Serializable {
 
   private static final long serialVersionUID = 1L;
+  private static final double SQRT2 = Math.sqrt(2.0);
 
   private MeanderGenerator() {
     // Utility class
@@ -105,13 +106,25 @@ public final class MeanderGenerator implements Serializable {
       return null;
     }
 
-    // Extra length per cycle at max amplitude: approx 2 * maxAmp
-    int neededCycles = (int) Math.ceil(targetExtraLength / (2.0 * maxAmp));
+    // Estimate corner trimming loss per cycle caused by chamfering or circular filleting
+    CornerStyle cornerStyle = constraint.cornerStyle();
+    double estRadius =
+        Math.min(spacing * 0.4, maxAmp * 0.4) * (constraint.radiusPercentage() / 100.0);
+    double lossPerCorner =
+        (cornerStyle == CornerStyle.CHAMFER || fortyFiveDegreeOnly)
+            ? (2.0 - SQRT2) * estRadius
+            : (2.0 - (Math.PI / 2.0)) * estRadius;
+    double cornerLossPerCycle = 4.0 * lossPerCorner;
+
+    // Extra length per cycle at max amplitude: approx 2 * maxAmp - cornerLossPerCycle
+    double maxEffectiveExtraPerCycle = Math.max(10.0, 2.0 * maxAmp - cornerLossPerCycle);
+    int neededCycles = (int) Math.ceil(targetExtraLength / maxEffectiveExtraPerCycle);
     int cycleCount = Math.min(maxCycles, Math.max(1, neededCycles));
 
-    // Calculate optimal amplitude for the chosen cycle count
+    // Calculate optimal amplitude for the chosen cycle count, compensating for corner trimming
     double targetPerCycle = targetExtraLength / cycleCount;
-    double amplitude = Math.max(minAmp, Math.min(maxAmp, targetPerCycle / 2.0));
+    double neededAmplitude = (targetPerCycle + cornerLossPerCycle) / 2.0;
+    double amplitude = Math.max(minAmp, Math.min(maxAmp, neededAmplitude));
 
     // Center pattern along baseline segment
     double patternWidth = cycleCount * 2.0 * spacing;
@@ -123,30 +136,65 @@ public final class MeanderGenerator implements Serializable {
     double currentOffset = startOffset;
     boolean singleSided = constraint.singleSided();
 
+    Direction normDir = (preferredNormal != null) ? preferredNormal : baseDir.turn45Degree(2);
+    Vector normVector = (normDir != null) ? normDir.getVector() : null;
+    int normX = (normVector != null) ? Integer.signum(((IntVector) normVector).x) : 0;
+    int normY = (normVector != null) ? Integer.signum(((IntVector) normVector).y) : 1;
+
+    Vector baseDirVector = baseDir.getVector();
+    int dirX = Integer.signum(((IntVector) baseDirVector).x);
+    int dirY = Integer.signum(((IntVector) baseDirVector).y);
+    double scale = baseDir.isDiagonal() ? SQRT2 : 1.0;
+
     for (int i = 0; i < cycleCount; i++) {
       double sign = singleSided ? 1.0 : ((i % 2 == 0) ? 1.0 : -1.0);
       double curAmp = amplitude * sign;
 
-      // Base point 1 (entry into meander loop)
-      double b1x = p0.x + currentOffset * ux;
-      double b1y = p0.y + currentOffset * uy;
+      Point b1;
+      Point k1;
+      Point k2;
+      Point b2;
 
-      // Peak point 1
-      double k1x = b1x + curAmp * nx;
-      double k1y = b1y + curAmp * ny;
+      if (fortyFiveDegreeOnly) {
+        int offStep = (int) Math.round(currentOffset / scale);
+        int spcStep = (int) Math.round(spacing / scale);
+        int ampStep = (int) Math.round(curAmp / scale);
 
-      // Peak point 2 (shifted along baseline by spacing)
-      double k2x = k1x + spacing * ux;
-      double k2y = k1y + spacing * uy;
+        int b1x = (int) Math.round(p0.x) + offStep * dirX;
+        int b1y = (int) Math.round(p0.y) + offStep * dirY;
+        b1 = new IntPoint(b1x, b1y);
+        k1 = new IntPoint(b1x + ampStep * normX, b1y + ampStep * normY);
+        k2 =
+            new IntPoint(
+                b1x + ampStep * normX + spcStep * dirX, b1y + ampStep * normY + spcStep * dirY);
+        b2 = new IntPoint(b1x + spcStep * dirX, b1y + spcStep * dirY);
+      } else {
+        // Base point 1 (entry into meander loop)
+        double b1x = p0.x + currentOffset * ux;
+        double b1y = p0.y + currentOffset * uy;
 
-      // Base point 2 (return to baseline)
-      double b2x = b1x + spacing * ux;
-      double b2y = b1y + spacing * uy;
+        // Peak point 1
+        double k1x = b1x + curAmp * nx;
+        double k1y = b1y + curAmp * ny;
 
-      rawCorners.add(new IntPoint((int) Math.round(b1x), (int) Math.round(b1y)));
-      rawCorners.add(new IntPoint((int) Math.round(k1x), (int) Math.round(k1y)));
-      rawCorners.add(new IntPoint((int) Math.round(k2x), (int) Math.round(k2y)));
-      rawCorners.add(new IntPoint((int) Math.round(b2x), (int) Math.round(b2y)));
+        // Peak point 2 (shifted along baseline by spacing)
+        double k2x = k1x + spacing * ux;
+        double k2y = k1y + spacing * uy;
+
+        // Base point 2 (return to baseline)
+        double b2x = b1x + spacing * ux;
+        double b2y = b1y + spacing * uy;
+
+        b1 = new IntPoint((int) Math.round(b1x), (int) Math.round(b1y));
+        k1 = new IntPoint((int) Math.round(k1x), (int) Math.round(k1y));
+        k2 = new IntPoint((int) Math.round(k2x), (int) Math.round(k2y));
+        b2 = new IntPoint((int) Math.round(b2x), (int) Math.round(b2y));
+      }
+
+      rawCorners.add(b1);
+      rawCorners.add(k1);
+      rawCorners.add(k2);
+      rawCorners.add(b2);
 
       currentOffset += 2.0 * spacing;
     }
@@ -154,7 +202,6 @@ public final class MeanderGenerator implements Serializable {
     rawCorners.add(endPoint);
 
     // Apply corner styling (fillet or chamfer)
-    CornerStyle cornerStyle = constraint.cornerStyle();
     double radius =
         Math.min(spacing * 0.4, amplitude * 0.4) * (constraint.radiusPercentage() / 100.0);
 

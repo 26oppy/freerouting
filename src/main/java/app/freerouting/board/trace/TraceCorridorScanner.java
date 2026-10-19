@@ -13,7 +13,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Scans routed traces of a net to identify candidate straight corridors suitable for inserting
@@ -91,6 +93,13 @@ public final class TraceCorridorScanner {
 
     int[] netNoArr = new int[] {net.netNumber};
 
+    Set<Point> terminalCenters = new HashSet<>();
+    for (Item item : connectables) {
+      if (item instanceof DrillItem drillItem) {
+        terminalCenters.add(drillItem.getCenter());
+      }
+    }
+
     for (Item item : connectables) {
       if (!(item instanceof PolylineTrace trace)) {
         continue;
@@ -108,8 +117,8 @@ public final class TraceCorridorScanner {
       int halfWidth = trace.getHalfWidth();
       int clearanceClass = trace.clearanceClassIndex();
 
-      boolean startsAtTerminal = touchesTerminal(board, trace.firstCorner(), net.netNumber);
-      boolean endsAtTerminal = touchesTerminal(board, trace.lastCorner(), net.netNumber);
+      boolean startsAtTerminal = terminalCenters.contains(trace.firstCorner());
+      boolean endsAtTerminal = terminalCenters.contains(trace.lastCorner());
 
       for (int i = 0; i < cornerCount - 1; i++) {
         // Protect terminal pad exit segments from meandering
@@ -136,22 +145,43 @@ public final class TraceCorridorScanner {
           continue;
         }
 
-        // Midpoint of segment
-        FloatPoint midFloat = new FloatPoint((fp0.x + fp1.x) / 2.0, (fp0.y + fp1.y) / 2.0);
-        IntPoint midPoint = midFloat.round();
-
         // Left normal (+90) and right normal (-90)
         Direction leftDir = baseDir.turn45Degree(2);
         Direction rightDir = baseDir.turn45Degree(-2);
 
         double probeDist = (maxTestAmplitude > 0) ? maxTestAmplitude : 2000.0;
 
-        double leftClear =
-            probeClearance(
-                board, midPoint, leftDir, probeDist, layer, netNoArr, halfWidth, clearanceClass);
-        double rightClear =
-            probeClearance(
-                board, midPoint, rightDir, probeDist, layer, netNoArr, halfWidth, clearanceClass);
+        // Sample clearance at 3 points along segment (25%, 50%, 75%) to detect intruding obstacles
+        double leftClear = probeDist;
+        double rightClear = probeDist;
+        double[] sampleFractions = {0.25, 0.50, 0.75};
+        for (double f : sampleFractions) {
+          FloatPoint sampleFloat =
+              new FloatPoint(fp0.x + f * (fp1.x - fp0.x), fp0.y + f * (fp1.y - fp0.y));
+          IntPoint samplePoint = sampleFloat.round();
+          double curLeft =
+              probeClearance(
+                  board,
+                  samplePoint,
+                  leftDir,
+                  probeDist,
+                  layer,
+                  netNoArr,
+                  halfWidth,
+                  clearanceClass);
+          double curRight =
+              probeClearance(
+                  board,
+                  samplePoint,
+                  rightDir,
+                  probeDist,
+                  layer,
+                  netNoArr,
+                  halfWidth,
+                  clearanceClass);
+          leftClear = Math.min(leftClear, curLeft);
+          rightClear = Math.min(rightClear, curRight);
+        }
 
         if (Math.max(leftClear, rightClear) >= minAmplitude) {
           candidates.add(new CandidateCorridor(trace, i, p0, p1, segLength, leftClear, rightClear));
@@ -186,21 +216,11 @@ public final class TraceCorridorScanner {
         new IntPoint((int) Math.round(fromPoint.x + dx), (int) Math.round(fromPoint.y + dy));
     double allowed =
         board.checkTraceSegment(
-            fromPoint, targetPoint, layer, netNumbers, halfWidth, clearanceClass, true);
+            fromPoint, targetPoint, layer, netNumbers, halfWidth, clearanceClass, false);
 
     if (allowed == Integer.MAX_VALUE || allowed >= probeDistance) {
       return probeDistance;
     }
     return Math.max(0.0, allowed);
-  }
-
-  private static boolean touchesTerminal(RoutingBoard board, Point corner, int netNumber) {
-    Collection<Item> atPoint = board.getConnectableItems(netNumber);
-    for (Item item : atPoint) {
-      if (item instanceof DrillItem drillItem && drillItem.getCenter().equals(corner)) {
-        return true;
-      }
-    }
-    return false;
   }
 }
