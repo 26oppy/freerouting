@@ -236,7 +236,7 @@ The live board model is split into cohesive subpackages. There are no remaining 
 
 - `board.model.items` — pins, vias, traces, conduction areas, keepouts, and connectivity.
 - `board.model.structure` — layers, outline, components, units, and fixed-state.
-- `board.trace` — polyline-trace geometry, normalization, and search-tree adaptation.
+- `board.trace` — polyline-trace geometry, normalization, search-tree adaptation, and straight corridor scanning (`TraceCorridorScanner`).
 - `board.facade` — `BasicBoard`, `RoutingBoard`, and repository/snapshot/search/undo façades.
 - `board.state` — observers, communication, changed-area, coordinate transform, and comparison.
 - `board.actions` — forced routing, item inspection/selection, drill-item moves, and ID generation.
@@ -322,7 +322,7 @@ mutators still require callers to manage board search trees and connectivity.
 
 ### `app.freerouting.geometry.planar`
 
-Planar geometry primitives and helper classes used throughout routing and board operations.
+Planar geometry primitives and helper classes used throughout routing and board operations, including polyline corner chamfering and arc-approximated filleting (`PolylineFillet`) and 45-degree serpentine accordion and differential pair skew pattern generation (`MeanderGenerator`).
 
 ### `app.freerouting.gui`
 
