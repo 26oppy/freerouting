@@ -5,6 +5,7 @@ import app.freerouting.board.model.items.DrillItem;
 import app.freerouting.board.model.items.Item;
 import app.freerouting.geometry.planar.Direction;
 import app.freerouting.geometry.planar.FloatPoint;
+import app.freerouting.geometry.planar.IntDirection;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.rules.Net;
@@ -21,6 +22,8 @@ import java.util.Set;
  * trace length tuning meander patterns.
  */
 public final class TraceCorridorScanner {
+
+  private static final double[] SAMPLE_FRACTIONS = {0.25, 0.50, 0.75};
 
   private TraceCorridorScanner() {
     // Utility class
@@ -150,11 +153,11 @@ public final class TraceCorridorScanner {
         // Sample clearance at 3 points along segment (25%, 50%, 75%) to detect intruding obstacles
         double leftClear = probeDist;
         double rightClear = probeDist;
-        double[] sampleFractions = {0.25, 0.50, 0.75};
-        for (double f : sampleFractions) {
-          FloatPoint sampleFloat =
-              new FloatPoint(fp0.x + f * (fp1.x - fp0.x), fp0.y + f * (fp1.y - fp0.y));
-          IntPoint samplePoint = sampleFloat.round();
+        for (double f : SAMPLE_FRACTIONS) {
+          IntPoint samplePoint =
+              new IntPoint(
+                  (int) Math.round(fp0.x + f * (fp1.x - fp0.x)),
+                  (int) Math.round(fp0.y + f * (fp1.y - fp0.y)));
           double curLeft =
               probeClearance(
                   board,
@@ -199,14 +202,23 @@ public final class TraceCorridorScanner {
       int[] netNumbers,
       int halfWidth,
       int clearanceClass) {
-    FloatPoint normVec = normalDir.getVector().toFloat();
-    double normLen = Math.hypot(normVec.x, normVec.y);
+    double vx;
+    double vy;
+    if (normalDir instanceof IntDirection intDir) {
+      vx = intDir.x;
+      vy = intDir.y;
+    } else {
+      FloatPoint normVec = normalDir.getVector().toFloat();
+      vx = normVec.x;
+      vy = normVec.y;
+    }
+    double normLen = Math.hypot(vx, vy);
     if (normLen <= 0.0) {
       return 0.0;
     }
 
-    double dx = (normVec.x / normLen) * probeDistance;
-    double dy = (normVec.y / normLen) * probeDistance;
+    double dx = (vx / normLen) * probeDistance;
+    double dy = (vy / normLen) * probeDistance;
 
     IntPoint targetPoint =
         new IntPoint((int) Math.round(fromPoint.x + dx), (int) Math.round(fromPoint.y + dy));

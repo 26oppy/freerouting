@@ -25,6 +25,9 @@ public final class RoutingPipeline {
     /** Invoked after optimization has completed. */
     default void afterOptimization(BatchOptimizer optimizer) {}
 
+    /** Invoked immediately before post-route length tuning starts. */
+    default void beforeLengthTuning(RoutingJob job) {}
+
     /** Invoked after post-route length tuning and skew equalization have completed. */
     default void afterLengthTuning(RoutingJob job) {}
   }
@@ -171,12 +174,16 @@ public final class RoutingPipeline {
   private void runLengthTuningStage() {
     if (this.job == null
         || this.job.board == null
-        || this.job.thread.isStopRequested()
+        || (this.job.thread != null && this.job.thread.isStopRequested())
         || !this.job.routerSettings.isLengthTuningEnabled()) {
       return;
     }
 
     this.job.stage = RoutingStage.LENGTH_TUNING;
+    for (StageListener listener : this.stageListeners) {
+      listener.beforeLengthTuning(this.job);
+    }
+
     DifferentialPairSkewTuner.tune(this.job.board);
     PostRouteLengthTuner.tune(this.job.board);
 

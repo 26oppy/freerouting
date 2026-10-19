@@ -21,9 +21,7 @@ import java.util.List;
  * Post-route optimization engine that equalizes trace lengths to satisfy target length constraints
  * by inserting serpentine meander (accordion) patterns into straight trace corridors.
  */
-public final class PostRouteLengthTuner implements Serializable {
-
-  private static final long serialVersionUID = 1L;
+public final class PostRouteLengthTuner {
 
   /** Result summary of a post-route length tuning execution. */
   public record TuningReport(
@@ -76,7 +74,9 @@ public final class PostRouteLengthTuner implements Serializable {
       }
 
       double currentLength = net.getTraceLength();
-      if (currentLength >= targetLength || lengthConstraint.isSatisfied(currentLength)) {
+      if (currentLength <= 0.0
+          || currentLength >= targetLength
+          || lengthConstraint.isSatisfied(currentLength)) {
         continue;
       }
 
@@ -150,6 +150,10 @@ public final class PostRouteLengthTuner implements Serializable {
 
       boolean replacedAny = false;
       for (CandidateCorridor corridor : corridors) {
+        if (corridor.trace() == null || !corridor.trace().isOnTheBoard()) {
+          continue;
+        }
+
         Point[] meanderPoints =
             MeanderGenerator.generateMeander(
                 corridor.startPoint(),

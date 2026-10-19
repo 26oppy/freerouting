@@ -789,7 +789,11 @@ public class RouterSettings implements Serializable, Cloneable {
 
   /** Enables or disables post-route trace length tuning. */
   public void setLengthTuningEnabled(Boolean value) {
+    Boolean oldValue = this.lengthTuning;
     this.lengthTuning = value;
+    if (pcs != null) {
+      pcs.firePropertyChange("lengthTuning", oldValue, value);
+    }
   }
 
   /** Enables or disables the fanout pre-pass. */

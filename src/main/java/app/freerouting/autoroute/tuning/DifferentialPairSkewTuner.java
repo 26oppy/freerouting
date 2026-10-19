@@ -20,9 +20,7 @@ import java.util.List;
  * Post-route optimization engine that equalizes intra-pair trace lengths of differential pairs by
  * inserting single-sided skew bumps on the shorter trace of each pair.
  */
-public final class DifferentialPairSkewTuner implements Serializable {
-
-  private static final long serialVersionUID = 1L;
+public final class DifferentialPairSkewTuner {
 
   /** Result summary of differential pair skew tuning operations. */
   public record SkewTuningReport(
@@ -73,7 +71,8 @@ public final class DifferentialPairSkewTuner implements Serializable {
 
       double skew = Math.abs(pLen - nLen);
       double allowedSkew = pair.hasMaxSkew() ? pair.maxSkew() : 0.0;
-      if (skew <= allowedSkew) {
+      double effectiveAllowed = Math.max(allowedSkew, 10.0);
+      if (skew <= effectiveAllowed) {
         continue; // Skew already within tolerance
       }
 
@@ -126,6 +125,10 @@ public final class DifferentialPairSkewTuner implements Serializable {
     }
 
     for (CandidateCorridor corridor : corridors) {
+      if (corridor.trace() == null || !corridor.trace().isOnTheBoard()) {
+        continue;
+      }
+
       // Preferred normal automatically points into the side with larger clearance (away from
       // partner)
       Point[] bumpPoints =

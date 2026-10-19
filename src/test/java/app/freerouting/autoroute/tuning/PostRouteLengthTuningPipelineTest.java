@@ -42,18 +42,25 @@ class PostRouteLengthTuningPipelineTest extends RoutingFixtureTest {
     job.thread = new NoOpStoppableThread();
     job.routerSettings.autorouter.maxPasses = 0;
     RoutingPipeline pipeline = RoutingPipeline.createForHeadless(job);
-    AtomicBoolean lengthTuningFired = new AtomicBoolean(false);
+    AtomicBoolean beforeTuningFired = new AtomicBoolean(false);
+    AtomicBoolean afterTuningFired = new AtomicBoolean(false);
     pipeline.addStageListener(
         new RoutingPipeline.StageListener() {
           @Override
+          public void beforeLengthTuning(RoutingJob rJob) {
+            beforeTuningFired.set(true);
+          }
+
+          @Override
           public void afterLengthTuning(RoutingJob rJob) {
-            lengthTuningFired.set(true);
+            afterTuningFired.set(true);
           }
         });
 
     pipeline.run();
 
-    assertTrue(lengthTuningFired.get(), "Expected afterLengthTuning lifecycle event to fire");
+    assertTrue(beforeTuningFired.get(), "Expected beforeLengthTuning lifecycle event to fire");
+    assertTrue(afterTuningFired.get(), "Expected afterLengthTuning lifecycle event to fire");
     assertTrue(
         new DesignRulesChecker(job.board, null).getAllClearanceViolations().isEmpty(),
         "Zero clearance violations expected after pipeline execution");
@@ -74,17 +81,24 @@ class PostRouteLengthTuningPipelineTest extends RoutingFixtureTest {
     job.routerSettings.autorouter.maxPasses = 0;
     job.routerSettings.setLengthTuningEnabled(false);
     RoutingPipeline pipeline = RoutingPipeline.createForHeadless(job);
-    AtomicBoolean lengthTuningFired = new AtomicBoolean(false);
+    AtomicBoolean beforeTuningFired = new AtomicBoolean(false);
+    AtomicBoolean afterTuningFired = new AtomicBoolean(false);
     pipeline.addStageListener(
         new RoutingPipeline.StageListener() {
           @Override
+          public void beforeLengthTuning(RoutingJob rJob) {
+            beforeTuningFired.set(true);
+          }
+
+          @Override
           public void afterLengthTuning(RoutingJob rJob) {
-            lengthTuningFired.set(true);
+            afterTuningFired.set(true);
           }
         });
 
     pipeline.run();
 
-    assertFalse(lengthTuningFired.get(), "Length tuning stage must NOT fire when disabled");
+    assertFalse(beforeTuningFired.get(), "Before length tuning stage must NOT fire when disabled");
+    assertFalse(afterTuningFired.get(), "After length tuning stage must NOT fire when disabled");
   }
 }
