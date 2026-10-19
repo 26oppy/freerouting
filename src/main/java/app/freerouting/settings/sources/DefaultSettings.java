@@ -116,6 +116,9 @@ public class DefaultSettings implements SettingsSource {
   /** Default single sided constraint for meanders. */
   public static final boolean DEFAULT_MEANDER_SINGLE_SIDED = false;
 
+  /** Default post-route trace length tuning enabled flag. */
+  public static final boolean DEFAULT_LENGTH_TUNING = true;
+
   /** Current default router score formula. */
   public static final RouterScoringVersion DEFAULT_ROUTER_SCORING_VERSION =
       RouterScoringVersion.V2_CONTINUOUS;
@@ -204,6 +207,7 @@ public class DefaultSettings implements SettingsSource {
     settings.meanderCornerStyle = DEFAULT_MEANDER_CORNER_STYLE;
     settings.meanderRadiusPercentage = DEFAULT_MEANDER_RADIUS_PERCENTAGE;
     settings.meanderSingleSided = DEFAULT_MEANDER_SINGLE_SIDED;
+    settings.lengthTuning = DEFAULT_LENGTH_TUNING;
     settings.planeNets = new String[0];
     settings.planeAsObstacle = false;
     settings.neckWidthUm = DEFAULT_NECK_WIDTH_UM;

@@ -2,6 +2,8 @@ package app.freerouting.autoroute.pipeline;
 
 import app.freerouting.autoroute.events.BoardUpdatedEventListener;
 import app.freerouting.autoroute.events.TaskStateChangedEventListener;
+import app.freerouting.autoroute.tuning.DifferentialPairSkewTuner;
+import app.freerouting.autoroute.tuning.PostRouteLengthTuner;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingStage;
 import app.freerouting.settings.RouterSettings;
@@ -22,6 +24,9 @@ public final class RoutingPipeline {
 
     /** Invoked after optimization has completed. */
     default void afterOptimization(BatchOptimizer optimizer) {}
+
+    /** Invoked after post-route length tuning and skew equalization have completed. */
+    default void afterLengthTuning(RoutingJob job) {}
   }
 
   private final RoutingJob job;
@@ -89,6 +94,7 @@ public final class RoutingPipeline {
     }
     runRoutingStage();
     runOptimizationStage();
+    runLengthTuningStage();
     this.job.stage = RoutingStage.IDLE;
   }
 
@@ -159,6 +165,23 @@ public final class RoutingPipeline {
     this.optimizer.runBatchLoop();
     for (StageListener listener : this.stageListeners) {
       listener.afterOptimization(this.optimizer);
+    }
+  }
+
+  private void runLengthTuningStage() {
+    if (this.job == null
+        || this.job.board == null
+        || this.job.thread.isStopRequested()
+        || !this.job.routerSettings.isLengthTuningEnabled()) {
+      return;
+    }
+
+    this.job.stage = RoutingStage.LENGTH_TUNING;
+    DifferentialPairSkewTuner.tune(this.job.board);
+    PostRouteLengthTuner.tune(this.job.board);
+
+    for (StageListener listener : this.stageListeners) {
+      listener.afterLengthTuning(this.job);
     }
   }
 

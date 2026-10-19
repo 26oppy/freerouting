@@ -4,5 +4,6 @@ package app.freerouting.core;
 public enum RoutingStage {
   IDLE, // The job hasn't started yet
   ROUTING, // The board is currently being processed by the auto-router
-  OPTIMIZATION // The board is routed, and it is currently being optimized
+  OPTIMIZATION, // The board is routed, and it is currently being optimized
+  LENGTH_TUNING // The board is routed and optimized, and trace lengths/skews are being tuned
 }

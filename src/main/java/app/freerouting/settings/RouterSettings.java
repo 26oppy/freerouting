@@ -93,6 +93,15 @@ public class RouterSettings implements Serializable, Cloneable {
   public Boolean meanderSingleSided;
 
   /**
+   * Whether post-route trace length tuning and differential pair skew equalization are performed
+   * after the routing and optimization phases.
+   */
+  @SerializedName(
+      value = "length_tuning",
+      alternate = {"lengthTuning", "length_tuning_enabled", "lengthTuningEnabled"})
+  public Boolean lengthTuning;
+
+  /**
    * Opt-in width necking: when a connection fails at its net-class trace width, retry it once with
    * all trace half-widths clamped to this width (in micrometers). Intended for fine-pitch regions
    * where the class width physically cannot exit the pads; supply a legal manufacturable width
@@ -669,6 +678,7 @@ public class RouterSettings implements Serializable, Cloneable {
     result.meanderCornerStyle = this.meanderCornerStyle;
     result.meanderRadiusPercentage = this.meanderRadiusPercentage;
     result.meanderSingleSided = this.meanderSingleSided;
+    result.lengthTuning = this.lengthTuning;
     result.planeNets = this.planeNets != null ? this.planeNets.clone() : null;
     result.planeAsObstacle = this.planeAsObstacle;
     result.neckWidthUm = this.neckWidthUm;
@@ -767,6 +777,19 @@ public class RouterSettings implements Serializable, Cloneable {
   /** Returns whether the fanout pre-pass should run. */
   public boolean isFanoutEnabled() {
     return fanout != null && Boolean.TRUE.equals(fanout.enabled);
+  }
+
+  /**
+   * Returns whether post-route trace length tuning and differential pair skew equalization are
+   * enabled.
+   */
+  public boolean isLengthTuningEnabled() {
+    return Boolean.TRUE.equals(this.lengthTuning);
+  }
+
+  /** Enables or disables post-route trace length tuning. */
+  public void setLengthTuningEnabled(Boolean value) {
+    this.lengthTuning = value;
   }
 
   /** Enables or disables the fanout pre-pass. */
