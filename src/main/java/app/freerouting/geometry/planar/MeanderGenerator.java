@@ -25,8 +25,10 @@ public final class MeanderGenerator implements Serializable {
    * @param endPoint ending point of the straight baseline segment
    * @param targetExtraLength extra length (in board units) to add
    * @param constraint meander pattern geometric constraints
-   * @param preferredNormal preferred perpendicular normal direction, or null for default left (+90°)
-   * @param maxClearAmplitude maximum clear amplitude available from obstacles, or <= 0 for unconstrained
+   * @param preferredNormal preferred perpendicular normal direction, or null for default left
+   *     (+90°)
+   * @param maxClearAmplitude maximum clear amplitude available from obstacles, or <= 0 for
+   *     unconstrained
    * @param fortyFiveDegreeOnly if true, restricts all meander legs to 45-degree increments
    * @return array of points representing the meandered path, or null if a meander cannot fit
    */
@@ -153,7 +155,8 @@ public final class MeanderGenerator implements Serializable {
 
     // Apply corner styling (fillet or chamfer)
     CornerStyle cornerStyle = constraint.cornerStyle();
-    double radius = Math.min(spacing * 0.4, amplitude * 0.4) * (constraint.radiusPercentage() / 100.0);
+    double radius =
+        Math.min(spacing * 0.4, amplitude * 0.4) * (constraint.radiusPercentage() / 100.0);
 
     Polyline rawPolyline = new Polyline(rawCorners.toArray(new Point[0]));
     Polyline styled =
@@ -215,4 +218,3 @@ public final class MeanderGenerator implements Serializable {
         fortyFiveDegreeOnly);
   }
 }
-

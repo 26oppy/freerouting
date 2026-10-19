@@ -93,7 +93,8 @@ class PolylineFilletTest {
       Point corner = new IntPoint(0, 1000);
       Point p1 = new IntPoint(1000, 1000);
 
-      Point[] nullPrev = PolylineFillet.filletCorner(null, corner, p1, CornerStyle.CHAMFER, 100, true);
+      Point[] nullPrev =
+          PolylineFillet.filletCorner(null, corner, p1, CornerStyle.CHAMFER, 100, true);
       assertArrayEquals(new Point[] {corner}, nullPrev);
 
       Point[] zeroRadius =
@@ -145,15 +146,11 @@ class PolylineFilletTest {
     void filletsUturnPolyline() {
       // Box turn: (0, 0) -> (0, 1000) -> (1000, 1000) -> (1000, 0)
       Point[] corners = {
-        new IntPoint(0, 0),
-        new IntPoint(0, 1000),
-        new IntPoint(1000, 1000),
-        new IntPoint(1000, 0)
+        new IntPoint(0, 0), new IntPoint(0, 1000), new IntPoint(1000, 1000), new IntPoint(1000, 0)
       };
       Polyline polyline = new Polyline(corners);
 
-      Polyline result =
-          PolylineFillet.filletPolyline(polyline, CornerStyle.CHAMFER, 200.0, true);
+      Polyline result = PolylineFillet.filletPolyline(polyline, CornerStyle.CHAMFER, 200.0, true);
 
       assertNotNull(result);
       // Original had 4 corners. 2 inner corners replaced by 2 each -> total 6 corners

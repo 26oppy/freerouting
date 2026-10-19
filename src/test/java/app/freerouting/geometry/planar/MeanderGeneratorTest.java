@@ -74,7 +74,8 @@ class MeanderGeneratorTest {
       Point end = new IntPoint(6000, 0);
       double skewDeficit = 500.0; // 0.5 mm skew difference
 
-      NetMeanderConstraint preset = NetMeanderConstraint.createDefaultPreset(MeanderPatternType.DIFF_PAIR_SKEW, 1000.0);
+      NetMeanderConstraint preset =
+          NetMeanderConstraint.createDefaultPreset(MeanderPatternType.DIFF_PAIR_SKEW, 1000.0);
 
       Point[] bumpPoints =
           MeanderGenerator.generateSkewBump(
@@ -104,8 +105,7 @@ class MeanderGeneratorTest {
           new NetMeanderConstraint(200.0, 1000.0, 600.0, CornerStyle.CHAMFER, 80.0, false);
 
       Point[] result =
-          MeanderGenerator.generateMeander(
-              start, end, 500.0, constraint, null, 1000.0, true);
+          MeanderGenerator.generateMeander(start, end, 500.0, constraint, null, 1000.0, true);
 
       assertNull(result);
     }
@@ -119,7 +119,8 @@ class MeanderGeneratorTest {
           new NetMeanderConstraint(200.0, 1000.0, 600.0, CornerStyle.CHAMFER, 80.0, false);
 
       assertNull(MeanderGenerator.generateMeander(start, end, 0.0, constraint, null, 1000.0, true));
-      assertNull(MeanderGenerator.generateMeander(start, end, -500.0, constraint, null, 1000.0, true));
+      assertNull(
+          MeanderGenerator.generateMeander(start, end, -500.0, constraint, null, 1000.0, true));
     }
 
     @Test
@@ -132,8 +133,7 @@ class MeanderGeneratorTest {
 
       // Available clear amplitude is only 200, but min is 400
       Point[] result =
-          MeanderGenerator.generateMeander(
-              start, end, 1000.0, constraint, null, 200.0, true);
+          MeanderGenerator.generateMeander(start, end, 1000.0, constraint, null, 200.0, true);
 
       assertNull(result);
     }
@@ -146,8 +146,8 @@ class MeanderGeneratorTest {
       assertNull(MeanderGenerator.generateMeander(null, p, 1000.0, constraint, null, 0, true));
       assertNull(MeanderGenerator.generateMeander(p, null, 1000.0, constraint, null, 0, true));
       assertNull(MeanderGenerator.generateMeander(p, p, 1000.0, constraint, null, 0, true));
-      assertNull(MeanderGenerator.generateMeander(p, new IntPoint(1000, 0), 1000.0, null, null, 0, true));
+      assertNull(
+          MeanderGenerator.generateMeander(p, new IntPoint(1000, 0), 1000.0, null, null, 0, true));
     }
   }
 }
-

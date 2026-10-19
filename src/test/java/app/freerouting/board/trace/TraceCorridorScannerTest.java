@@ -47,8 +47,7 @@ class TraceCorridorScannerTest extends RoutingFixtureTest {
 
     // Scan corridors with minimum length 1.0 mm (1000 board units)
     List<TraceCorridorScanner.CandidateCorridor> corridors =
-        TraceCorridorScanner.scanCorridors(
-            job.board, routedNet, 500.0, 100.0, 1000.0);
+        TraceCorridorScanner.scanCorridors(job.board, routedNet, 500.0, 100.0, 1000.0);
 
     assertNotNull(corridors);
     if (!corridors.isEmpty()) {
@@ -61,4 +60,3 @@ class TraceCorridorScannerTest extends RoutingFixtureTest {
     }
   }
 }
-

@@ -81,11 +81,7 @@ public final class TraceCorridorScanner {
    * @return list of candidate corridors sorted by length descending
    */
   public static List<CandidateCorridor> scanCorridors(
-      RoutingBoard board,
-      Net net,
-      double minLength,
-      double minAmplitude,
-      double maxTestAmplitude) {
+      RoutingBoard board, Net net, double minLength, double minAmplitude, double maxTestAmplitude) {
     if (board == null || net == null || minLength <= 0.0) {
       return Collections.emptyList();
     }
@@ -150,13 +146,15 @@ public final class TraceCorridorScanner {
 
         double probeDist = (maxTestAmplitude > 0) ? maxTestAmplitude : 2000.0;
 
-        double leftClear = probeClearance(board, midPoint, leftDir, probeDist, layer, netNoArr, halfWidth, clearanceClass);
-        double rightClear = probeClearance(board, midPoint, rightDir, probeDist, layer, netNoArr, halfWidth, clearanceClass);
+        double leftClear =
+            probeClearance(
+                board, midPoint, leftDir, probeDist, layer, netNoArr, halfWidth, clearanceClass);
+        double rightClear =
+            probeClearance(
+                board, midPoint, rightDir, probeDist, layer, netNoArr, halfWidth, clearanceClass);
 
         if (Math.max(leftClear, rightClear) >= minAmplitude) {
-          candidates.add(
-              new CandidateCorridor(
-                  trace, i, p0, p1, segLength, leftClear, rightClear));
+          candidates.add(new CandidateCorridor(trace, i, p0, p1, segLength, leftClear, rightClear));
         }
       }
     }
@@ -184,7 +182,8 @@ public final class TraceCorridorScanner {
     double dx = (normVec.x / normLen) * probeDistance;
     double dy = (normVec.y / normLen) * probeDistance;
 
-    IntPoint targetPoint = new IntPoint((int) Math.round(fromPoint.x + dx), (int) Math.round(fromPoint.y + dy));
+    IntPoint targetPoint =
+        new IntPoint((int) Math.round(fromPoint.x + dx), (int) Math.round(fromPoint.y + dy));
     double allowed =
         board.checkTraceSegment(
             fromPoint, targetPoint, layer, netNumbers, halfWidth, clearanceClass, true);
@@ -205,4 +204,3 @@ public final class TraceCorridorScanner {
     return false;
   }
 }
-

@@ -160,10 +160,7 @@ public final class PolylineFillet implements Serializable {
    * @return new Polyline with filleted corners, or the original if no changes were applied
    */
   public static Polyline filletPolyline(
-      Polyline polyline,
-      CornerStyle style,
-      double radius,
-      boolean fortyFiveDegreeOnly) {
+      Polyline polyline, CornerStyle style, double radius, boolean fortyFiveDegreeOnly) {
     if (polyline == null || polyline.cornerCount() < 3 || radius <= 0.0) {
       return polyline;
     }
@@ -190,7 +187,8 @@ public final class PolylineFillet implements Serializable {
     }
 
     Point lastCorner = polyline.corner(cornerCount - 1);
-    if (resultCorners.isEmpty() || !resultCorners.get(resultCorners.size() - 1).equals(lastCorner)) {
+    if (resultCorners.isEmpty()
+        || !resultCorners.get(resultCorners.size() - 1).equals(lastCorner)) {
       resultCorners.add(lastCorner);
     }
 
@@ -201,4 +199,3 @@ public final class PolylineFillet implements Serializable {
     return new Polyline(resultCorners.toArray(new Point[0]));
   }
 }
-
