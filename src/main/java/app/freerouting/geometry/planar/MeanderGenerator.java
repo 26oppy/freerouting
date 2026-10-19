@@ -2,7 +2,6 @@ package app.freerouting.geometry.planar;
 
 import app.freerouting.rules.CornerStyle;
 import app.freerouting.rules.NetMeanderConstraint;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,9 +9,8 @@ import java.util.List;
  * Generates 45-degree and orthogonal serpentine meander (accordion) patterns and differential pair
  * skew bumps along straight trace segments to achieve target trace lengths.
  */
-public final class MeanderGenerator implements Serializable {
+public final class MeanderGenerator {
 
-  private static final long serialVersionUID = 1L;
   private static final double SQRT2 = Math.sqrt(2.0);
 
   private MeanderGenerator() {

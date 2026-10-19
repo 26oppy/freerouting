@@ -1,7 +1,6 @@
 package app.freerouting.geometry.planar;
 
 import app.freerouting.rules.CornerStyle;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,9 +10,7 @@ import java.util.List;
  * <p>Supports both 45-degree constrained beveling (for standard PCB routing) and multi-segment
  * chord approximations for smooth circular fillets in any-angle routing.
  */
-public final class PolylineFillet implements Serializable {
-
-  private static final long serialVersionUID = 1L;
+public final class PolylineFillet {
 
   private PolylineFillet() {
     // Utility class

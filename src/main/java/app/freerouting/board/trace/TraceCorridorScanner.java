@@ -8,7 +8,6 @@ import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.rules.Net;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,10 +44,7 @@ public final class TraceCorridorScanner {
       Point endPoint,
       double length,
       double leftClearDepth,
-      double rightClearDepth)
-      implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+      double rightClearDepth) {
 
     /** Returns the maximum clear depth across both left and right sides. */
     public double maxClearDepth() {
