@@ -40,7 +40,7 @@ flowchart TD
         IO["**io.specctra**\nDSN / SES reader-writer"]
         BOARD["**board.model/facade/state/actions/trace + searchtree + optimize**\nLive board model · search trees · optimization"]
         RULES["**rules**\nNets · clearances"]
-        AR["**autoroute.pipeline + maze + expansion + drill + path**\nRouting stages · maze · expansion · path"]
+        AR["**autoroute.pipeline + maze + expansion + drill + path + tuning**\nRouting stages · maze · expansion · path · length tuning"]
         DRC["**drc**\nDesign-rule checking"]
         GEO["**geometry.planar**\nShapes · points · math"]
     end
@@ -109,7 +109,7 @@ Use the table below to jump to the package most likely to own the behavior you a
 | --- | --- |
 | DSN / SES file loading or writing | `app.freerouting.io.specctra` |
 | Board items, board state, or board-level helpers | `app.freerouting.board.model.items`, `app.freerouting.board.model.structure`, `app.freerouting.board.facade`, `app.freerouting.board.state`, `app.freerouting.board.actions`, and `app.freerouting.board.trace` |
-| Routing decisions, fanout, maze search, or optimization | `app.freerouting.autoroute.pipeline`, `app.freerouting.autoroute.maze`, `app.freerouting.autoroute.expansion`, `app.freerouting.autoroute.drill`, `app.freerouting.autoroute.path`, and `app.freerouting.board.optimize` |
+| Routing decisions, fanout, maze search, optimization, or length tuning | `app.freerouting.autoroute.pipeline`, `app.freerouting.autoroute.maze`, `app.freerouting.autoroute.expansion`, `app.freerouting.autoroute.drill`, `app.freerouting.autoroute.path`, `app.freerouting.autoroute.tuning`, and `app.freerouting.board.optimize` |
 | Nets, vias, clearance classes, or board rules | `app.freerouting.rules` |
 | Clearance violations or design-rule checks | `app.freerouting.drc` |
 | GUI windows, panels, menus, editor state, accessibility locators, or drawing | `app.freerouting.gui.windows.board`, `app.freerouting.gui.windows.routing`, `app.freerouting.gui.menus`, `app.freerouting.gui.board`, `app.freerouting.gui.controls`, `app.freerouting.gui.support`, `app.freerouting.gui.workspace`, `app.freerouting.gui.interactive`, `app.freerouting.gui.a11y`, and `app.freerouting.gui.rendering` |
@@ -275,6 +275,12 @@ Drill-page indexing and expansion-drill support used during maze expansion.
 
 Found-connection reconstruction and insertion, including path connection value objects.
 
+### `app.freerouting.autoroute.tuning`
+
+Post-route serpentine trace length tuning, differential pair intra-pair skew equalization,
+clear corridor analysis, and meander trace replacement. Operates during `RoutingStage.LENGTH_TUNING`
+after the autorouting and optimization stages complete.
+
 ### `app.freerouting.autoroute`
 
 Remaining autoroute support types and routing diagnostics. The implementation families are kept in
@@ -413,6 +419,7 @@ Several implementation areas live one level below the top-level package grouping
 - `app.freerouting.api.v1`, `app.freerouting.api.dto`, `app.freerouting.api.security`, and `app.freerouting.api.dev` contain the public controllers, payloads, authentication, and mocked endpoints; start with [JobControllerV1.java](../src/main/java/app/freerouting/api/v1/JobControllerV1.java), [BoardFilePayload.java](../src/main/java/app/freerouting/api/dto/BoardFilePayload.java), and [ApiKeyValidationService.java](../src/main/java/app/freerouting/api/security/ApiKeyValidationService.java).
 - `app.freerouting.autoroute.events` contains routing event callbacks; start with [BoardUpdatedEvent.java](../src/main/java/app/freerouting/autoroute/events/BoardUpdatedEvent.java).
 - `app.freerouting.autoroute.pipeline` contains the shared routing sequencer; start with [RoutingPipeline.java](../src/main/java/app/freerouting/autoroute/pipeline/RoutingPipeline.java).
+- `app.freerouting.autoroute.tuning` contains post-route trace length tuning and differential pair skew equalization; start with [PostRouteLengthTuner.java](../src/main/java/app/freerouting/autoroute/tuning/PostRouteLengthTuner.java) and [DifferentialPairSkewTuner.java](../src/main/java/app/freerouting/autoroute/tuning/DifferentialPairSkewTuner.java).
 - `app.freerouting.board.searchtree` contains board spatial indexes; start with [SearchTreeManager.java](../src/main/java/app/freerouting/board/searchtree/SearchTreeManager.java).
 - `app.freerouting.board.facade` keeps board services behind the stable `BasicBoard` and `RoutingBoard`
   façades: item storage/connectivity/snapshots, routing operations/search, and routing undo/redo.
@@ -425,7 +432,7 @@ Several implementation areas live one level below the top-level package grouping
 ### Routing Path
 
 The primary routing packages are `board`, `board.searchtree`, `board.optimize`, `autoroute.pipeline`,
-`autoroute.maze`, `autoroute.expansion`, `autoroute.drill`, `autoroute.path`, `rules`, `drc`, and
+`autoroute.maze`, `autoroute.expansion`, `autoroute.drill`, `autoroute.path`, `autoroute.tuning`, `rules`, `drc`, and
 `geometry.planar`.
 
 - `board` stores the current design.

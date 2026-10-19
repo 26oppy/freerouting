@@ -51,7 +51,8 @@ The primary way to configure Freerouting is through a JSON settings file. This f
     "meander_spacing_mm": 0.6,
     "meander_corner_style": "FILLET",
     "meander_radius_percentage": 80.0,
-    "meander_single_sided": false
+    "meander_single_sided": false,
+    "length_tuning": true
   },
   "usage_and_diagnostic_data": {
     "disable_analytics": false,
@@ -166,6 +167,7 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 - **`meander_corner_style`**: Corner style for meander turns (`FILLET` or `CHAMFER`). Default is `FILLET`.
 - **`meander_radius_percentage`**: Corner rounding / chamfer radius percentage (0.0 to 100.0). Default is `80.0`.
 - **`meander_single_sided`**: Boolean restricting meanders to one side of the baseline track (`true`) or allowing two-sided excursions (`false`). Default is `false`.
+- **`length_tuning`**: Boolean enabling or disabling post-route trace length tuning and differential pair skew equalization during `RoutingStage.LENGTH_TUNING`. Default is `true`.
 - **`layers`**: An array of layer-specific settings (transient, typically set via CLI or loaded from board files). Each element contains:
     - **`routable`**: Boolean indicating if the layer is active/routable by the autorouter.
     - **`preferred_direction_horizontal`**: Boolean indicating if the preferred direction on this layer is horizontal.
