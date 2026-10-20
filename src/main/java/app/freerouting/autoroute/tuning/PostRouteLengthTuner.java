@@ -101,14 +101,14 @@ public final class PostRouteLengthTuner {
             String.format(
                 "PostRouteLengthTuner: tuned net '%s' — added %.2f mm (start: %.2f mm, end: %.2f mm, target: %.2f mm)",
                 net.name,
-                toUserUnits(board, added),
-                toUserUnits(board, startLength),
-                toUserUnits(board, endLength),
-                toUserUnits(board, targetLength)));
+                toMm(board, added),
+                toMm(board, startLength),
+                toMm(board, endLength),
+                toMm(board, targetLength)));
       }
     }
 
-    double totalAddedMm = toUserUnits(board, totalAddedLength);
+    double totalAddedMm = toMm(board, totalAddedLength);
     return new TuningReport(attempted, success, meandersInserted, totalAddedMm);
   }
 
@@ -127,7 +127,8 @@ public final class PostRouteLengthTuner {
 
     NetMeanderConstraint meanderConstraint = net.getMeanderConstraint();
     double spacing = meanderConstraint.spacing() > 0 ? meanderConstraint.spacing() : 600.0;
-    double minLength = 4.0 * spacing;
+    double minLength = Math.min(4.0 * spacing, Math.max(1500.0, 1.5 * spacing));
+    double scanMinAmp = Math.min(250.0, meanderConstraint.minAmplitude());
 
     for (int iter = 0; iter < maxIterations; iter++) {
       double currentLength = net.getTraceLength();
@@ -138,11 +139,7 @@ public final class PostRouteLengthTuner {
 
       List<CandidateCorridor> corridors =
           TraceCorridorScanner.scanCorridors(
-              board,
-              net,
-              minLength,
-              meanderConstraint.minAmplitude(),
-              meanderConstraint.maxAmplitude());
+              board, net, minLength, scanMinAmp, meanderConstraint.maxAmplitude());
 
       if (corridors.isEmpty()) {
         break;
@@ -154,51 +151,67 @@ public final class PostRouteLengthTuner {
           continue;
         }
 
-        Point[] meanderPoints =
-            MeanderGenerator.generateMeander(
-                corridor.startPoint(),
-                corridor.endPoint(),
-                remainingDeficit,
-                meanderConstraint,
-                corridor.preferredNormal(),
-                corridor.maxClearDepth(),
-                fortyFiveDegreeOnly);
-
-        if (meanderPoints == null || meanderPoints.length < 3) {
+        double maxClear = corridor.maxClearDepth();
+        double startAmp = Math.min(maxClear, meanderConstraint.maxAmplitude());
+        double minAmp = Math.min(scanMinAmp, startAmp);
+        if (startAmp < minAmp || startAmp <= 0.0) {
           continue;
         }
 
-        Polyline newPolyline =
-            spliceMeanderIntoTrace(corridor.trace(), corridor.segmentIndex(), meanderPoints);
-        if (newPolyline == null) {
-          continue;
+        double step = Math.max(100.0, (startAmp - minAmp) / 4.0);
+        for (double testAmp = startAmp; testAmp >= minAmp; testAmp -= step) {
+          Point[] meanderPoints =
+              MeanderGenerator.generateMeander(
+                  corridor.startPoint(),
+                  corridor.endPoint(),
+                  remainingDeficit,
+                  meanderConstraint,
+                  corridor.preferredNormal(),
+                  testAmp,
+                  fortyFiveDegreeOnly);
+
+          if (meanderPoints == null || meanderPoints.length < 3) {
+            continue;
+          }
+
+          Polyline newPolyline =
+              spliceMeanderIntoTrace(corridor.trace(), corridor.segmentIndex(), meanderPoints);
+          if (newPolyline == null) {
+            continue;
+          }
+
+          int layer = corridor.trace().getLayer();
+          int halfWidth = corridor.trace().getHalfWidth();
+          int[] netNumbers = corridor.trace().netNumbers;
+          int clearanceClass = corridor.trace().clearanceClassIndex();
+
+          // Check if replacing this trace causes any clearance conflicts
+          FixedState originalState = corridor.trace().getFixedState();
+          corridor.trace().setFixedState(FixedState.UNFIXED);
+          board.removeItem(corridor.trace());
+          boolean fits =
+              board.checkPolylineTrace(newPolyline, layer, halfWidth, netNumbers, clearanceClass);
+
+          if (fits) {
+            board.insertTrace(
+                newPolyline, layer, halfWidth, netNumbers, clearanceClass, originalState);
+            insertedCount++;
+            replacedAny = true;
+            break; // Break inner amplitude relaxation loop
+          } else {
+            // Revert removal if candidate meander failed clearance check
+            board.insertTrace(
+                corridor.trace().polyline(),
+                layer,
+                halfWidth,
+                netNumbers,
+                clearanceClass,
+                originalState);
+          }
         }
 
-        int layer = corridor.trace().getLayer();
-        int halfWidth = corridor.trace().getHalfWidth();
-        int[] netNumbers = corridor.trace().netNumbers;
-        int clearanceClass = corridor.trace().clearanceClassIndex();
-
-        // Check if replacing this trace causes any clearance conflicts
-        board.removeItem(corridor.trace());
-        boolean fits =
-            board.checkPolylineTrace(newPolyline, layer, halfWidth, netNumbers, clearanceClass);
-
-        if (fits) {
-          board.insertTrace(
-              newPolyline, layer, halfWidth, netNumbers, clearanceClass, FixedState.USER_FIXED);
-          insertedCount++;
-          replacedAny = true;
-          break; // Break inner loop to re-scan fresh corridors on updated board state
-        } else {
-          // Revert removal if candidate meander failed clearance check
-          board.insertTrace(
-              corridor.trace().polyline(),
-              layer,
-              halfWidth,
-              netNumbers,
-              clearanceClass,
-              corridor.trace().getFixedState());
+        if (replacedAny) {
+          break; // Break corridor loop to re-scan fresh corridors on updated board state
         }
       }
 
@@ -258,11 +271,13 @@ public final class PostRouteLengthTuner {
     return new Polyline(newCorners.toArray(new Point[0]));
   }
 
-  private static double toUserUnits(RoutingBoard board, double boardUnits) {
-    if (board != null
-        && board.communication != null
-        && board.communication.coordinateTransform != null) {
-      return board.communication.coordinateTransform.boardToDsn(boardUnits);
+  private static double toMm(RoutingBoard board, double boardUnits) {
+    if (board != null && board.communication != null) {
+      double mmRes =
+          board.communication.getResolution(app.freerouting.board.model.structure.Unit.MM);
+      if (mmRes > 0) {
+        return boardUnits / mmRes;
+      }
     }
     return boardUnits;
   }

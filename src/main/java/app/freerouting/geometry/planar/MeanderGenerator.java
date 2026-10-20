@@ -97,9 +97,14 @@ public final class MeanderGenerator {
       return null;
     }
 
-    // A cycle spans 2 * spacing along baseline. We leave 1 * spacing margin at each end.
-    double usableLength = length - 2.0 * spacing;
-    int maxCycles = (int) Math.floor(usableLength / (2.0 * spacing));
+    double effSpacing = spacing;
+    if (effSpacing * 4.0 > length) {
+      effSpacing = Math.max(300.0, length / 4.0);
+    }
+
+    // A cycle spans 2 * effSpacing along baseline. We leave 1 * effSpacing margin at each end.
+    double usableLength = length - 2.0 * effSpacing;
+    int maxCycles = (int) Math.floor(usableLength / (2.0 * effSpacing));
     if (maxCycles < 1) {
       return null;
     }
@@ -107,7 +112,7 @@ public final class MeanderGenerator {
     // Estimate corner trimming loss per cycle caused by chamfering or circular filleting
     CornerStyle cornerStyle = constraint.cornerStyle();
     double estRadius =
-        Math.min(spacing * 0.4, maxAmp * 0.4) * (constraint.radiusPercentage() / 100.0);
+        Math.min(effSpacing * 0.4, maxAmp * 0.4) * (constraint.radiusPercentage() / 100.0);
     double lossPerCorner =
         (cornerStyle == CornerStyle.CHAMFER || fortyFiveDegreeOnly)
             ? (2.0 - SQRT2) * estRadius
@@ -125,7 +130,7 @@ public final class MeanderGenerator {
     double amplitude = Math.max(minAmp, Math.min(maxAmp, neededAmplitude));
 
     // Center pattern along baseline segment
-    double patternWidth = cycleCount * 2.0 * spacing;
+    double patternWidth = cycleCount * 2.0 * effSpacing;
     double startOffset = (length - patternWidth) / 2.0;
 
     List<Point> rawCorners = new ArrayList<>();
@@ -155,7 +160,7 @@ public final class MeanderGenerator {
 
       if (fortyFiveDegreeOnly) {
         int offStep = (int) Math.round(currentOffset / scale);
-        int spcStep = (int) Math.round(spacing / scale);
+        int spcStep = (int) Math.round(effSpacing / scale);
         int ampStep = (int) Math.round(curAmp / scale);
 
         int b1x = (int) Math.round(p0.x) + offStep * dirX;
@@ -176,12 +181,12 @@ public final class MeanderGenerator {
         double k1y = b1y + curAmp * ny;
 
         // Peak point 2 (shifted along baseline by spacing)
-        double k2x = k1x + spacing * ux;
-        double k2y = k1y + spacing * uy;
+        double k2x = k1x + effSpacing * ux;
+        double k2y = k1y + effSpacing * uy;
 
         // Base point 2 (return to baseline)
-        double b2x = b1x + spacing * ux;
-        double b2y = b1y + spacing * uy;
+        double b2x = b1x + effSpacing * ux;
+        double b2y = b1y + effSpacing * uy;
 
         b1 = new IntPoint((int) Math.round(b1x), (int) Math.round(b1y));
         k1 = new IntPoint((int) Math.round(k1x), (int) Math.round(k1y));
@@ -194,14 +199,14 @@ public final class MeanderGenerator {
       rawCorners.add(k2);
       rawCorners.add(b2);
 
-      currentOffset += 2.0 * spacing;
+      currentOffset += 2.0 * effSpacing;
     }
 
     rawCorners.add(endPoint);
 
     // Apply corner styling (fillet or chamfer)
     double radius =
-        Math.min(spacing * 0.4, amplitude * 0.4) * (constraint.radiusPercentage() / 100.0);
+        Math.min(effSpacing * 0.4, amplitude * 0.4) * (constraint.radiusPercentage() / 100.0);
 
     Polyline rawPolyline = new Polyline(rawCorners.toArray(new Point[0]));
     Polyline styled =

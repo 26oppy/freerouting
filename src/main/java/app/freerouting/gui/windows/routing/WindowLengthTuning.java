@@ -751,9 +751,10 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       radiusField.setText(String.format(Locale.US, "%.1f", preset.radiusPercentage()));
       singleSidedCheckBox.setSelected(preset.singleSided());
     } else {
-      minAmpField.setText(Unit.INCH.equals(getUserUnit()) ? "0.0100" : "0.20");
-      maxAmpField.setText(Unit.INCH.equals(getUserUnit()) ? "0.0400" : "1.00");
-      spacingField.setText(Unit.INCH.equals(getUserUnit()) ? "0.0200" : "0.60");
+      Unit u = getUserUnit() != null ? getUserUnit() : Unit.MM;
+      minAmpField.setText(formatLengthValue(toBoardUnits(Unit.scale(0.20, Unit.MM, u))));
+      maxAmpField.setText(formatLengthValue(toBoardUnits(Unit.scale(1.00, Unit.MM, u))));
+      spacingField.setText(formatLengthValue(toBoardUnits(Unit.scale(0.60, Unit.MM, u))));
       cornerStyleCombo.setSelectedItem("FILLET");
       radiusField.setText("80.0");
       singleSidedCheckBox.setSelected(type != MeanderPatternType.SINGLE_TRACK);
@@ -846,7 +847,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       }
 
       boolean enableConstraint = enableTargetConstraintBox.isSelected();
-      double maxSkew = parseDouble(maxSkewField.getText(), 0.10);
+      double maxSkew = parseDouble(maxSkewField.getText(), getDefaultSkewUser());
       double maxSkewBoard = enableConstraint ? toBoardUnits(maxSkew) : 0.0;
 
       for (int sel : selected) {
@@ -1105,36 +1106,79 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     return ct != null && ct.userUnit != null ? ct.userUnit : Unit.MM;
   }
 
+  private double getDefaultSkewUser() {
+    Unit u = getUserUnit();
+    return Unit.scale(0.10, Unit.MM, (u != null ? u : Unit.MM));
+  }
+
+  private double getDefaultToleranceUser() {
+    Unit u = getUserUnit();
+    return Unit.scale(0.20, Unit.MM, (u != null ? u : Unit.MM));
+  }
+
   private String getDefaultToleranceString() {
-    return Unit.INCH.equals(getUserUnit()) ? "0.0079" : "0.20";
+    Unit u = getUserUnit();
+    if (u == null) {
+      u = Unit.MM;
+    }
+    double defaultTolUser = getDefaultToleranceUser();
+    return switch (u) {
+      case INCH -> String.format(Locale.US, "%.4f", defaultTolUser);
+      case MIL, MM -> String.format(Locale.US, "%.3f", defaultTolUser);
+      case UM -> String.format(Locale.US, "%.1f", defaultTolUser);
+    };
   }
 
   private String getDefaultSkewString() {
-    return Unit.INCH.equals(getUserUnit()) ? "0.0039" : "0.10";
+    Unit u = getUserUnit();
+    if (u == null) {
+      u = Unit.MM;
+    }
+    double defaultSkewUser = getDefaultSkewUser();
+    return switch (u) {
+      case INCH -> String.format(Locale.US, "%.4f", defaultSkewUser);
+      case MIL, MM -> String.format(Locale.US, "%.3f", defaultSkewUser);
+      case UM -> String.format(Locale.US, "%.1f", defaultSkewUser);
+    };
   }
 
   private String formatLengthValue(double boardUnits) {
     double userVal = toUser(boardUnits);
-    if (Unit.INCH.equals(getUserUnit())) {
-      return String.format(Locale.US, "%.4f", userVal);
+    Unit u = getUserUnit();
+    if (u == null) {
+      u = Unit.MM;
     }
-    return String.format(Locale.US, "%.2f", userVal);
+    return switch (u) {
+      case INCH -> String.format(Locale.US, "%.4f", userVal);
+      case MIL, MM -> String.format(Locale.US, "%.2f", userVal);
+      case UM -> String.format(Locale.US, "%.1f", userVal);
+    };
   }
 
   private String formatToleranceValue(double boardUnits) {
     double userVal = toUser(boardUnits);
-    if (Unit.INCH.equals(getUserUnit())) {
-      return String.format(Locale.US, "%.4f", userVal);
+    Unit u = getUserUnit();
+    if (u == null) {
+      u = Unit.MM;
     }
-    return String.format(Locale.US, "%.2f", userVal);
+    return switch (u) {
+      case INCH -> String.format(Locale.US, "%.4f", userVal);
+      case MIL, MM -> String.format(Locale.US, "%.3f", userVal);
+      case UM -> String.format(Locale.US, "%.1f", userVal);
+    };
   }
 
   private String formatSkewValue(double boardUnits) {
     double userVal = toUser(boardUnits);
-    if (Unit.INCH.equals(getUserUnit())) {
-      return String.format(Locale.US, "%.4f", userVal);
+    Unit u = getUserUnit();
+    if (u == null) {
+      u = Unit.MM;
     }
-    return String.format(Locale.US, "%.3f", userVal);
+    return switch (u) {
+      case INCH -> String.format(Locale.US, "%.4f", userVal);
+      case MIL, MM -> String.format(Locale.US, "%.3f", userVal);
+      case UM -> String.format(Locale.US, "%.1f", userVal);
+    };
   }
 
   private void linkSelectedAsDifferentialPair() {
@@ -1199,10 +1243,11 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     }
     pairName = pairName.trim();
 
-    double defaultSkewBoard = 1000.0; // 0.10 mm in board units
-    double defaultSpacingBoard = 6000.0; // 0.60 mm in board units
     NetMeanderConstraint skewPreset =
         board.rules.getDefaultMeanderConstraint(MeanderPatternType.DIFF_PAIR_SKEW);
+    double defaultSkewBoard = toBoardUnits(getDefaultSkewUser());
+    double defaultSpacingBoard =
+        skewPreset != null && skewPreset.spacing() > 0 ? skewPreset.spacing() : 6000.0;
 
     DifferentialPair pair =
         new DifferentialPair(posNet, negNet, pairName, defaultSpacingBoard, defaultSkewBoard);
@@ -1334,11 +1379,12 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
         return;
       }
 
-      double maxSkewUser = parseDouble(skewField.getText(), 0.10);
-      double maxSkewBoard = toBoardUnits(maxSkewUser);
-      double defaultSpacingBoard = 6000.0;
       NetMeanderConstraint skewPreset =
           board.rules.getDefaultMeanderConstraint(MeanderPatternType.DIFF_PAIR_SKEW);
+      double maxSkewUser = parseDouble(skewField.getText(), getDefaultSkewUser());
+      double maxSkewBoard = toBoardUnits(maxSkewUser);
+      double defaultSpacingBoard =
+          skewPreset != null && skewPreset.spacing() > 0 ? skewPreset.spacing() : 6000.0;
 
       DifferentialPair pair =
           new DifferentialPair(pNet, nNet, pName, defaultSpacingBoard, maxSkewBoard);

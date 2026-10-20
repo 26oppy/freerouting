@@ -210,8 +210,13 @@ public class LengthTuningTableModel extends AbstractTableModel {
       return "";
     }
     boolean isInch = "inch".equalsIgnoreCase(unitString);
-    String lenFmt = isInch ? "%.3f %s" : "%.2f %s";
-    String tolFmt = isInch ? "±%.4f %s" : "±%.2f %s";
+    boolean isMil = "mil".equalsIgnoreCase(unitString);
+    boolean isUm = "um".equalsIgnoreCase(unitString);
+    String lenFmt = isInch ? "%.4f %s" : (isUm ? "%.1f %s" : "%.2f %s");
+    String tolFmt =
+        isInch
+            ? "±%.4f %s"
+            : ((isMil || "mm".equalsIgnoreCase(unitString)) ? "±%.3f %s" : "±%.1f %s");
 
     return switch (columnIndex) {
       case 0 -> row.name;

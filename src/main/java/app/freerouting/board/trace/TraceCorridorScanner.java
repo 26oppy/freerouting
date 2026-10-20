@@ -23,7 +23,9 @@ import java.util.Set;
  */
 public final class TraceCorridorScanner {
 
-  private static final double[] SAMPLE_FRACTIONS = {0.25, 0.50, 0.75};
+  private static final double[] SAMPLE_FRACTIONS = {
+    0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90
+  };
 
   private TraceCorridorScanner() {
     // Utility class

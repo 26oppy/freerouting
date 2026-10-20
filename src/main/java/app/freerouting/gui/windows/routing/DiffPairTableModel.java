@@ -207,7 +207,8 @@ public class DiffPairTableModel extends AbstractTableModel {
       return "";
     }
     boolean isInch = "inch".equalsIgnoreCase(unitString);
-    String skewFmt = isInch ? "%.4f %s" : "%.3f %s";
+    boolean isUm = "um".equalsIgnoreCase(unitString);
+    String skewFmt = isInch ? "%.4f %s" : (isUm ? "%.1f %s" : "%.3f %s");
 
     return switch (columnIndex) {
       case 0 -> row.baseName;
