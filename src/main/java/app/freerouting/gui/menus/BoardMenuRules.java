@@ -54,6 +54,16 @@ public final class BoardMenuRules extends JMenu {
         _ -> FRAnalytics.buttonClicked("rulesNetClassMenuitem", rulesNetClassMenuitem.getText()));
     rulesMenu.add(rulesNetClassMenuitem);
 
+    JMenuItem rulesLengthTuningMenuitem = new JMenuItem();
+    rulesLengthTuningMenuitem.setText(rulesMenu.tm.getText("lengthTuning"));
+    rulesLengthTuningMenuitem.addActionListener(
+        _ -> rulesMenu.boardFrame.lengthTuningWindow.setVisible(true));
+    rulesLengthTuningMenuitem.addActionListener(
+        _ ->
+            FRAnalytics.buttonClicked(
+                "rulesLengthTuningMenuitem", rulesLengthTuningMenuitem.getText()));
+    rulesMenu.add(rulesLengthTuningMenuitem);
+
     return rulesMenu;
   }
 }

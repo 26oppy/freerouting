@@ -36,6 +36,7 @@ import javax.swing.JPanel;
 /** Window handling parameters of the automatic routing. */
 public class WindowAutorouteParameter extends BoardSavableSubWindow {
 
+  private final BoardFrame boardFrame;
   private final GuiBoardManager boardHandling;
   private final JLabel[] layerNameArr;
   private final JLabel[] signalLayerNameArr;
@@ -45,6 +46,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
   private final JCheckBox settingsAutorouterFanoutButton;
   private final JCheckBox settingsAutorouterAutoroutePassButton;
   private final JCheckBox settingsAutorouterOptimizationButton;
+  private final JCheckBox settingsAutorouterLengthTuningButton;
   private final String horizontal;
   private final String vertical;
   private final JFormattedTextField viaCostField;
@@ -76,6 +78,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
   public WindowAutorouteParameter(BoardFrame boardFrame) {
     setLanguage(boardFrame.getLocale());
 
+    this.boardFrame = boardFrame;
     this.boardHandling = boardFrame.boardPanel.boardHandling;
     this.setTitle(tm.getText("title"));
 
@@ -227,6 +230,16 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     settingsAutorouterAutoroutePassButton.setSelected(true);
     settingsAutorouterOptimizationButton.setSelected(false);
 
+    this.settingsAutorouterLengthTuningButton = new JCheckBox();
+    tm.setText(this.settingsAutorouterLengthTuningButton, "length_tuning");
+    settingsAutorouterLengthTuningButton.addActionListener(new LengthTuningListener());
+    settingsAutorouterLengthTuningButton.addActionListener(
+        _ ->
+            FRAnalytics.buttonClicked(
+                "settingsAutorouterLengthTuningButton",
+                settingsAutorouterLengthTuningButton.getText()));
+    settingsAutorouterLengthTuningButton.setSelected(true);
+
     gridbagConstraints.gridwidth = GridBagConstraints.REMAINDER;
     gridbagConstraints.gridheight = 1;
 
@@ -236,6 +249,23 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     mainPanel.add(settingsAutorouterAutoroutePassButton, gridbagConstraints);
     gridbag.setConstraints(settingsAutorouterOptimizationButton, gridbagConstraints);
     mainPanel.add(settingsAutorouterOptimizationButton, gridbagConstraints);
+
+    JPanel lengthTuningPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    lengthTuningPanel.add(settingsAutorouterLengthTuningButton);
+    JButton configureLengthTuningBtn = new JButton("...");
+    configureLengthTuningBtn.setMargin(new Insets(1, 5, 1, 5));
+    configureLengthTuningBtn.setToolTipText(tm.getText("configure_length_tuning_tooltip"));
+    configureLengthTuningBtn.addActionListener(
+        _ -> {
+          if (this.boardFrame != null && this.boardFrame.lengthTuningWindow != null) {
+            this.boardFrame.lengthTuningWindow.setVisible(true);
+          }
+        });
+    lengthTuningPanel.add(Box.createHorizontalStrut(6));
+    lengthTuningPanel.add(configureLengthTuningBtn);
+
+    gridbag.setConstraints(lengthTuningPanel, gridbagConstraints);
+    mainPanel.add(lengthTuningPanel, gridbagConstraints);
 
     separator = new JLabel("––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––  ");
 
@@ -606,6 +636,11 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
             settingsAutorouterOptimizationButton.setSelected(bool);
           }
         }
+        case "lengthTuning" -> {
+          if (newValue instanceof Boolean bool) {
+            settingsAutorouterLengthTuningButton.setSelected(bool);
+          }
+        }
         default -> {}
       }
     } finally {
@@ -623,6 +658,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     this.settingsAutorouterFanoutButton.setSelected(settings.getRunFanout());
     this.settingsAutorouterAutoroutePassButton.setSelected(settings.getRunRouter());
     this.settingsAutorouterOptimizationButton.setSelected(settings.getRunOptimizer());
+    this.settingsAutorouterLengthTuningButton.setSelected(settings.isLengthTuningEnabled());
 
     for (int i = 0; i < settingsAutorouterLayerActiveArr.length; i++) {
       this.settingsAutorouterLayerActiveArr[i].setSelected(settings.getLayerActive(i));
@@ -921,6 +957,21 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
       try {
         applyOptimizerEnabledSelection(
             autorouteSettings, settingsAutorouterOptimizationButton.isSelected());
+      } finally {
+        isUpdatingFromSettings = false;
+      }
+    }
+  }
+
+  private class LengthTuningListener implements ActionListener {
+
+    @Override
+    public void actionPerformed(ActionEvent evt) {
+      RouterSettings autorouteSettings = boardHandling.getCurrentRoutingJob().routerSettings;
+      isUpdatingFromSettings = true;
+      try {
+        autorouteSettings.setLengthTuningEnabled(
+            settingsAutorouterLengthTuningButton.isSelected());
       } finally {
         isUpdatingFromSettings = false;
       }

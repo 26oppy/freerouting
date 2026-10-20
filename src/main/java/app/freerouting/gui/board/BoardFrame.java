@@ -28,6 +28,7 @@ import app.freerouting.gui.windows.routing.WindowAutorouteParameter;
 import app.freerouting.gui.windows.routing.WindowClearanceMatrix;
 import app.freerouting.gui.windows.routing.WindowClearanceViolations;
 import app.freerouting.gui.windows.routing.WindowEditVias;
+import app.freerouting.gui.windows.routing.WindowLengthTuning;
 import app.freerouting.gui.windows.routing.WindowLengthViolations;
 import app.freerouting.gui.windows.routing.WindowMoveParameter;
 import app.freerouting.gui.windows.routing.WindowNetClasses;
@@ -88,7 +89,7 @@ import javax.swing.JToolBar;
 public class BoardFrame extends WindowBase {
 
   /** The windows above stored in an array. */
-  static final int SUBWINDOW_COUNT = 24;
+  static final int SUBWINDOW_COUNT = 25;
 
   static final String GUI_DEFAULTS_FILE_NAME = "gui_defaults.par";
   static final String GUI_DEFAULTS_FILE_BACKUP_NAME = "gui_defaults.par.bak";
@@ -149,6 +150,7 @@ public class BoardFrame extends WindowBase {
   public WindowNets netInfoWindow;
   public WindowClearanceViolations clearanceViolationsWindow;
   public WindowLengthViolations lengthViolationsWindow;
+  public WindowLengthTuning lengthTuningWindow;
   public WindowUnconnectedRoute unconnectedRouteWindow;
   public WindowRouteStubs routeStubsWindow;
   public WindowComponents componentsWindow;

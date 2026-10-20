@@ -14,6 +14,7 @@ import app.freerouting.gui.windows.routing.WindowAutorouteParameter;
 import app.freerouting.gui.windows.routing.WindowClearanceMatrix;
 import app.freerouting.gui.windows.routing.WindowClearanceViolations;
 import app.freerouting.gui.windows.routing.WindowEditVias;
+import app.freerouting.gui.windows.routing.WindowLengthTuning;
 import app.freerouting.gui.windows.routing.WindowLengthViolations;
 import app.freerouting.gui.windows.routing.WindowMoveParameter;
 import app.freerouting.gui.windows.routing.WindowNetClasses;
@@ -103,6 +104,8 @@ public class BoardWindowLayout {
     boardFrame.permanentSubwindows[22] = boardFrame.routeStubsWindow;
     boardFrame.autorouteParameterWindow = new WindowAutorouteParameter(boardFrame);
     boardFrame.permanentSubwindows[23] = boardFrame.autorouteParameterWindow;
+    boardFrame.lengthTuningWindow = new WindowLengthTuning(boardFrame);
+    boardFrame.permanentSubwindows[24] = boardFrame.lengthTuningWindow;
   }
 
   public void initializeWindows(boolean showEssentialImmediately) {
@@ -153,6 +156,9 @@ public class BoardWindowLayout {
     boardFrame.displayMiscWindow.setLocation(0, 350);
     boardFrame.colorManager.setLocation(0, 600);
     boardFrame.aboutWindow.setLocation(200, 200);
+    if (boardFrame.lengthTuningWindow != null) {
+      boardFrame.lengthTuningWindow.setLocation(400, 100);
+    }
   }
 
   public void disposePermanentSubwindows() {
@@ -183,6 +189,7 @@ public class BoardWindowLayout {
     boardFrame.netInfoWindow = null;
     boardFrame.unconnectedRouteWindow = null;
     boardFrame.routeStubsWindow = null;
+    boardFrame.lengthTuningWindow = null;
     boardFrame.aboutWindow = null;
   }
 
