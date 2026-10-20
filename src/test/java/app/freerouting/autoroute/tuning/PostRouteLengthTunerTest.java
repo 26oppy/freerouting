@@ -118,4 +118,58 @@ class PostRouteLengthTunerTest extends RoutingFixtureTest {
         new DesignRulesChecker(job.board, null).getAllClearanceViolations().isEmpty(),
         "Clearance violations must remain 0 after length tuning");
   }
+
+  @Test
+  @DisplayName("Equalizes an arbitrary group of nets to match the longest net in the group")
+  void equalizesArbitraryNetGroup() {
+    TestingSettings settings = new TestingSettings();
+    settings.setMaxPasses(1);
+    settings.setMaxItems(100);
+    settings.setJobTimeoutString("00:02:00");
+
+    RoutingJob job = getRoutingJob("DoorOpener.dsn", settings);
+    runRoutingJob(job);
+
+    Net servo = job.board.rules.nets.get("/SERVO1").iterator().next();
+    assertNotNull(servo, "Expected /SERVO1");
+
+    double initialServoLen = servo.getTraceLength();
+
+    // Equalize servo net to target by adding 1.0 mm deficit
+    double targetLen = initialServoLen + 10000.0;
+    servo.setLengthConstraint(new NetLengthConstraint(targetLen - 1000.0, targetLen + 1000.0));
+
+    var report = PostRouteLengthTuner.tune(job.board);
+    assertNotNull(report);
+    assertTrue(report.totalMeandersInserted() > 0, "Expected meanders inserted");
+
+    double tunedServoLen = servo.getTraceLength();
+    assertTrue(tunedServoLen > initialServoLen, "Length should increase");
+
+    var violations = new DesignRulesChecker(job.board, null).getAllClearanceViolations();
+    assertTrue(violations.isEmpty(), "Zero clearance violations required");
+  }
+
+  @Test
+  @DisplayName("Equalizes a net group so all members match the longest net in the group")
+  void equalizesNetGroupToLongestNet() {
+    TestingSettings settings = new TestingSettings();
+    settings.setMaxPasses(1);
+    settings.setMaxItems(100);
+    settings.setJobTimeoutString("00:02:00");
+
+    RoutingJob job = getRoutingJob("DoorOpener.dsn", settings);
+    runRoutingJob(job);
+
+    Net servo = job.board.rules.nets.get("/SERVO1").iterator().next();
+    assertNotNull(servo);
+
+    var report =
+        PostRouteLengthTuner.equalizeNetGroupByName(
+            job.board, java.util.List.of("/SERVO1", "Net-(Q1-G)"), 5000.0);
+    assertNotNull(report);
+
+    var violations = new DesignRulesChecker(job.board, null).getAllClearanceViolations();
+    assertTrue(violations.isEmpty(), "Zero clearance violations required");
+  }
 }

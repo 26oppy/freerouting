@@ -6,6 +6,7 @@ import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.board.trace.TraceCorridorScanner;
 import app.freerouting.board.trace.TraceCorridorScanner.CandidateCorridor;
+import app.freerouting.geometry.planar.Direction;
 import app.freerouting.geometry.planar.MeanderGenerator;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Polyline;
@@ -80,7 +81,11 @@ public final class PostRouteLengthTuner {
 
     boolean fortyFiveDegreeOnly = board.rules.getTraceAngleRestriction() != AngleRestriction.NONE;
 
-    for (Net net : netsToTune) {
+    // Prioritize nets with larger length deficits so they secure spacious corridors first
+    List<Net> sortedNets = new ArrayList<>(netsToTune);
+    sortedNets.sort((n1, n2) -> Double.compare(getDeficit(n2), getDeficit(n1)));
+
+    for (Net net : sortedNets) {
       if (net == null) {
         continue;
       }
@@ -135,6 +140,74 @@ public final class PostRouteLengthTuner {
   }
 
   /**
+   * Equalizes trace lengths across an arbitrary group of nets (such as a data bus, address bus, or
+   * matched signal lines) to match the longest net in the group within the given tolerance.
+   *
+   * @param board the routing board with routed traces
+   * @param netGroup collection of nets to equalize
+   * @param toleranceBoardUnits allowable tolerance window in board units (e.g. 1000 = 0.1 mm)
+   * @return summary report of tuning operations performed
+   */
+  public static TuningReport equalizeNetGroup(
+      RoutingBoard board, Collection<Net> netGroup, double toleranceBoardUnits) {
+    if (board == null || netGroup == null || netGroup.size() < 2) {
+      return new TuningReport(0, 0, 0, 0.0);
+    }
+
+    double maxLen = 0.0;
+    for (Net net : netGroup) {
+      if (net != null) {
+        maxLen = Math.max(maxLen, net.getTraceLength());
+      }
+    }
+    if (maxLen <= 0.0) {
+      return new TuningReport(0, 0, 0, 0.0);
+    }
+
+    double tol = Math.max(100.0, toleranceBoardUnits);
+    for (Net net : netGroup) {
+      if (net != null) {
+        net.setLengthConstraint(new NetLengthConstraint(maxLen - tol, maxLen + tol));
+      }
+    }
+
+    return tune(board, netGroup);
+  }
+
+  /**
+   * Equalizes trace lengths across nets identified by name to match the longest net in the group.
+   *
+   * @param board the routing board with routed traces
+   * @param netNames names of the nets in the group
+   * @param toleranceBoardUnits allowable tolerance window in board units
+   * @return summary report of tuning operations performed
+   */
+  public static TuningReport equalizeNetGroupByName(
+      RoutingBoard board, Collection<String> netNames, double toleranceBoardUnits) {
+    if (board == null
+        || netNames == null
+        || netNames.size() < 2
+        || board.rules == null
+        || board.rules.nets == null) {
+      return new TuningReport(0, 0, 0, 0.0);
+    }
+    List<Net> group = new ArrayList<>();
+    for (String name : netNames) {
+      if (name != null) {
+        Collection<Net> found = board.rules.nets.get(name);
+        if (found != null) {
+          group.addAll(found);
+        }
+      }
+    }
+    return equalizeNetGroup(board, group, toleranceBoardUnits);
+  }
+
+  /** Configuration for a single meander generation attempt along a corridor. */
+  private record TuningAttemptConfig(
+      Direction normal, double clearance, boolean forceSingleSided) {}
+
+  /**
    * Iteratively inserts meanders into available straight corridors of a single net until its length
    * deficit is satisfied or no further corridors can be found.
    */
@@ -173,62 +246,110 @@ public final class PostRouteLengthTuner {
           continue;
         }
 
-        double maxClear = corridor.maxClearDepth();
-        double startAmp = Math.min(maxClear, meanderConstraint.maxAmplitude());
-        double minAmp = Math.min(scanMinAmp, startAmp);
-        if (startAmp < minAmp || startAmp <= 0.0) {
+        Direction prefNorm = corridor.preferredNormal();
+        if (prefNorm == null) {
           continue;
         }
+        Direction oppNorm = prefNorm.turn45Degree(4);
 
-        double step = Math.max(100.0, (startAmp - minAmp) / 4.0);
-        for (double testAmp = startAmp; testAmp >= minAmp; testAmp -= step) {
-          Point[] meanderPoints =
-              MeanderGenerator.generateMeander(
-                  corridor.startPoint(),
-                  corridor.endPoint(),
-                  remainingDeficit,
-                  meanderConstraint,
-                  corridor.preferredNormal(),
-                  testAmp,
-                  fortyFiveDegreeOnly);
+        double prefClear = Math.max(corridor.leftClearDepth(), corridor.rightClearDepth());
+        double oppClear = Math.min(corridor.leftClearDepth(), corridor.rightClearDepth());
 
-          if (meanderPoints == null || meanderPoints.length < 3) {
+        // Build candidate configurations to attempt:
+        // 1. If double-sided requested and both sides have clearance >= scanMinAmp: try
+        // double-sided
+        // 2. If double-sided requested but opposite side is cramped: auto-adapt to single-sided on
+        // open side
+        // 3. Preferred single-sided direction
+        // 4. Opposite single-sided direction (fallback if preferred side hits obstacle)
+        List<TuningAttemptConfig> configs = new ArrayList<>();
+        boolean reqSingleSided = meanderConstraint.singleSided();
+
+        if (!reqSingleSided) {
+          if (oppClear >= scanMinAmp) {
+            configs.add(new TuningAttemptConfig(prefNorm, oppClear, false));
+          }
+        }
+
+        if (prefClear >= scanMinAmp) {
+          configs.add(new TuningAttemptConfig(prefNorm, prefClear, true));
+        }
+
+        if (oppClear >= scanMinAmp) {
+          configs.add(new TuningAttemptConfig(oppNorm, oppClear, true));
+        }
+
+        for (TuningAttemptConfig config : configs) {
+          double startAmp = Math.min(config.clearance, meanderConstraint.maxAmplitude());
+          double minAmp = Math.min(scanMinAmp, startAmp);
+          if (startAmp < minAmp || startAmp <= 0.0) {
             continue;
           }
 
-          Polyline newPolyline =
-              spliceMeanderIntoTrace(corridor.trace(), corridor.segmentIndex(), meanderPoints);
-          if (newPolyline == null) {
-            continue;
+          // Smoothly distribute large deficits across multiple corridors when available
+          double targetForCorridor = remainingDeficit;
+          if (corridors.size() > 1 && remainingDeficit > 4.0 * (2.0 * spacing)) {
+            targetForCorridor =
+                Math.min(remainingDeficit, Math.max(remainingDeficit / 2.0, 3.0 * (2.0 * spacing)));
           }
 
-          int layer = corridor.trace().getLayer();
-          int halfWidth = corridor.trace().getHalfWidth();
-          int[] netNumbers = corridor.trace().netNumbers;
-          int clearanceClass = corridor.trace().clearanceClassIndex();
+          NetMeanderConstraint activeConstraint =
+              config.forceSingleSided ? meanderConstraint.withSingleSided(true) : meanderConstraint;
 
-          // Check if replacing this trace causes any clearance conflicts
-          FixedState originalState = corridor.trace().getFixedState();
-          corridor.trace().setFixedState(FixedState.UNFIXED);
-          board.removeItem(corridor.trace());
-          boolean fits =
-              board.checkPolylineTrace(newPolyline, layer, halfWidth, netNumbers, clearanceClass);
+          double step = Math.max(100.0, (startAmp - minAmp) / 4.0);
+          for (double testAmp = startAmp; testAmp >= minAmp; testAmp -= step) {
+            Point[] meanderPoints =
+                MeanderGenerator.generateMeander(
+                    corridor.startPoint(),
+                    corridor.endPoint(),
+                    targetForCorridor,
+                    activeConstraint,
+                    config.normal,
+                    testAmp,
+                    fortyFiveDegreeOnly);
 
-          if (fits) {
-            board.insertTrace(
-                newPolyline, layer, halfWidth, netNumbers, clearanceClass, originalState);
-            insertedCount++;
-            replacedAny = true;
-            break; // Break inner amplitude relaxation loop
-          } else {
-            // Revert removal if candidate meander failed clearance check
-            board.insertTrace(
-                corridor.trace().polyline(),
-                layer,
-                halfWidth,
-                netNumbers,
-                clearanceClass,
-                originalState);
+            if (meanderPoints == null || meanderPoints.length < 3) {
+              continue;
+            }
+
+            Polyline newPolyline =
+                spliceMeanderIntoTrace(corridor.trace(), corridor.segmentIndex(), meanderPoints);
+            if (newPolyline == null) {
+              continue;
+            }
+
+            int layer = corridor.trace().getLayer();
+            int halfWidth = corridor.trace().getHalfWidth();
+            int[] netNumbers = corridor.trace().netNumbers;
+            int clearanceClass = corridor.trace().clearanceClassIndex();
+
+            // Check if replacing this trace causes any clearance conflicts
+            FixedState originalState = corridor.trace().getFixedState();
+            corridor.trace().setFixedState(FixedState.UNFIXED);
+            board.removeItem(corridor.trace());
+            boolean fits =
+                board.checkPolylineTrace(newPolyline, layer, halfWidth, netNumbers, clearanceClass);
+
+            if (fits) {
+              board.insertTrace(
+                  newPolyline, layer, halfWidth, netNumbers, clearanceClass, originalState);
+              insertedCount++;
+              replacedAny = true;
+              break; // Break inner amplitude relaxation loop
+            } else {
+              // Revert removal if candidate meander failed clearance check
+              board.insertTrace(
+                  corridor.trace().polyline(),
+                  layer,
+                  halfWidth,
+                  netNumbers,
+                  clearanceClass,
+                  originalState);
+            }
+          }
+
+          if (replacedAny) {
+            break; // Break config loop
           }
         }
 
@@ -243,6 +364,19 @@ public final class PostRouteLengthTuner {
     }
 
     return insertedCount;
+  }
+
+  private static double getDeficit(Net net) {
+    if (net == null) {
+      return 0.0;
+    }
+    NetLengthConstraint c = net.getLengthConstraint();
+    if (c == null || !c.isConstrained()) {
+      return 0.0;
+    }
+    double target = c.targetLength();
+    double current = net.getTraceLength();
+    return (target > current && !c.isSatisfied(current)) ? (target - current) : 0.0;
   }
 
   /**
