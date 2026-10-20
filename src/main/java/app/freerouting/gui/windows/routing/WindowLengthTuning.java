@@ -24,8 +24,11 @@ import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -78,12 +81,21 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   private final JCheckBox autoTuneOnCompletionCheckBox = new JCheckBox();
   private final JLabel activeUnitBadge = new JLabel("Unit: mm");
 
-  // Table action buttons
+  // Table action buttons & selection badges
   private final JButton linkDiffPairBtn = new JButton();
+  private final JButton matchLongestBtn = new JButton();
+  private final JButton zoomNetBtn = new JButton();
+  private final JLabel singleNetSelectionCountLabel = new JLabel(" ");
+
   private final JButton addPairBtn = new JButton();
+  private final JButton removePairBtn = new JButton();
+  private final JButton zoomPairBtn = new JButton();
+  private final JLabel diffPairSelectionCountLabel = new JLabel(" ");
+
   private JScrollPane inspectorScrollPane;
 
-  // Inspector - Targets
+  // Inspector - Targets & Active Selection Header
+  private final JLabel inspectorTargetHeaderLabel = new JLabel(" ");
   private final JCheckBox enableTargetConstraintBox = new JCheckBox();
   private final JTextField targetLengthField = new JTextField(7);
   private final JTextField toleranceField = new JTextField(7);
@@ -170,40 +182,63 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
   private JSplitPane createCenterSplitPane() {
     // -----------------------------------------------------------------------
-    // Left: Tab 1 = Single Nets (with bus matching, linking & zoom)
+    // Left: Tab 1 = Single Nets (with select all, clear, bus matching, linking & zoom)
     // -----------------------------------------------------------------------
     singleNetTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     singleNetTable.setAutoCreateRowSorter(true);
+    singleNetTable.setToolTipText(tm.getText("double_click_hint"));
     JPanel singleNetPanel = new JPanel(new BorderLayout());
     singleNetPanel.add(new JScrollPane(singleNetTable), BorderLayout.CENTER);
 
-    JPanel singleNetTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+    JPanel singleNetTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
+
+    JButton selectAllNetsBtn = new JButton(tm.getText("btn_select_all"));
+    selectAllNetsBtn.addActionListener(_ -> singleNetTable.selectAll());
+    singleNetTools.add(selectAllNetsBtn);
+
+    JButton clearNetsBtn = new JButton(tm.getText("btn_clear_selection"));
+    clearNetsBtn.addActionListener(_ -> singleNetTable.clearSelection());
+    singleNetTools.add(clearNetsBtn);
 
     linkDiffPairBtn.setText(tm.getText("btn_link_diff_pair"));
     linkDiffPairBtn.setEnabled(false);
     linkDiffPairBtn.addActionListener(_ -> linkSelectedAsDifferentialPair());
     singleNetTools.add(linkDiffPairBtn);
 
-    JButton matchLongestBtn = new JButton(tm.getText("btn_match_longest"));
+    matchLongestBtn.setText(tm.getText("btn_match_longest"));
+    matchLongestBtn.setEnabled(false);
     matchLongestBtn.setToolTipText(
         "Sets target length of all selected nets to the longest selected trace");
     matchLongestBtn.addActionListener(_ -> matchSelectedToLongest());
     singleNetTools.add(matchLongestBtn);
 
-    JButton zoomNetBtn = new JButton(tm.getText("btn_zoom"));
+    zoomNetBtn.setText(tm.getText("btn_zoom"));
+    zoomNetBtn.setEnabled(false);
     zoomNetBtn.addActionListener(_ -> zoomToSelectedNets());
     singleNetTools.add(zoomNetBtn);
+
+    singleNetSelectionCountLabel.setForeground(new Color(90, 95, 105));
+    singleNetTools.add(singleNetSelectionCountLabel);
     singleNetPanel.add(singleNetTools, BorderLayout.SOUTH);
 
     // -----------------------------------------------------------------------
-    // Left: Tab 2 = Differential Pairs (with add, auto-detect, remove, zoom)
+    // Left: Tab 2 = Differential Pairs (with select all, clear, add, auto-detect, remove, zoom)
     // -----------------------------------------------------------------------
     diffPairTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     diffPairTable.setAutoCreateRowSorter(true);
+    diffPairTable.setToolTipText(tm.getText("double_click_hint"));
     JPanel diffPairPanel = new JPanel(new BorderLayout());
     diffPairPanel.add(new JScrollPane(diffPairTable), BorderLayout.CENTER);
 
-    JPanel diffPairTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+    JPanel diffPairTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
+
+    JButton selectAllPairsBtn = new JButton(tm.getText("btn_select_all"));
+    selectAllPairsBtn.addActionListener(_ -> diffPairTable.selectAll());
+    diffPairTools.add(selectAllPairsBtn);
+
+    JButton clearPairsBtn = new JButton(tm.getText("btn_clear_selection"));
+    clearPairsBtn.addActionListener(_ -> diffPairTable.clearSelection());
+    diffPairTools.add(clearPairsBtn);
 
     addPairBtn.setText(tm.getText("add_pair"));
     addPairBtn.addActionListener(_ -> openAddDifferentialPairDialog());
@@ -214,13 +249,18 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     autoDetectBtn.addActionListener(_ -> autoDetectDifferentialPairs());
     diffPairTools.add(autoDetectBtn);
 
-    JButton removePairBtn = new JButton(tm.getText("remove_pair"));
+    removePairBtn.setText(tm.getText("remove_pair"));
+    removePairBtn.setEnabled(false);
     removePairBtn.addActionListener(_ -> removeSelectedDifferentialPairs());
     diffPairTools.add(removePairBtn);
 
-    JButton zoomPairBtn = new JButton(tm.getText("btn_zoom"));
+    zoomPairBtn.setText(tm.getText("btn_zoom"));
+    zoomPairBtn.setEnabled(false);
     zoomPairBtn.addActionListener(_ -> zoomToSelectedNets());
     diffPairTools.add(zoomPairBtn);
+
+    diffPairSelectionCountLabel.setForeground(new Color(90, 95, 105));
+    diffPairTools.add(diffPairSelectionCountLabel);
     diffPairPanel.add(diffPairTools, BorderLayout.SOUTH);
 
     tabbedPane.addTab(tm.getText("tab_single_nets"), singleNetPanel);
@@ -275,10 +315,16 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     gbc.anchor = GridBagConstraints.WEST;
     gbc.fill = GridBagConstraints.HORIZONTAL;
 
-    // Enable / Disable Constraint Checkbox
+    // Header displaying selected net / pair name
     gbc.gridx = 0;
     gbc.gridy = 0;
     gbc.gridwidth = 3;
+    inspectorTargetHeaderLabel.setFont(inspectorTargetHeaderLabel.getFont().deriveFont(Font.BOLD));
+    inspectorTargetHeaderLabel.setForeground(new Color(40, 70, 130));
+    panel.add(inspectorTargetHeaderLabel, gbc);
+
+    // Enable / Disable Constraint Checkbox
+    gbc.gridy = 1;
     enableTargetConstraintBox.setText(tm.getText("enable_length_constraint"));
     enableTargetConstraintBox.setSelected(true);
     enableTargetConstraintBox.addActionListener(_ -> onTargetEnableToggled());
@@ -287,7 +333,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     // Target Length
     gbc.gridx = 0;
-    gbc.gridy = 1;
+    gbc.gridy = 2;
     panel.add(new JLabel(tm.getText("target_length")), gbc);
     gbc.gridx = 1;
     panel.add(targetLengthField, gbc);
@@ -296,7 +342,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     // Tolerance
     gbc.gridx = 0;
-    gbc.gridy = 2;
+    gbc.gridy = 3;
     panel.add(new JLabel(tm.getText("tolerance")), gbc);
     gbc.gridx = 1;
     panel.add(toleranceField, gbc);
@@ -305,7 +351,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     // Max Skew
     gbc.gridx = 0;
-    gbc.gridy = 3;
+    gbc.gridy = 4;
     panel.add(new JLabel(tm.getText("max_skew")), gbc);
     gbc.gridx = 1;
     panel.add(maxSkewField, gbc);
@@ -437,10 +483,59 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
         .getSelectionModel()
         .addListSelectionListener(
             _ -> {
-              onSingleNetSelected();
-              linkDiffPairBtn.setEnabled(singleNetTable.getSelectedRowCount() == 2);
+              int selCount = singleNetTable.getSelectedRowCount();
+              linkDiffPairBtn.setEnabled(selCount == 2);
+              matchLongestBtn.setEnabled(selCount >= 2);
+              zoomNetBtn.setEnabled(selCount > 0);
+              singleNetSelectionCountLabel.setText(
+                  selCount > 0
+                      ? MessageFormat.format(tm.getText("selected_count"), selCount)
+                      : " ");
+              if (selCount > 0) {
+                onSingleNetSelected();
+              } else {
+                populateDefaultSingleNetFields();
+              }
             });
-    diffPairTable.getSelectionModel().addListSelectionListener(_ -> onDiffPairSelected());
+
+    singleNetTable.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (e.getClickCount() == 2) {
+              zoomToSelectedNets();
+            }
+          }
+        });
+
+    diffPairTable
+        .getSelectionModel()
+        .addListSelectionListener(
+            _ -> {
+              int selCount = diffPairTable.getSelectedRowCount();
+              removePairBtn.setEnabled(selCount > 0);
+              zoomPairBtn.setEnabled(selCount > 0);
+              diffPairSelectionCountLabel.setText(
+                  selCount > 0
+                      ? MessageFormat.format(tm.getText("selected_count"), selCount)
+                      : " ");
+              if (selCount > 0) {
+                onDiffPairSelected();
+              } else {
+                populateDefaultDiffPairFields();
+              }
+            });
+
+    diffPairTable.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            if (e.getClickCount() == 2) {
+              zoomToSelectedNets();
+            }
+          }
+        });
+
     tabbedPane.addChangeListener(_ -> onTabChanged());
 
     cornerStyleCombo.addActionListener(_ -> updateDiagram());
@@ -514,7 +609,22 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   private void onSingleNetSelected() {
     int[] selectedRows = singleNetTable.getSelectedRows();
     if (selectedRows.length == 0) {
+      inspectorTargetHeaderLabel.setText(tm.getText("editing_target_none"));
+      populateDefaultSingleNetFields();
       return;
+    }
+
+    if (selectedRows.length > 1) {
+      inspectorTargetHeaderLabel.setText(
+          MessageFormat.format(tm.getText("editing_multiple_nets"), selectedRows.length));
+    } else {
+      int modelRow = singleNetTable.convertRowIndexToModel(selectedRows[0]);
+      Net net = singleNetTableModel.getNetAt(modelRow);
+      if (net != null) {
+        String className = net.getNetClass() != null ? net.getNetClass().getName() : "default";
+        inspectorTargetHeaderLabel.setText(
+            MessageFormat.format(tm.getText("editing_single_net"), net.name, className));
+      }
     }
 
     int modelRow = singleNetTable.convertRowIndexToModel(selectedRows[0]);
@@ -561,7 +671,23 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   private void onDiffPairSelected() {
     int[] selectedRows = diffPairTable.getSelectedRows();
     if (selectedRows.length == 0) {
+      inspectorTargetHeaderLabel.setText(tm.getText("editing_target_none"));
+      populateDefaultDiffPairFields();
       return;
+    }
+
+    if (selectedRows.length > 1) {
+      inspectorTargetHeaderLabel.setText(
+          MessageFormat.format(tm.getText("editing_multiple_pairs"), selectedRows.length));
+    } else {
+      int modelRow = diffPairTable.convertRowIndexToModel(selectedRows[0]);
+      DifferentialPair pair = diffPairTableModel.getPairAt(modelRow);
+      if (pair != null) {
+        String pName = pair.positiveNet() != null ? pair.positiveNet().name : "?";
+        String nName = pair.negativeNet() != null ? pair.negativeNet().name : "?";
+        inspectorTargetHeaderLabel.setText(
+            MessageFormat.format(tm.getText("editing_single_pair"), pair.baseName(), pName, nName));
+      }
     }
 
     int modelRow = diffPairTable.convertRowIndexToModel(selectedRows[0]);
@@ -598,6 +724,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   }
 
   private void populateDefaultSingleNetFields() {
+    inspectorTargetHeaderLabel.setText(tm.getText("editing_target_none"));
     enableTargetConstraintBox.setSelected(false);
     targetLengthField.setText(formatLengthValue(0.0));
     toleranceField.setText(getDefaultToleranceString());
@@ -605,6 +732,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   }
 
   private void populateDefaultDiffPairFields() {
+    inspectorTargetHeaderLabel.setText(tm.getText("editing_target_none"));
     enableTargetConstraintBox.setSelected(true);
     maxSkewField.setText(getDefaultSkewString());
     populateDefaultMeanderFields(MeanderPatternType.DIFF_PAIR_SKEW);
