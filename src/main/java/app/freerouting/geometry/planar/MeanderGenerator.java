@@ -93,7 +93,11 @@ public final class MeanderGenerator {
     if (maxClearAmplitude > 0) {
       maxAmp = Math.min(maxAmp, maxClearAmplitude);
     }
-    if (maxAmp < minAmp) {
+
+    // Effective minimum amplitude: allow scaling down for small deficits (e.g. skew bumps or fine
+    // tuning) with a minimum manufacturing floor of 20.0 board units (0.02 mm / 20 um)
+    double effMinAmp = Math.min(minAmp, Math.max(20.0, targetExtraLength / 2.0));
+    if (maxAmp < effMinAmp) {
       return null;
     }
 
@@ -111,23 +115,32 @@ public final class MeanderGenerator {
 
     // Estimate corner trimming loss per cycle caused by chamfering or circular filleting
     CornerStyle cornerStyle = constraint.cornerStyle();
-    double estRadius =
-        Math.min(effSpacing * 0.4, maxAmp * 0.4) * (constraint.radiusPercentage() / 100.0);
-    double lossPerCorner =
+    double lossFactor =
         (cornerStyle == CornerStyle.CHAMFER || fortyFiveDegreeOnly)
-            ? (2.0 - SQRT2) * estRadius
-            : (2.0 - (Math.PI / 2.0)) * estRadius;
-    double cornerLossPerCycle = 4.0 * lossPerCorner;
+            ? (2.0 - SQRT2)
+            : (2.0 - (Math.PI / 2.0));
+    double radiusFraction = 0.4 * (constraint.radiusPercentage() / 100.0);
+    double c = 4.0 * lossFactor * radiusFraction;
 
-    // Extra length per cycle at max amplitude: approx 2 * maxAmp - cornerLossPerCycle
-    double maxEffectiveExtraPerCycle = Math.max(10.0, 2.0 * maxAmp - cornerLossPerCycle);
+    // Maximum corner loss when amplitude >= effSpacing
+    double maxRadius = effSpacing * radiusFraction;
+    double maxCornerLossPerCycle = 4.0 * lossFactor * maxRadius;
+
+    // Extra length per cycle at max amplitude
+    double maxEffectiveExtraPerCycle = Math.max(10.0, 2.0 * maxAmp - maxCornerLossPerCycle);
     int neededCycles = (int) Math.ceil(targetExtraLength / maxEffectiveExtraPerCycle);
     int cycleCount = Math.min(maxCycles, Math.max(1, neededCycles));
 
-    // Calculate optimal amplitude for the chosen cycle count, compensating for corner trimming
+    // Calculate optimal amplitude for the chosen cycle count
     double targetPerCycle = targetExtraLength / cycleCount;
-    double neededAmplitude = (targetPerCycle + cornerLossPerCycle) / 2.0;
-    double amplitude = Math.max(minAmp, Math.min(maxAmp, neededAmplitude));
+    double neededAmplitude;
+    double transitionTarget = (2.0 - c) * effSpacing;
+    if (targetPerCycle < transitionTarget) {
+      neededAmplitude = targetPerCycle / Math.max(0.5, 2.0 - c);
+    } else {
+      neededAmplitude = (targetPerCycle + maxCornerLossPerCycle) / 2.0;
+    }
+    double amplitude = Math.max(effMinAmp, Math.min(maxAmp, neededAmplitude));
 
     // Center pattern along baseline segment
     double patternWidth = cycleCount * 2.0 * effSpacing;

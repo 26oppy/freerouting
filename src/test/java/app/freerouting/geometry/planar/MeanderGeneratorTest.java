@@ -109,6 +109,51 @@ class MeanderGeneratorTest {
       double extraAdded = polyline.lengthApprox() - 6000.0;
       assertTrue(extraAdded > 0.0);
     }
+
+    @Test
+    void smallDeficitDoesNotOvershootDueToMinAmplitude() {
+      // 10 mm segment: (0, 0) to (10000, 0)
+      Point start = new IntPoint(0, 0);
+      Point end = new IntPoint(10000, 0);
+      double smallTarget = 60.0; // 60 um deficit
+
+      // minAmplitude is 300 um, but target is only 60 um
+      NetMeanderConstraint constraint =
+          new NetMeanderConstraint(300.0, 1000.0, 600.0, CornerStyle.CHAMFER, 80.0, true);
+
+      Point[] points =
+          MeanderGenerator.generateMeander(
+              start, end, smallTarget, constraint, Direction.UP, 1000.0, true);
+
+      assertNotNull(points, "Meander for small deficit must be generated");
+      Polyline polyline = new Polyline(points);
+      double extraAdded = polyline.lengthApprox() - 10000.0;
+
+      // Must be close to 60 um deficit, NOT blown up by minAmplitude (300 * 2 = 600 um)
+      assertTrue(
+          extraAdded >= 40.0 && extraAdded <= 90.0,
+          "Extra length added should be close to 60 um but was " + extraAdded);
+    }
+
+    @Test
+    void tightClearancePermitsSmallDeficitWhenBelowMinAmplitude() {
+      Point start = new IntPoint(0, 0);
+      Point end = new IntPoint(10000, 0);
+      double smallTarget = 50.0;
+
+      // minAmplitude is 400, but clearance is only 150. The required bump is only ~25 tall,
+      // so it comfortably fits within 150 clearance.
+      NetMeanderConstraint constraint =
+          new NetMeanderConstraint(400.0, 1000.0, 600.0, CornerStyle.CHAMFER, 80.0, true);
+
+      Point[] points =
+          MeanderGenerator.generateMeander(
+              start, end, smallTarget, constraint, Direction.UP, 150.0, true);
+
+      assertNotNull(
+          points,
+          "Small deficit requiring ~25 amplitude must fit inside 150 clearance even when minAmp=400");
+    }
   }
 
   @Nested
