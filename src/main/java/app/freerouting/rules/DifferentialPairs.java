@@ -3,11 +3,13 @@ package app.freerouting.rules;
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Thread-safe collection and bidirectional index for differential signal pairs on a board.
@@ -23,6 +25,12 @@ public class DifferentialPairs implements Serializable {
 
   /** Fast index mapping net numbers to their differential pair. */
   private final Map<Integer, DifferentialPair> pairsByNetNumber = new HashMap<>();
+
+  /** Base names explicitly excluded by the user to prevent auto-detection resurrection. */
+  private final Set<String> excludedBaseNames = new HashSet<>();
+
+  /** Net pairs explicitly excluded by the user. */
+  private final Set<String> excludedNetPairs = new HashSet<>();
 
   /** Creates an empty DifferentialPairs collection. */
   public DifferentialPairs() {}
@@ -55,15 +63,33 @@ public class DifferentialPairs implements Serializable {
     checkNetAvailability(pair.positiveNet(), pair);
     checkNetAvailability(pair.negativeNet(), pair);
 
+    // Un-exclude pair when explicitly added or re-added
+    this.excludedBaseNames.remove(key);
+    if (pair.positiveNet() != null && pair.negativeNet() != null) {
+      this.excludedNetPairs.remove(netPairKey(pair.positiveNet(), pair.negativeNet()));
+    }
+
     this.pairsByName.put(key, pair);
     indexSubnets(pair.positiveNet(), pair);
     indexSubnets(pair.negativeNet(), pair);
   }
 
   private static boolean hasSameIdentity(DifferentialPair a, DifferentialPair b) {
-    return a.baseName().equalsIgnoreCase(b.baseName())
-        && a.positiveNet().equals(b.positiveNet())
-        && a.negativeNet().equals(b.negativeNet());
+    if (a == null || b == null) {
+      return false;
+    }
+    boolean baseMatch = a.baseName().equalsIgnoreCase(b.baseName());
+    boolean posMatch =
+        a.positiveNet() != null
+            && b.positiveNet() != null
+            && (a.positiveNet().netNumber == b.positiveNet().netNumber
+                || a.positiveNet().name.equalsIgnoreCase(b.positiveNet().name));
+    boolean negMatch =
+        a.negativeNet() != null
+            && b.negativeNet() != null
+            && (a.negativeNet().netNumber == b.negativeNet().netNumber
+                || a.negativeNet().name.equalsIgnoreCase(b.negativeNet().name));
+    return baseMatch && posMatch && negMatch;
   }
 
   private void checkNetAvailability(Net net, DifferentialPair pair) {
@@ -147,7 +173,8 @@ public class DifferentialPairs implements Serializable {
   }
 
   /**
-   * Removes the given differential pair from the registry.
+   * Removes the given differential pair from the registry and records it as user-excluded to
+   * prevent automatic re-detection.
    *
    * @param pair the pair to remove
    * @return true if the pair was present and removed, false otherwise
@@ -162,9 +189,52 @@ public class DifferentialPairs implements Serializable {
       this.pairsByName.remove(key);
       removeSubnets(existing.positiveNet());
       removeSubnets(existing.negativeNet());
+      this.excludedBaseNames.add(key);
+      if (existing.positiveNet() != null && existing.negativeNet() != null) {
+        this.excludedNetPairs.add(netPairKey(existing.positiveNet(), existing.negativeNet()));
+      }
       return true;
     }
     return false;
+  }
+
+  /**
+   * Checks whether the given base name or net pair has been explicitly excluded/removed by the
+   * user, preventing automatic re-detection.
+   *
+   * @param baseName the logical base name to check
+   * @param net1 first net of the pair
+   * @param net2 second net of the pair (optional)
+   * @return true if excluded
+   */
+  public synchronized boolean isExcluded(String baseName, Net net1, Net net2) {
+    if (baseName != null && this.excludedBaseNames.contains(baseName.toLowerCase(Locale.ROOT))) {
+      return true;
+    }
+    if (net1 != null && net2 != null && this.excludedNetPairs.contains(netPairKey(net1, net2))) {
+      return true;
+    }
+    return false;
+  }
+
+  /** Clears all exclusion records, allowing auto-detection to scan all nets again. */
+  public synchronized void clearExcluded() {
+    this.excludedBaseNames.clear();
+    this.excludedNetPairs.clear();
+  }
+
+  /** Returns an unmodifiable snapshot of excluded base names. */
+  public synchronized Set<String> getExcludedBaseNames() {
+    return Set.copyOf(this.excludedBaseNames);
+  }
+
+  private static String netPairKey(Net a, Net b) {
+    if (a == null || b == null) {
+      return "";
+    }
+    String nameA = a.name != null ? a.name.toLowerCase(Locale.ROOT) : String.valueOf(a.netNumber);
+    String nameB = b.name != null ? b.name.toLowerCase(Locale.ROOT) : String.valueOf(b.netNumber);
+    return (nameA.compareTo(nameB) <= 0) ? nameA + "<->" + nameB : nameB + "<->" + nameA;
   }
 
   /** Returns an unmodifiable snapshot collection of all registered differential pairs. */

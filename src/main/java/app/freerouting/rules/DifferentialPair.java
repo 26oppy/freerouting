@@ -29,7 +29,9 @@ public record DifferentialPair(
     Objects.requireNonNull(positiveNet, "positiveNet cannot be null");
     Objects.requireNonNull(negativeNet, "negativeNet cannot be null");
     Objects.requireNonNull(baseName, "baseName cannot be null");
-    if (positiveNet.equals(negativeNet)) {
+    if (positiveNet.equals(negativeNet)
+        || positiveNet.netNumber == negativeNet.netNumber
+        || positiveNet.name.equalsIgnoreCase(negativeNet.name)) {
       throw new IllegalArgumentException(
           "positiveNet and negativeNet cannot be the same net: " + positiveNet.name);
     }
@@ -64,6 +66,8 @@ public record DifferentialPair(
     }
     return this.positiveNet.equals(net)
         || this.negativeNet.equals(net)
+        || this.positiveNet.netNumber == net.netNumber
+        || this.negativeNet.netNumber == net.netNumber
         || this.positiveNet.name.equalsIgnoreCase(net.name)
         || this.negativeNet.name.equalsIgnoreCase(net.name);
   }
@@ -78,10 +82,14 @@ public record DifferentialPair(
     if (net == null) {
       return null;
     }
-    if (this.positiveNet.equals(net) || this.positiveNet.name.equalsIgnoreCase(net.name)) {
+    if (this.positiveNet.equals(net)
+        || this.positiveNet.netNumber == net.netNumber
+        || this.positiveNet.name.equalsIgnoreCase(net.name)) {
       return this.negativeNet;
     }
-    if (this.negativeNet.equals(net) || this.negativeNet.name.equalsIgnoreCase(net.name)) {
+    if (this.negativeNet.equals(net)
+        || this.negativeNet.netNumber == net.netNumber
+        || this.negativeNet.name.equalsIgnoreCase(net.name)) {
       return this.positiveNet;
     }
     return null;
@@ -95,7 +103,9 @@ public record DifferentialPair(
    */
   public boolean isPositive(Net net) {
     return net != null
-        && (this.positiveNet.equals(net) || this.positiveNet.name.equalsIgnoreCase(net.name));
+        && (this.positiveNet.equals(net)
+            || this.positiveNet.netNumber == net.netNumber
+            || this.positiveNet.name.equalsIgnoreCase(net.name));
   }
 
   /**
@@ -106,7 +116,9 @@ public record DifferentialPair(
    */
   public boolean isNegative(Net net) {
     return net != null
-        && (this.negativeNet.equals(net) || this.negativeNet.name.equalsIgnoreCase(net.name));
+        && (this.negativeNet.equals(net)
+            || this.negativeNet.netNumber == net.netNumber
+            || this.negativeNet.name.equalsIgnoreCase(net.name));
   }
 
   /** Returns true if a specific coupled spacing constraint is configured for this pair. */

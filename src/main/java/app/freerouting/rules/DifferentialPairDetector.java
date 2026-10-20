@@ -222,6 +222,9 @@ public final class DifferentialPairDetector {
       if (boardRules.differentialPairs.get(info.baseName()) != null) {
         continue;
       }
+      if (boardRules.differentialPairs.isExcluded(info.baseName(), net, null)) {
+        continue;
+      }
 
       CandidateKey key = new CandidateKey(info.baseName().toLowerCase(Locale.ROOT), info.style());
       CandidateEntry entry =
@@ -251,7 +254,9 @@ public final class DifferentialPairDetector {
     List<DifferentialPair> result = new ArrayList<>();
     for (CandidateEntry entry : candidates.values()) {
       if (!entry.ambiguous && entry.positiveNet != null && entry.negativeNet != null) {
-        if (boardRules.differentialPairs.findForNet(entry.positiveNet) == null
+        if (!boardRules.differentialPairs.isExcluded(
+                entry.baseName, entry.positiveNet, entry.negativeNet)
+            && boardRules.differentialPairs.findForNet(entry.positiveNet) == null
             && boardRules.differentialPairs.findForNet(entry.negativeNet) == null
             && boardRules.differentialPairs.get(entry.baseName) == null) {
           result.add(new DifferentialPair(entry.positiveNet, entry.negativeNet, entry.baseName));

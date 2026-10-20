@@ -137,7 +137,15 @@ class DifferentialPairsTest {
     assertNull(registry.findForNet(pos1));
     assertNull(registry.findForNet(neg1));
 
-    assertFalse(registry.remove(usb));
+    // Verifies that removal records exclusion to prevent auto-detection resurrection
+    assertTrue(registry.isExcluded("USB", pos1, neg1));
+    assertTrue(registry.isExcluded("usb", pos1, neg1));
+    assertTrue(registry.getExcludedBaseNames().contains("usb"));
+
+    // Explicitly re-adding un-excludes
+    registry.add(usb);
+    assertFalse(registry.isExcluded("USB", pos1, neg1));
+
     assertFalse(registry.remove(null));
   }
 

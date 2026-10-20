@@ -430,4 +430,27 @@ class DifferentialPairDetectorTest {
     assertTrue(pair.contains(dN1));
     assertTrue(pair.contains(dN2));
   }
+
+  @Test
+  void testExcludedPairsNotRedetected() {
+    app.freerouting.board.facade.RoutingBoard board = createTestBoard();
+    Net canP = board.rules.nets.add("CAN_P", 1, false);
+    Net canN = board.rules.nets.add("CAN_N", 1, false);
+
+    java.util.List<DifferentialPair> detected =
+        DifferentialPairDetector.detectAndRegister(board.rules);
+    assertEquals(1, detected.size());
+    assertEquals(1, board.rules.differentialPairs.count());
+
+    DifferentialPair pair = board.rules.differentialPairs.get("CAN");
+    assertNotNull(pair);
+
+    // User explicitly removes the detected pair
+    board.rules.differentialPairs.remove(pair);
+    assertEquals(0, board.rules.differentialPairs.count());
+
+    // Auto-detection should respect the exclusion and NOT resurrect the pair
+    java.util.List<DifferentialPair> redetected = DifferentialPairDetector.detect(board.rules);
+    assertTrue(redetected.isEmpty(), "Removed pair must not be resurrected by auto-detection");
+  }
 }
