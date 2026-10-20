@@ -9,7 +9,9 @@ import app.freerouting.geometry.planar.MeanderGenerator;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Polyline;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.rules.CornerStyle;
 import app.freerouting.rules.DifferentialPair;
+import app.freerouting.rules.MeanderPatternType;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetMeanderConstraint;
 import java.io.Serializable;
@@ -113,6 +115,16 @@ public final class DifferentialPairSkewTuner {
       double allowedSkew,
       boolean fortyFiveDegreeOnly) {
     NetMeanderConstraint constraint = shorterNet.getMeanderConstraint();
+    if (constraint == null || !constraint.isConstrained()) {
+      constraint =
+          board.rules != null
+              ? board.rules.getDefaultMeanderConstraint(MeanderPatternType.DIFF_PAIR_SKEW)
+              : null;
+    }
+    if (constraint == null || !constraint.isConstrained()) {
+      constraint =
+          new NetMeanderConstraint(2000.0, 10000.0, 6000.0, CornerStyle.FILLET, 80.0, true);
+    }
     double spacing = constraint.spacing() > 0 ? constraint.spacing() : 600.0;
     double minLength = 4.0 * spacing;
 

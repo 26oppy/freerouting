@@ -209,17 +209,21 @@ public class LengthTuningTableModel extends AbstractTableModel {
     if (row == null) {
       return "";
     }
+    boolean isInch = "inch".equalsIgnoreCase(unitString);
+    String lenFmt = isInch ? "%.3f %s" : "%.2f %s";
+    String tolFmt = isInch ? "±%.4f %s" : "±%.2f %s";
+
     return switch (columnIndex) {
       case 0 -> row.name;
       case 1 -> row.className;
-      case 2 -> String.format(Locale.US, "%.2f %s", row.currentLengthMm, unitString);
+      case 2 -> String.format(Locale.US, lenFmt, row.currentLengthMm, unitString);
       case 3 ->
           row.targetLengthMm != null
-              ? String.format(Locale.US, "%.2f %s", row.targetLengthMm, unitString)
+              ? String.format(Locale.US, lenFmt, row.targetLengthMm, unitString)
               : "—";
       case 4 ->
           row.toleranceMm != null
-              ? String.format(Locale.US, "±%.2f %s", row.toleranceMm, unitString)
+              ? String.format(Locale.US, tolFmt, row.toleranceMm, unitString)
               : "—";
       case 5 -> row.status;
       default -> "";

@@ -10,6 +10,7 @@ import app.freerouting.gui.workspace.GuiBoardManager;
 import app.freerouting.gui.workspace.WorkspaceSettings;
 import app.freerouting.rules.CornerStyle;
 import app.freerouting.rules.DifferentialPair;
+import app.freerouting.rules.DifferentialPairDetector;
 import app.freerouting.rules.MeanderPatternType;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetLengthConstraint;
@@ -25,7 +26,10 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import javax.swing.BorderFactory;
@@ -43,6 +47,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -70,7 +75,13 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   private final JTextField filterField = new JTextField(15);
   private final JCheckBox showConstrainedCheckBox = new JCheckBox();
   private final JCheckBox showUnsatisfiedCheckBox = new JCheckBox();
+  private final JCheckBox autoTuneOnCompletionCheckBox = new JCheckBox();
   private final JLabel activeUnitBadge = new JLabel("Unit: mm");
+
+  // Table action buttons
+  private final JButton linkDiffPairBtn = new JButton();
+  private final JButton addPairBtn = new JButton();
+  private JScrollPane inspectorScrollPane;
 
   // Inspector - Targets
   private final JCheckBox enableTargetConstraintBox = new JCheckBox();
@@ -140,6 +151,12 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     showUnsatisfiedCheckBox.setText(tm.getText("show_only_unsatisfied"));
     left.add(showConstrainedCheckBox);
     left.add(showUnsatisfiedCheckBox);
+
+    autoTuneOnCompletionCheckBox.setText(tm.getText("auto_tune_on_completion"));
+    autoTuneOnCompletionCheckBox.setToolTipText(tm.getText("auto_tune_tooltip"));
+    autoTuneOnCompletionCheckBox.addActionListener(_ -> toggleAutoTuneOnCompletion());
+    left.add(autoTuneOnCompletionCheckBox);
+
     panel.add(left, BorderLayout.WEST);
 
     JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 2));
@@ -153,7 +170,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
   private JSplitPane createCenterSplitPane() {
     // -----------------------------------------------------------------------
-    // Left: Tab 1 = Single Nets (with bus matching & zoom)
+    // Left: Tab 1 = Single Nets (with bus matching, linking & zoom)
     // -----------------------------------------------------------------------
     singleNetTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     singleNetTable.setAutoCreateRowSorter(true);
@@ -161,6 +178,12 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     singleNetPanel.add(new JScrollPane(singleNetTable), BorderLayout.CENTER);
 
     JPanel singleNetTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+
+    linkDiffPairBtn.setText(tm.getText("btn_link_diff_pair"));
+    linkDiffPairBtn.setEnabled(false);
+    linkDiffPairBtn.addActionListener(_ -> linkSelectedAsDifferentialPair());
+    singleNetTools.add(linkDiffPairBtn);
+
     JButton matchLongestBtn = new JButton(tm.getText("btn_match_longest"));
     matchLongestBtn.setToolTipText(
         "Sets target length of all selected nets to the longest selected trace");
@@ -173,7 +196,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     singleNetPanel.add(singleNetTools, BorderLayout.SOUTH);
 
     // -----------------------------------------------------------------------
-    // Left: Tab 2 = Differential Pairs (with auto-detect, remove, zoom)
+    // Left: Tab 2 = Differential Pairs (with add, auto-detect, remove, zoom)
     // -----------------------------------------------------------------------
     diffPairTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     diffPairTable.setAutoCreateRowSorter(true);
@@ -181,6 +204,11 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     diffPairPanel.add(new JScrollPane(diffPairTable), BorderLayout.CENTER);
 
     JPanel diffPairTools = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+
+    addPairBtn.setText(tm.getText("add_pair"));
+    addPairBtn.addActionListener(_ -> openAddDifferentialPairDialog());
+    diffPairTools.add(addPairBtn);
+
     JButton autoDetectBtn = new JButton(tm.getText("auto_detect_pairs"));
     autoDetectBtn.setToolTipText(tm.getText("auto_detect_pairs_tooltip"));
     autoDetectBtn.addActionListener(_ -> autoDetectDifferentialPairs());
@@ -206,9 +234,9 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     inspectorPanel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 4));
 
     inspectorPanel.add(createTargetsSection());
-    inspectorPanel.add(Box.createVerticalStrut(6));
+    inspectorPanel.add(Box.createVerticalStrut(4));
     inspectorPanel.add(createMeanderGeometrySection());
-    inspectorPanel.add(Box.createVerticalStrut(6));
+    inspectorPanel.add(Box.createVerticalStrut(4));
 
     // Apply button right inside the inspector
     JButton applyBtn = new JButton(tm.getText("btn_apply"));
@@ -216,7 +244,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     applyBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
     applyBtn.addActionListener(_ -> applyRuleToSelected());
     inspectorPanel.add(applyBtn);
-    inspectorPanel.add(Box.createVerticalStrut(8));
+    inspectorPanel.add(Box.createVerticalStrut(6));
 
     JLabel previewLabel = new JLabel(tm.getText("label_preview"));
     previewLabel.setFont(previewLabel.getFont().deriveFont(Font.BOLD));
@@ -226,8 +254,12 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     diagramPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
     inspectorPanel.add(diagramPanel);
 
+    inspectorScrollPane = new JScrollPane(inspectorPanel);
+    inspectorScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+    inspectorScrollPane.setBorder(null);
+
     JSplitPane splitPane =
-        new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabbedPane, new JScrollPane(inspectorPanel));
+        new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabbedPane, inspectorScrollPane);
     splitPane.setResizeWeight(0.55);
     splitPane.setDividerLocation(480);
     return splitPane;
@@ -239,7 +271,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     panel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
     GridBagConstraints gbc = new GridBagConstraints();
-    gbc.insets = new Insets(2, 4, 2, 4);
+    gbc.insets = new Insets(1, 4, 1, 4);
     gbc.anchor = GridBagConstraints.WEST;
     gbc.fill = GridBagConstraints.HORIZONTAL;
 
@@ -289,7 +321,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     panel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
     GridBagConstraints gbc = new GridBagConstraints();
-    gbc.insets = new Insets(2, 4, 2, 4);
+    gbc.insets = new Insets(1, 4, 1, 4);
     gbc.anchor = GridBagConstraints.WEST;
     gbc.fill = GridBagConstraints.HORIZONTAL;
 
@@ -401,7 +433,13 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     showConstrainedCheckBox.addActionListener(_ -> updateFilter());
     showUnsatisfiedCheckBox.addActionListener(_ -> updateFilter());
 
-    singleNetTable.getSelectionModel().addListSelectionListener(_ -> onSingleNetSelected());
+    singleNetTable
+        .getSelectionModel()
+        .addListSelectionListener(
+            _ -> {
+              onSingleNetSelected();
+              linkDiffPairBtn.setEnabled(singleNetTable.getSelectedRowCount() == 2);
+            });
     diffPairTable.getSelectionModel().addListSelectionListener(_ -> onDiffPairSelected());
     tabbedPane.addChangeListener(_ -> onTabChanged());
 
@@ -462,6 +500,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       }
     }
     updateDiagram();
+    resetInspectorScroll();
   }
 
   private void onTargetEnableToggled() {
@@ -487,25 +526,25 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     NetLengthConstraint lengthConstraint = net.getLengthConstraint();
     if (lengthConstraint != null && lengthConstraint.isConstrained()) {
       enableTargetConstraintBox.setSelected(true);
-      targetLengthField.setText(FMT.format(toUser(lengthConstraint.targetLength())));
+      targetLengthField.setText(formatLengthValue(lengthConstraint.targetLength()));
       if (lengthConstraint.hasMin() && lengthConstraint.hasMax()) {
         toleranceField.setText(
-            FMT.format(
-                toUser((lengthConstraint.maxLength() - lengthConstraint.minLength()) / 2.0)));
+            formatToleranceValue(
+                (lengthConstraint.maxLength() - lengthConstraint.minLength()) / 2.0));
       } else {
-        toleranceField.setText("0.20");
+        toleranceField.setText(getDefaultToleranceString());
       }
     } else {
       enableTargetConstraintBox.setSelected(false);
-      targetLengthField.setText(FMT.format(toUser(net.getTraceLength())));
-      toleranceField.setText("0.20");
+      targetLengthField.setText(formatLengthValue(net.getTraceLength()));
+      toleranceField.setText(getDefaultToleranceString());
     }
 
     NetMeanderConstraint meander = net.getMeanderConstraint();
     if (meander != null) {
-      minAmpField.setText(FMT.format(toUser(meander.minAmplitude())));
-      maxAmpField.setText(FMT.format(toUser(meander.maxAmplitude())));
-      spacingField.setText(FMT.format(toUser(meander.spacing())));
+      minAmpField.setText(formatLengthValue(meander.minAmplitude()));
+      maxAmpField.setText(formatLengthValue(meander.maxAmplitude()));
+      spacingField.setText(formatLengthValue(meander.spacing()));
       cornerStyleCombo.setSelectedItem(
           meander.cornerStyle() != null ? meander.cornerStyle().name() : "FILLET");
       radiusField.setText(String.format(Locale.US, "%.1f", meander.radiusPercentage()));
@@ -516,6 +555,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     onTargetEnableToggled();
     updateDiagram();
+    resetInspectorScroll();
   }
 
   private void onDiffPairSelected() {
@@ -532,18 +572,18 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     if (pair.hasMaxSkew()) {
       enableTargetConstraintBox.setSelected(true);
-      maxSkewField.setText(FMT.format(toUser(pair.maxSkew())));
+      maxSkewField.setText(formatSkewValue(pair.maxSkew()));
     } else {
       enableTargetConstraintBox.setSelected(false);
-      maxSkewField.setText("0.10"); // Sensible default skew tolerance
+      maxSkewField.setText(getDefaultSkewString());
     }
 
     Net shorter = pair.positiveNet();
     if (shorter != null && shorter.getMeanderConstraint() != null) {
       NetMeanderConstraint meander = shorter.getMeanderConstraint();
-      minAmpField.setText(FMT.format(toUser(meander.minAmplitude())));
-      maxAmpField.setText(FMT.format(toUser(meander.maxAmplitude())));
-      spacingField.setText(FMT.format(toUser(meander.spacing())));
+      minAmpField.setText(formatLengthValue(meander.minAmplitude()));
+      maxAmpField.setText(formatLengthValue(meander.maxAmplitude()));
+      spacingField.setText(formatLengthValue(meander.spacing()));
       cornerStyleCombo.setSelectedItem(
           meander.cornerStyle() != null ? meander.cornerStyle().name() : "FILLET");
       radiusField.setText(String.format(Locale.US, "%.1f", meander.radiusPercentage()));
@@ -554,18 +594,19 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     onTargetEnableToggled();
     updateDiagram();
+    resetInspectorScroll();
   }
 
   private void populateDefaultSingleNetFields() {
     enableTargetConstraintBox.setSelected(false);
-    targetLengthField.setText("0.00");
-    toleranceField.setText("0.20");
+    targetLengthField.setText(formatLengthValue(0.0));
+    toleranceField.setText(getDefaultToleranceString());
     populateDefaultMeanderFields(MeanderPatternType.SINGLE_TRACK);
   }
 
   private void populateDefaultDiffPairFields() {
     enableTargetConstraintBox.setSelected(true);
-    maxSkewField.setText("0.10");
+    maxSkewField.setText(getDefaultSkewString());
     populateDefaultMeanderFields(MeanderPatternType.DIFF_PAIR_SKEW);
   }
 
@@ -575,16 +616,16 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
         board != null && board.rules != null ? board.rules.getDefaultMeanderConstraint(type) : null;
 
     if (preset != null) {
-      minAmpField.setText(FMT.format(toUser(preset.minAmplitude())));
-      maxAmpField.setText(FMT.format(toUser(preset.maxAmplitude())));
-      spacingField.setText(FMT.format(toUser(preset.spacing())));
+      minAmpField.setText(formatLengthValue(preset.minAmplitude()));
+      maxAmpField.setText(formatLengthValue(preset.maxAmplitude()));
+      spacingField.setText(formatLengthValue(preset.spacing()));
       cornerStyleCombo.setSelectedItem(preset.cornerStyle().name());
       radiusField.setText(String.format(Locale.US, "%.1f", preset.radiusPercentage()));
       singleSidedCheckBox.setSelected(preset.singleSided());
     } else {
-      minAmpField.setText("0.20");
-      maxAmpField.setText("1.00");
-      spacingField.setText("0.60");
+      minAmpField.setText(Unit.INCH.equals(getUserUnit()) ? "0.0100" : "0.20");
+      maxAmpField.setText(Unit.INCH.equals(getUserUnit()) ? "0.0400" : "1.00");
+      spacingField.setText(Unit.INCH.equals(getUserUnit()) ? "0.0200" : "0.60");
       cornerStyleCombo.setSelectedItem("FILLET");
       radiusField.setText("80.0");
       singleSidedCheckBox.setSelected(type != MeanderPatternType.SINGLE_TRACK);
@@ -890,6 +931,11 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     maxAmpUnitLabel.setText(unit);
     spacingUnitLabel.setText(unit);
 
+    if (board != null) {
+      WorkspaceSettings ws = WorkspaceSettings.getOrCreate(board);
+      autoTuneOnCompletionCheckBox.setSelected(Boolean.TRUE.equals(ws.isLengthTuningEnabled()));
+    }
+
     singleNetTableModel.refreshData(board, ct);
     diffPairTableModel.refreshData(board, ct);
 
@@ -909,6 +955,306 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     updateDiagram();
     updateStatusSummary();
+    resetInspectorScroll();
+  }
+
+  private void toggleAutoTuneOnCompletion() {
+    RoutingBoard board = getBoard();
+    if (board != null) {
+      WorkspaceSettings ws = WorkspaceSettings.getOrCreate(board);
+      ws.setLengthTuningEnabled(autoTuneOnCompletionCheckBox.isSelected());
+    }
+  }
+
+  private void resetInspectorScroll() {
+    if (inspectorScrollPane != null) {
+      SwingUtilities.invokeLater(() -> inspectorScrollPane.getVerticalScrollBar().setValue(0));
+    }
+  }
+
+  private Unit getUserUnit() {
+    CoordinateTransform ct = getCoordinateTransform();
+    return ct != null && ct.userUnit != null ? ct.userUnit : Unit.MM;
+  }
+
+  private String getDefaultToleranceString() {
+    return Unit.INCH.equals(getUserUnit()) ? "0.0079" : "0.20";
+  }
+
+  private String getDefaultSkewString() {
+    return Unit.INCH.equals(getUserUnit()) ? "0.0039" : "0.10";
+  }
+
+  private String formatLengthValue(double boardUnits) {
+    double userVal = toUser(boardUnits);
+    if (Unit.INCH.equals(getUserUnit())) {
+      return String.format(Locale.US, "%.4f", userVal);
+    }
+    return String.format(Locale.US, "%.2f", userVal);
+  }
+
+  private String formatToleranceValue(double boardUnits) {
+    double userVal = toUser(boardUnits);
+    if (Unit.INCH.equals(getUserUnit())) {
+      return String.format(Locale.US, "%.4f", userVal);
+    }
+    return String.format(Locale.US, "%.2f", userVal);
+  }
+
+  private String formatSkewValue(double boardUnits) {
+    double userVal = toUser(boardUnits);
+    if (Unit.INCH.equals(getUserUnit())) {
+      return String.format(Locale.US, "%.4f", userVal);
+    }
+    return String.format(Locale.US, "%.3f", userVal);
+  }
+
+  private void linkSelectedAsDifferentialPair() {
+    int[] selected = singleNetTable.getSelectedRows();
+    if (selected.length != 2) {
+      JOptionPane.showMessageDialog(
+          this,
+          tm.getText("select_exact_two_nets_warning"),
+          tm.getText("add_pair_dialog_title"),
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+
+    RoutingBoard board = getBoard();
+    if (board == null) {
+      return;
+    }
+
+    int modelRow1 = singleNetTable.convertRowIndexToModel(selected[0]);
+    int modelRow2 = singleNetTable.convertRowIndexToModel(selected[1]);
+    Net net1 = singleNetTableModel.getNetAt(modelRow1);
+    Net net2 = singleNetTableModel.getNetAt(modelRow2);
+    if (net1 == null || net2 == null) {
+      return;
+    }
+
+    Net posNet = net1;
+    Net negNet = net2;
+    var info1 = DifferentialPairDetector.extract(net1.name);
+    var info2 = DifferentialPairDetector.extract(net2.name);
+    String proposedName = null;
+    if (info1 != null && info1.polarity() == DifferentialPairDetector.Polarity.NEGATIVE) {
+      posNet = net2;
+      negNet = net1;
+      proposedName = info1.baseName();
+    } else if (info1 != null) {
+      proposedName = info1.baseName();
+    } else if (info2 != null) {
+      proposedName = info2.baseName();
+    }
+    if (proposedName == null || proposedName.isBlank()) {
+      proposedName = deduceCommonPrefix(net1.name, net2.name);
+    }
+    if (proposedName.isBlank()) {
+      proposedName = net1.name + "_" + net2.name;
+    }
+
+    String pairName =
+        (String)
+            JOptionPane.showInputDialog(
+                this,
+                java.text.MessageFormat.format(
+                    tm.getText("link_pair_prompt"), posNet.name, negNet.name),
+                tm.getText("add_pair_dialog_title"),
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                null,
+                proposedName);
+
+    if (pairName == null || pairName.trim().isEmpty()) {
+      return;
+    }
+    pairName = pairName.trim();
+
+    double defaultSkewBoard = 1000.0; // 0.10 mm in board units
+    double defaultSpacingBoard = 6000.0; // 0.60 mm in board units
+    NetMeanderConstraint skewPreset =
+        board.rules.getDefaultMeanderConstraint(MeanderPatternType.DIFF_PAIR_SKEW);
+
+    DifferentialPair pair =
+        new DifferentialPair(posNet, negNet, pairName, defaultSpacingBoard, defaultSkewBoard);
+    board.rules.differentialPairs.add(pair);
+
+    if (posNet.getMeanderConstraint() == null) {
+      posNet.setMeanderConstraint(skewPreset);
+    }
+    if (negNet.getMeanderConstraint() == null) {
+      negNet.setMeanderConstraint(skewPreset);
+    }
+
+    tabbedPane.setSelectedIndex(1);
+    refresh();
+
+    for (int i = 0; i < diffPairTable.getRowCount(); i++) {
+      int mRow = diffPairTable.convertRowIndexToModel(i);
+      DifferentialPair p = diffPairTableModel.getPairAt(mRow);
+      if (p != null && pairName.equalsIgnoreCase(p.baseName())) {
+        diffPairTable.setRowSelectionInterval(i, i);
+        diffPairTable.scrollRectToVisible(diffPairTable.getCellRect(i, 0, true));
+        break;
+      }
+    }
+  }
+
+  private void openAddDifferentialPairDialog() {
+    RoutingBoard board = getBoard();
+    if (board == null) {
+      return;
+    }
+
+    List<String> netNames = new ArrayList<>();
+    int maxNet = board.rules.nets.maxNetNumber();
+    for (int i = 1; i <= maxNet; i++) {
+      Net n = board.rules.nets.get(i);
+      if (n != null && n.name != null && !n.name.isBlank()) {
+        netNames.add(n.name);
+      }
+    }
+    Collections.sort(netNames);
+
+    if (netNames.size() < 2) {
+      JOptionPane.showMessageDialog(this, "Not enough nets on board to create a pair.");
+      return;
+    }
+
+    JComboBox<String> posCombo = new JComboBox<>(netNames.toArray(new String[0]));
+    JComboBox<String> negCombo = new JComboBox<>(netNames.toArray(new String[0]));
+    if (netNames.size() > 1) {
+      negCombo.setSelectedIndex(1);
+    }
+
+    JTextField nameField = new JTextField(15);
+    JTextField skewField = new JTextField(getDefaultSkewString(), 8);
+
+    Runnable updateSuggestedName =
+        () -> {
+          String n1 = (String) posCombo.getSelectedItem();
+          String n2 = (String) negCombo.getSelectedItem();
+          if (n1 != null && n2 != null) {
+            String base = deduceCommonPrefix(n1, n2);
+            if (base.isBlank()) {
+              base = n1 + "_" + n2;
+            }
+            nameField.setText(base);
+          }
+        };
+    updateSuggestedName.run();
+    posCombo.addActionListener(_ -> updateSuggestedName.run());
+    negCombo.addActionListener(_ -> updateSuggestedName.run());
+
+    JPanel dialogPanel = new JPanel(new GridBagLayout());
+    GridBagConstraints gbc = new GridBagConstraints();
+    gbc.insets = new Insets(4, 4, 4, 4);
+    gbc.anchor = GridBagConstraints.WEST;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+
+    gbc.gridx = 0;
+    gbc.gridy = 0;
+    dialogPanel.add(new JLabel(tm.getText("select_positive_net")), gbc);
+    gbc.gridx = 1;
+    dialogPanel.add(posCombo, gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = 1;
+    dialogPanel.add(new JLabel(tm.getText("select_negative_net")), gbc);
+    gbc.gridx = 1;
+    dialogPanel.add(negCombo, gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = 2;
+    dialogPanel.add(new JLabel(tm.getText("pair_name")), gbc);
+    gbc.gridx = 1;
+    dialogPanel.add(nameField, gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = 3;
+    dialogPanel.add(new JLabel(tm.getText("initial_skew_tolerance")), gbc);
+    JPanel skewPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+    skewPanel.add(skewField);
+    skewPanel.add(new JLabel(getUnitName()));
+    gbc.gridx = 1;
+    dialogPanel.add(skewPanel, gbc);
+
+    int result =
+        JOptionPane.showConfirmDialog(
+            this,
+            dialogPanel,
+            tm.getText("add_pair_dialog_title"),
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+
+    if (result == JOptionPane.OK_OPTION) {
+      String posName = (String) posCombo.getSelectedItem();
+      String negName = (String) negCombo.getSelectedItem();
+      if (posName == null || negName == null || posName.equalsIgnoreCase(negName)) {
+        JOptionPane.showMessageDialog(this, tm.getText("select_two_distinct_nets_warning"));
+        return;
+      }
+      String pName = nameField.getText().trim();
+      if (pName.isEmpty()) {
+        pName = posName + "_" + negName;
+      }
+
+      Net pNet = board.rules.nets.get(posName, 1);
+      Net nNet = board.rules.nets.get(negName, 1);
+      if (pNet == null || nNet == null) {
+        return;
+      }
+
+      double maxSkewUser = parseDouble(skewField.getText(), 0.10);
+      double maxSkewBoard = toBoardUnits(maxSkewUser);
+      double defaultSpacingBoard = 6000.0;
+      NetMeanderConstraint skewPreset =
+          board.rules.getDefaultMeanderConstraint(MeanderPatternType.DIFF_PAIR_SKEW);
+
+      DifferentialPair pair =
+          new DifferentialPair(pNet, nNet, pName, defaultSpacingBoard, maxSkewBoard);
+      board.rules.differentialPairs.add(pair);
+
+      if (pNet.getMeanderConstraint() == null) {
+        pNet.setMeanderConstraint(skewPreset);
+      }
+      if (nNet.getMeanderConstraint() == null) {
+        nNet.setMeanderConstraint(skewPreset);
+      }
+
+      tabbedPane.setSelectedIndex(1);
+      refresh();
+
+      for (int i = 0; i < diffPairTable.getRowCount(); i++) {
+        int mRow = diffPairTable.convertRowIndexToModel(i);
+        DifferentialPair p = diffPairTableModel.getPairAt(mRow);
+        if (p != null && pName.equalsIgnoreCase(p.baseName())) {
+          diffPairTable.setRowSelectionInterval(i, i);
+          diffPairTable.scrollRectToVisible(diffPairTable.getCellRect(i, 0, true));
+          break;
+        }
+      }
+    }
+  }
+
+  private static String deduceCommonPrefix(String s1, String s2) {
+    if (s1 == null || s2 == null) {
+      return "";
+    }
+    int len = Math.min(s1.length(), s2.length());
+    int i = 0;
+    while (i < len && s1.charAt(i) == s2.charAt(i)) {
+      i++;
+    }
+    String prefix = s1.substring(0, i);
+    while (prefix.endsWith("_")
+        || prefix.endsWith(".")
+        || prefix.endsWith("-")
+        || prefix.endsWith("/")) {
+      prefix = prefix.substring(0, prefix.length() - 1);
+    }
+    return prefix;
   }
 
   private void updateStatusSummary() {

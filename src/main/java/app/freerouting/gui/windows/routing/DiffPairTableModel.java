@@ -206,13 +206,16 @@ public class DiffPairTableModel extends AbstractTableModel {
     if (row == null) {
       return "";
     }
+    boolean isInch = "inch".equalsIgnoreCase(unitString);
+    String skewFmt = isInch ? "%.4f %s" : "%.3f %s";
+
     return switch (columnIndex) {
       case 0 -> row.baseName;
       case 1 -> row.positiveNetName;
       case 2 -> row.negativeNetName;
-      case 3 -> String.format(Locale.US, "%.3f %s", row.currentSkewMm, unitString);
+      case 3 -> String.format(Locale.US, skewFmt, row.currentSkewMm, unitString);
       case 4 ->
-          row.maxSkewMm > 0 ? String.format(Locale.US, "%.3f %s", row.maxSkewMm, unitString) : "—";
+          row.maxSkewMm > 0 ? String.format(Locale.US, skewFmt, row.maxSkewMm, unitString) : "—";
       case 5 -> row.status;
       default -> "";
     };

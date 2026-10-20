@@ -264,7 +264,8 @@ public final class DifferentialPairDetector {
 
   /**
    * Scans the nets on the board, auto-detects differential pairs based on standard naming
-   * conventions, and registers any newly detected pairs into the board rules.
+   * conventions, and registers any newly detected pairs into the board rules with default skew
+   * limits and meander geometry.
    *
    * @param boardRules the board rules containing nets and the differential pair registry
    * @return unmodifiable list of newly registered differential pairs
@@ -275,8 +276,30 @@ public final class DifferentialPairDetector {
     }
 
     List<DifferentialPair> detected = detect(boardRules);
+    double defaultSkewBoard = 1000.0; // 0.10 mm in 0.1-micron board units
+    double defaultSpacingBoard = 6000.0; // 0.60 mm in board units
+    NetMeanderConstraint skewPreset =
+        boardRules.getDefaultMeanderConstraint(MeanderPatternType.DIFF_PAIR_SKEW);
+
+    List<DifferentialPair> registered = new ArrayList<>();
     for (DifferentialPair pair : detected) {
-      boardRules.differentialPairs.add(pair);
+      DifferentialPair constrainedPair =
+          new DifferentialPair(
+              pair.positiveNet(),
+              pair.negativeNet(),
+              pair.baseName(),
+              pair.coupledSpacing() > 0 ? pair.coupledSpacing() : defaultSpacingBoard,
+              defaultSkewBoard);
+      boardRules.differentialPairs.add(constrainedPair);
+
+      if (pair.positiveNet() != null && pair.positiveNet().getMeanderConstraint() == null) {
+        pair.positiveNet().setMeanderConstraint(skewPreset);
+      }
+      if (pair.negativeNet() != null && pair.negativeNet().getMeanderConstraint() == null) {
+        pair.negativeNet().setMeanderConstraint(skewPreset);
+      }
+
+      registered.add(constrainedPair);
       FRLogger.info(
           "Auto-detected differential pair: "
               + pair.baseName()
@@ -286,6 +309,6 @@ public final class DifferentialPairDetector {
               + pair.negativeNet().name
               + ")");
     }
-    return detected;
+    return Collections.unmodifiableList(registered);
   }
 }

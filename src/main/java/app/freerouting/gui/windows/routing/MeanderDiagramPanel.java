@@ -42,8 +42,8 @@ public class MeanderDiagramPanel extends JPanel {
 
   /** Creates a new meander diagram preview panel. */
   public MeanderDiagramPanel() {
-    setPreferredSize(new Dimension(380, 200));
-    setMinimumSize(new Dimension(280, 160));
+    setPreferredSize(new Dimension(380, 160));
+    setMinimumSize(new Dimension(280, 120));
     setBackground(BG_COLOR);
   }
 
