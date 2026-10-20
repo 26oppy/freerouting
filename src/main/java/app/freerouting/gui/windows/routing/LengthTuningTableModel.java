@@ -54,6 +54,7 @@ public class LengthTuningTableModel extends AbstractTableModel {
   private final List<NetRow> filteredRows = new ArrayList<>();
 
   private String filterText = "";
+  private String netClassFilter = "";
   private boolean showConstrainedOnly = false;
   private boolean showUnsatisfiedOnly = false;
   private String unitString = "mm";
@@ -125,7 +126,16 @@ public class LengthTuningTableModel extends AbstractTableModel {
 
   /** Updates filtering parameters and refreshes the displayed table rows. */
   public void setFilter(String text, boolean constrainedOnly, boolean unsatisfiedOnly) {
+    setFilter(text, constrainedOnly, unsatisfiedOnly, null);
+  }
+
+  /**
+   * Updates filtering parameters including net class restriction and refreshes the displayed rows.
+   */
+  public void setFilter(
+      String text, boolean constrainedOnly, boolean unsatisfiedOnly, String netClass) {
     this.filterText = text != null ? text.trim().toLowerCase(Locale.US) : "";
+    this.netClassFilter = netClass != null ? netClass.trim().toLowerCase(Locale.US) : "";
     this.showConstrainedOnly = constrainedOnly;
     this.showUnsatisfiedOnly = unsatisfiedOnly;
     applyFilter();
@@ -138,6 +148,11 @@ public class LengthTuningTableModel extends AbstractTableModel {
         continue;
       }
       if (showUnsatisfiedOnly && !row.isUnsatisfied) {
+        continue;
+      }
+      if (!netClassFilter.isEmpty()
+          && !netClassFilter.equalsIgnoreCase("<all net classes>")
+          && !row.className.equalsIgnoreCase(netClassFilter)) {
         continue;
       }
       if (!filterText.isEmpty()) {

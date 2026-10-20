@@ -7,6 +7,7 @@ import app.freerouting.gui.board.BoardFrame;
 import app.freerouting.gui.board.BoardSavableSubWindow;
 import app.freerouting.gui.support.GuiTextManager;
 import app.freerouting.gui.workspace.GuiBoardManager;
+import app.freerouting.gui.workspace.WorkspaceSettings;
 import app.freerouting.settings.RouterSettings;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -25,6 +26,7 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -197,7 +199,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     tm.setText(stagesLabel, "routing_stages");
 
     gridbagConstraints.gridwidth = 2;
-    gridbagConstraints.gridheight = 3;
+    gridbagConstraints.gridheight = 4;
     gridbag.setConstraints(stagesLabel, gridbagConstraints);
     mainPanel.add(stagesLabel);
 
@@ -538,6 +540,18 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
         .getCurrentRoutingJob()
         .routerSettings
         .addPropertyChangeListener(this::onSettingsChanged);
+
+    WorkspaceSettings ws = this.boardHandling.getWorkspaceSettings();
+    if (ws != null) {
+      ws.addPropertyChangeListener(
+          WorkspaceSettings.PROP_LENGTH_TUNING,
+          evt -> {
+            if (!isUpdatingFromSettings && evt.getNewValue() instanceof Boolean bool) {
+              settingsAutorouterLengthTuningButton.setSelected(bool);
+              boardHandling.getCurrentRoutingJob().routerSettings.setLengthTuningEnabled(bool);
+            }
+          });
+    }
   }
 
   public static int normalizeIntInput(Object input, int oldValue, int minValue, int maxValue) {
@@ -566,6 +580,10 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
 
   public static void applyOptimizerEnabledSelection(RouterSettings settings, boolean selected) {
     settings.setOptimizerEnabled(selected);
+  }
+
+  public static void applyLengthTuningEnabledSelection(RouterSettings settings, boolean selected) {
+    settings.setLengthTuningEnabled(selected);
   }
 
   @Override
@@ -639,6 +657,10 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
         case "lengthTuning" -> {
           if (newValue instanceof Boolean bool) {
             settingsAutorouterLengthTuningButton.setSelected(bool);
+            WorkspaceSettings ws = boardHandling.getWorkspaceSettings();
+            if (ws != null && !Objects.equals(ws.isLengthTuningEnabled(), bool)) {
+              ws.setLengthTuningEnabled(bool);
+            }
           }
         }
         default -> {}
@@ -658,7 +680,12 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     this.settingsAutorouterFanoutButton.setSelected(settings.getRunFanout());
     this.settingsAutorouterAutoroutePassButton.setSelected(settings.getRunRouter());
     this.settingsAutorouterOptimizationButton.setSelected(settings.getRunOptimizer());
-    this.settingsAutorouterLengthTuningButton.setSelected(settings.isLengthTuningEnabled());
+    WorkspaceSettings ws = this.boardHandling.getWorkspaceSettings();
+    boolean lengthTuningEnabled =
+        (ws != null && ws.isLengthTuningEnabled() != null)
+            ? ws.isLengthTuningEnabled()
+            : settings.isLengthTuningEnabled();
+    this.settingsAutorouterLengthTuningButton.setSelected(lengthTuningEnabled);
 
     for (int i = 0; i < settingsAutorouterLayerActiveArr.length; i++) {
       this.settingsAutorouterLayerActiveArr[i].setSelected(settings.getLayerActive(i));
@@ -967,10 +994,15 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
 
     @Override
     public void actionPerformed(ActionEvent evt) {
+      boolean selected = settingsAutorouterLengthTuningButton.isSelected();
       RouterSettings autorouteSettings = boardHandling.getCurrentRoutingJob().routerSettings;
       isUpdatingFromSettings = true;
       try {
-        autorouteSettings.setLengthTuningEnabled(settingsAutorouterLengthTuningButton.isSelected());
+        applyLengthTuningEnabledSelection(autorouteSettings, selected);
+        WorkspaceSettings ws = boardHandling.getWorkspaceSettings();
+        if (ws != null) {
+          ws.setLengthTuningEnabled(selected);
+        }
       } finally {
         isUpdatingFromSettings = false;
       }

@@ -789,6 +789,9 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
     }
     Boolean old = this.lengthTuning;
     this.lengthTuning = value;
+    if (this.settings != null) {
+      this.settings.lengthTuning = value;
+    }
     pcs.firePropertyChange(PROP_LENGTH_TUNING, old, value);
   }
 

@@ -57,17 +57,6 @@ public final class BoardMenuParameter extends JMenu {
 
     parameterMenu.add(settingsAutorouterMenuitem);
 
-    JMenuItem settingsLengthTuningMenuitem = new JMenuItem();
-    settingsLengthTuningMenuitem.setText(parameterMenu.tm.getText("lengthTuning"));
-    settingsLengthTuningMenuitem.addActionListener(
-        _ -> parameterMenu.boardFrame.lengthTuningWindow.setVisible(true));
-    settingsLengthTuningMenuitem.addActionListener(
-        _ ->
-            FRAnalytics.buttonClicked(
-                "settingsLengthTuningMenuitem", settingsLengthTuningMenuitem.getText()));
-
-    parameterMenu.add(settingsLengthTuningMenuitem);
-
     JMenuItem settingsControlsMenuitem = new JMenuItem();
     settingsControlsMenuitem.setText(parameterMenu.tm.getText("move"));
     settingsControlsMenuitem.addActionListener(

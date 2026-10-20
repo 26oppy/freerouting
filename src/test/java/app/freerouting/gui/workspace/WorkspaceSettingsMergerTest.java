@@ -311,4 +311,30 @@ class WorkspaceSettingsMergerTest {
         runMerged.layers[0].routable,
         "GUI change must be respected on the first run, overriding CLI settings");
   }
+
+  @Test
+  void lengthTuningDisabledInWorkspaceSettingsOverridesDefaultSettings() {
+    WorkspaceSettings workspaceSettings = WorkspaceSettings.getOrCreate(board);
+    SettingsMerger merger = new SettingsMerger(new DefaultSettings(), workspaceSettings);
+
+    // Initial state: DefaultSettings enables length tuning
+    RouterSettings initialMerged = merger.merge();
+    assertTrue(
+        initialMerged.isLengthTuningEnabled(),
+        "DefaultSettings must have length tuning enabled by default");
+
+    // Seed the workspace settings from initial merge (simulating board load)
+    workspaceSettings.setSettings(initialMerged);
+    assertTrue(workspaceSettings.isLengthTuningEnabled());
+
+    // User unchecks length tuning in WindowAutorouteParameter
+    workspaceSettings.setLengthTuningEnabled(false);
+    assertFalse(workspaceSettings.isLengthTuningEnabled());
+
+    // On autoroute start, BoardToolbar merges settings again
+    RouterSettings runMerged = merger.merge();
+    assertFalse(
+        runMerged.isLengthTuningEnabled(),
+        "Explicitly disabled lengthTuning (false) in WorkspaceSettings must override DefaultSettings");
+  }
 }

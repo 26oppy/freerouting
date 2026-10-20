@@ -15,6 +15,7 @@ import app.freerouting.rules.NetLengthConstraint;
 import app.freerouting.rules.NetMeanderConstraint;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -49,6 +50,29 @@ public final class PostRouteLengthTuner {
       return new TuningReport(0, 0, 0, 0.0);
     }
 
+    List<Net> allNets = new ArrayList<>();
+    int netCount = board.rules.nets.maxNetNumber();
+    for (int netNo = 1; netNo <= netCount; netNo++) {
+      Net net = board.rules.nets.get(netNo);
+      if (net != null) {
+        allNets.add(net);
+      }
+    }
+    return tune(board, allNets);
+  }
+
+  /**
+   * Executes post-route trace length tuning on the specified collection of nets.
+   *
+   * @param board the routing board with routed and optimized traces
+   * @param netsToTune collection of candidate nets to evaluate and tune
+   * @return summary report of tuning operations performed
+   */
+  public static TuningReport tune(RoutingBoard board, Collection<Net> netsToTune) {
+    if (board == null || board.rules == null || netsToTune == null || netsToTune.isEmpty()) {
+      return new TuningReport(0, 0, 0, 0.0);
+    }
+
     int attempted = 0;
     int success = 0;
     int meandersInserted = 0;
@@ -56,9 +80,7 @@ public final class PostRouteLengthTuner {
 
     boolean fortyFiveDegreeOnly = board.rules.getTraceAngleRestriction() != AngleRestriction.NONE;
 
-    int netCount = board.rules.nets.maxNetNumber();
-    for (int netNo = 1; netNo <= netCount; netNo++) {
-      Net net = board.rules.nets.get(netNo);
+    for (Net net : netsToTune) {
       if (net == null) {
         continue;
       }

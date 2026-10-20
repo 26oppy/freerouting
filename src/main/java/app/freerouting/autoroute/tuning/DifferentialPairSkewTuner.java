@@ -49,6 +49,20 @@ public final class DifferentialPairSkewTuner {
         || board.rules.differentialPairs.isEmpty()) {
       return new SkewTuningReport(0, 0, 0, 0.0);
     }
+    return tune(board, board.rules.differentialPairs.all());
+  }
+
+  /**
+   * Executes differential pair intra-pair skew tuning on the specified collection of pairs.
+   *
+   * @param board the routing board
+   * @param pairs collection of differential pairs to evaluate and tune
+   * @return summary report of skew tuning operations
+   */
+  public static SkewTuningReport tune(RoutingBoard board, Collection<DifferentialPair> pairs) {
+    if (board == null || board.rules == null || pairs == null || pairs.isEmpty()) {
+      return new SkewTuningReport(0, 0, 0, 0.0);
+    }
 
     int attempted = 0;
     int equalized = 0;
@@ -57,8 +71,10 @@ public final class DifferentialPairSkewTuner {
 
     boolean fortyFiveDegreeOnly = board.rules.getTraceAngleRestriction() != AngleRestriction.NONE;
 
-    Collection<DifferentialPair> pairs = board.rules.differentialPairs.all();
     for (DifferentialPair pair : pairs) {
+      if (pair == null) {
+        continue;
+      }
       Net pNet = pair.positiveNet();
       Net nNet = pair.negativeNet();
       if (pNet == null || nNet == null) {

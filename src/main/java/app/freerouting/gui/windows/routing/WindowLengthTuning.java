@@ -24,6 +24,7 @@ import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.DecimalFormat;
@@ -79,6 +80,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   private final JCheckBox showConstrainedCheckBox = new JCheckBox();
   private final JCheckBox showUnsatisfiedCheckBox = new JCheckBox();
   private final JCheckBox autoTuneOnCompletionCheckBox = new JCheckBox();
+  private final JComboBox<String> netClassFilterCombo = new JComboBox<>();
   private final JLabel activeUnitBadge = new JLabel("Unit: mm");
 
   // Table action buttons & selection badges
@@ -158,6 +160,11 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     left.add(filterLabel);
     filterField.setToolTipText(tm.getText("filter_tooltip"));
     left.add(filterField);
+
+    JLabel netClassLabel = new JLabel(tm.getText("net_class"));
+    left.add(netClassLabel);
+    netClassFilterCombo.addItem("<All Net Classes>");
+    left.add(netClassFilterCombo);
 
     showConstrainedCheckBox.setText(tm.getText("show_only_constrained"));
     showUnsatisfiedCheckBox.setText(tm.getText("show_only_unsatisfied"));
@@ -284,6 +291,12 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     applyBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
     applyBtn.addActionListener(_ -> applyRuleToSelected());
     inspectorPanel.add(applyBtn);
+
+    JButton applyToNetClassBtn = new JButton(tm.getText("btn_apply_to_netclass"));
+    applyToNetClassBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+    applyToNetClassBtn.addActionListener(_ -> applyProfileToNetClass());
+    inspectorPanel.add(Box.createVerticalStrut(4));
+    inspectorPanel.add(applyToNetClassBtn);
     inspectorPanel.add(Box.createVerticalStrut(6));
 
     JLabel previewLabel = new JLabel(tm.getText("label_preview"));
@@ -562,13 +575,28 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     maxAmpField.getDocument().addDocumentListener(geomDocListener);
     spacingField.getDocument().addDocumentListener(geomDocListener);
     radiusField.getDocument().addDocumentListener(geomDocListener);
+    netClassFilterCombo.addActionListener(_ -> updateFilter());
+
+    RoutingBoard board = getBoard();
+    if (board != null) {
+      WorkspaceSettings ws = WorkspaceSettings.getOrCreate(board);
+      ws.addPropertyChangeListener(
+          WorkspaceSettings.PROP_LENGTH_TUNING,
+          evt -> {
+            if (evt.getNewValue() instanceof Boolean bool) {
+              autoTuneOnCompletionCheckBox.setSelected(bool);
+            }
+          });
+    }
   }
 
   private void updateFilter() {
+    String selectedClass = (String) netClassFilterCombo.getSelectedItem();
     singleNetTableModel.setFilter(
         filterField.getText(),
         showConstrainedCheckBox.isSelected(),
-        showUnsatisfiedCheckBox.isSelected());
+        showUnsatisfiedCheckBox.isSelected(),
+        selectedClass);
     updateStatusSummary();
   }
 
@@ -899,14 +927,118 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     }
 
     if (maxLen <= 0.0) {
-      JOptionPane.showMessageDialog(
-          this, "Selected nets have zero routed length. Please route the nets first.");
-      return;
+      double enteredTarget = parseDouble(targetLengthField.getText(), 0.0);
+      if (enteredTarget <= 0.0) {
+        String input =
+            JOptionPane.showInputDialog(
+                this,
+                java.text.MessageFormat.format(tm.getText("match_unrouted_prompt"), getUnitName()),
+                tm.getText("match_unrouted_title"),
+                JOptionPane.QUESTION_MESSAGE);
+        if (input == null || input.isBlank()) {
+          return;
+        }
+        enteredTarget = parseDouble(input, 0.0);
+        if (enteredTarget <= 0.0) {
+          return;
+        }
+        targetLengthField.setText(FMT.format(enteredTarget));
+      }
+      maxLen = toBoardUnits(enteredTarget);
+    } else {
+      targetLengthField.setText(FMT.format(toUser(maxLen)));
     }
 
     enableTargetConstraintBox.setSelected(true);
-    targetLengthField.setText(FMT.format(toUser(maxLen)));
     applyRuleToSelected();
+  }
+
+  private void applyProfileToNetClass() {
+    RoutingBoard board = getBoard();
+    if (board == null || board.rules == null || board.rules.netClasses == null) {
+      return;
+    }
+
+    String selectedClass = (String) netClassFilterCombo.getSelectedItem();
+    if (selectedClass == null
+        || selectedClass.isBlank()
+        || selectedClass.equalsIgnoreCase("<All Net Classes>")) {
+      List<String> classNames = new ArrayList<>();
+      for (int i = 0; i < board.rules.netClasses.count(); i++) {
+        var nc = board.rules.netClasses.get(i);
+        if (nc != null && nc.getName() != null && !nc.getName().isBlank()) {
+          classNames.add(nc.getName());
+        }
+      }
+      if (classNames.isEmpty()) {
+        JOptionPane.showMessageDialog(
+            this,
+            "No Net Classes found on board.",
+            "Net Class Profile",
+            JOptionPane.WARNING_MESSAGE);
+        return;
+      }
+      String chosen =
+          (String)
+              JOptionPane.showInputDialog(
+                  this,
+                  "Select Net Class to assign this tuning profile to:",
+                  "Assign Tuning Profile to Net Class",
+                  JOptionPane.QUESTION_MESSAGE,
+                  null,
+                  classNames.toArray(new String[0]),
+                  classNames.get(0));
+      if (chosen == null) {
+        return;
+      }
+      selectedClass = chosen;
+    }
+
+    app.freerouting.rules.NetClass netClass = board.rules.netClasses.get(selectedClass);
+    if (netClass == null) {
+      return;
+    }
+
+    boolean enableConstraint = enableTargetConstraintBox.isSelected();
+    double target = parseDouble(targetLengthField.getText(), 0.0);
+    double tol = parseDouble(toleranceField.getText(), 0.2);
+
+    NetLengthConstraint lengthConstraint;
+    if (enableConstraint && target > 0.0) {
+      double targetBoard = toBoardUnits(target);
+      double tolBoard = toBoardUnits(tol);
+      lengthConstraint = new NetLengthConstraint(targetBoard - tolBoard, targetBoard + tolBoard);
+    } else {
+      lengthConstraint = NetLengthConstraint.UNCONSTRAINED;
+    }
+
+    double minAmp = parseDouble(minAmpField.getText(), 0.5);
+    double maxAmp = parseDouble(maxAmpField.getText(), 2.0);
+    double spacing = parseDouble(spacingField.getText(), 1.0);
+    CornerStyle cornerStyle = CornerStyle.valueOf((String) cornerStyleCombo.getSelectedItem());
+    double radiusPct = parseDouble(radiusField.getText(), 80.0);
+    boolean singleSided = singleSidedCheckBox.isSelected();
+
+    NetMeanderConstraint meanderConstraint =
+        new NetMeanderConstraint(
+            toBoardUnits(minAmp),
+            toBoardUnits(maxAmp),
+            toBoardUnits(spacing),
+            cornerStyle,
+            radiusPct,
+            singleSided);
+
+    netClass.setLengthConstraint(lengthConstraint);
+    netClass.setMeanderConstraint(meanderConstraint);
+
+    refresh();
+    JOptionPane.showMessageDialog(
+        this,
+        "Assigned tuning profile to Net Class '"
+            + selectedClass
+            + "'. All member nets will inherit these rules.",
+        "Net Class Profile Assigned",
+        JOptionPane.INFORMATION_MESSAGE);
   }
 
   private void autoDetectDifferentialPairs() {
@@ -998,13 +1130,27 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       return;
     }
 
-    applyRuleToSelected();
     String unit = getUnitName();
 
     if (tabbedPane.getSelectedIndex() == 0) {
-      // Tune length on single nets
+      int[] selected = singleNetTable.getSelectedRows();
+      if (selected.length == 0) {
+        JOptionPane.showMessageDialog(this, tm.getText("no_selection_warning"));
+        return;
+      }
+      applyRuleToSelected();
+
+      List<Net> netsToTune = new ArrayList<>();
+      for (int sel : selected) {
+        int modelRow = singleNetTable.convertRowIndexToModel(sel);
+        Net net = singleNetTableModel.getNetAt(modelRow);
+        if (net != null) {
+          netsToTune.add(net);
+        }
+      }
+
       app.freerouting.autoroute.tuning.PostRouteLengthTuner.TuningReport report =
-          app.freerouting.autoroute.tuning.PostRouteLengthTuner.tune(board);
+          app.freerouting.autoroute.tuning.PostRouteLengthTuner.tune(board, netsToTune);
 
       refresh();
       boardFrame.repaint();
@@ -1020,9 +1166,24 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
           tm.getText("tuning_complete_title"),
           JOptionPane.INFORMATION_MESSAGE);
     } else {
-      // Tune skew on differential pairs
+      int[] selected = diffPairTable.getSelectedRows();
+      if (selected.length == 0) {
+        JOptionPane.showMessageDialog(this, tm.getText("no_selection_warning"));
+        return;
+      }
+      applyRuleToSelected();
+
+      List<DifferentialPair> pairsToTune = new ArrayList<>();
+      for (int sel : selected) {
+        int modelRow = diffPairTable.convertRowIndexToModel(sel);
+        DifferentialPair pair = diffPairTableModel.getPairAt(modelRow);
+        if (pair != null) {
+          pairsToTune.add(pair);
+        }
+      }
+
       app.freerouting.autoroute.tuning.DifferentialPairSkewTuner.SkewTuningReport report =
-          app.freerouting.autoroute.tuning.DifferentialPairSkewTuner.tune(board);
+          app.freerouting.autoroute.tuning.DifferentialPairSkewTuner.tune(board, pairsToTune);
 
       refresh();
       boardFrame.repaint();
@@ -1063,6 +1224,28 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
     if (board != null) {
       WorkspaceSettings ws = WorkspaceSettings.getOrCreate(board);
       autoTuneOnCompletionCheckBox.setSelected(Boolean.TRUE.equals(ws.isLengthTuningEnabled()));
+
+      if (board.rules != null && board.rules.netClasses != null) {
+        Object prev = netClassFilterCombo.getSelectedItem();
+        ActionListener[] listeners = netClassFilterCombo.getActionListeners();
+        for (ActionListener al : listeners) {
+          netClassFilterCombo.removeActionListener(al);
+        }
+        netClassFilterCombo.removeAllItems();
+        netClassFilterCombo.addItem("<All Net Classes>");
+        for (int i = 0; i < board.rules.netClasses.count(); i++) {
+          var nc = board.rules.netClasses.get(i);
+          if (nc != null && nc.getName() != null && !nc.getName().isBlank()) {
+            netClassFilterCombo.addItem(nc.getName());
+          }
+        }
+        if (prev != null) {
+          netClassFilterCombo.setSelectedItem(prev);
+        }
+        for (ActionListener al : listeners) {
+          netClassFilterCombo.addActionListener(al);
+        }
+      }
     }
 
     singleNetTableModel.refreshData(board, ct);
@@ -1089,9 +1272,21 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
   private void toggleAutoTuneOnCompletion() {
     RoutingBoard board = getBoard();
+    boolean selected = autoTuneOnCompletionCheckBox.isSelected();
     if (board != null) {
       WorkspaceSettings ws = WorkspaceSettings.getOrCreate(board);
-      ws.setLengthTuningEnabled(autoTuneOnCompletionCheckBox.isSelected());
+      ws.setLengthTuningEnabled(selected);
+    }
+    if (boardFrame != null
+        && boardFrame.boardPanel != null
+        && boardFrame.boardPanel.boardHandling != null
+        && boardFrame.boardPanel.boardHandling.getCurrentRoutingJob() != null) {
+      boardFrame
+          .boardPanel
+          .boardHandling
+          .getCurrentRoutingJob()
+          .routerSettings
+          .setLengthTuningEnabled(selected);
     }
   }
 
