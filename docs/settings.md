@@ -369,6 +369,15 @@ Settings are resolved by the `SettingsMerger` class, which collects all active `
 
 If a setting is not defined in any source, the hardcoded default from `DefaultSettings` is used.
 
+### GUI Interactive Settings (Priority 65)
+
+Interactive user changes made in `WindowAutorouteParameter` and `WindowLengthTuning` update the `WorkspaceSettings` singleton, which provides a live snapshot of GUI state at priority 65 via `SettingsMerger`. Properties managed dynamically include:
+- Trace length tuning master enable (`length_tuning`)
+- Serpentine meander minimum/maximum amplitudes (`meander_min_amplitude_mm`, `meander_max_amplitude_mm`)
+- Meander parallel turn spacing (`meander_spacing_mm`)
+- Meander corner styling (`meander_corner_style`: `FILLET` or `CHAMFER`) and rounding radius (`meander_radius_percentage`)
+- Unilateral / single-sided meander orientation flag (`meander_single_sided`)
+
 ### Specctra `.rules` File Settings (Priority 40)
 
 When a `.rules` file is provided (via CLI `-dr`, `-de board.dsn+board.rules`, API `POST /v1/jobs/{jobId}/rules`, or an adjacent `<designName>.rules` file), `RulesFileSettings` parses both general routing rules and the `(autoroute_settings ...)` block. Supported parameters include:

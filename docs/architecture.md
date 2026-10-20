@@ -424,7 +424,10 @@ Several implementation areas live one level below the top-level package grouping
 - `app.freerouting.board.facade` keeps board services behind the stable `BasicBoard` and `RoutingBoard`
   façades: item storage/connectivity/snapshots, routing operations/search, and routing undo/redo.
 - `app.freerouting.gui.windows.board` and `app.freerouting.gui.windows.routing` contain the Swing
-  information and routing-parameter windows; start with [WindowVisibility.java](../src/main/java/app/freerouting/gui/windows/board/WindowVisibility.java) and [WindowAutorouteParameter.java](../src/main/java/app/freerouting/gui/windows/routing/WindowAutorouteParameter.java).
+  information and routing-parameter windows; start with [WindowVisibility.java](../src/main/java/app/freerouting/gui/windows/board/WindowVisibility.java),
+  [WindowAutorouteParameter.java](../src/main/java/app/freerouting/gui/windows/routing/WindowAutorouteParameter.java), and
+  [WindowLengthTuning.java](../src/main/java/app/freerouting/gui/windows/routing/WindowLengthTuning.java)
+  (interactive length and skew tuning studio with live 2D vector preview [MeanderDiagramPanel.java](../src/main/java/app/freerouting/gui/windows/routing/MeanderDiagramPanel.java)).
 - `app.freerouting.gui.board` contains the board shell; start with [BoardFrame.java](../src/main/java/app/freerouting/gui/board/BoardFrame.java).
 
 ## How The Code Fits Together
