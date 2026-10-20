@@ -61,6 +61,13 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
   public static final String PROP_TRACE_PULL_TIGHT_ACCURACY = "tracePullTightAccuracy";
   public static final String PROP_AUTOMATIC_NECKDOWN = "automaticNeckdown";
   public static final String PROP_MANUAL_TRACE_HALF_WIDTH = "manual_trace_half_width";
+  public static final String PROP_LENGTH_TUNING = "lengthTuning";
+  public static final String PROP_MEANDER_MIN_AMPLITUDE_MM = "meanderMinAmplitudeMm";
+  public static final String PROP_MEANDER_MAX_AMPLITUDE_MM = "meanderMaxAmplitudeMm";
+  public static final String PROP_MEANDER_SPACING_MM = "meanderSpacingMm";
+  public static final String PROP_MEANDER_CORNER_STYLE = "meanderCornerStyle";
+  public static final String PROP_MEANDER_RADIUS_PERCENTAGE = "meanderRadiusPercentage";
+  public static final String PROP_MEANDER_SINGLE_SIDED = "meanderSingleSided";
 
   /** The single GUI-session instance; {@code null} when running headless. */
   private static volatile WorkspaceSettings instance;
@@ -138,6 +145,27 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
 
   /** The filter used in interactive selection of board items. */
   private ItemSelectionFilter itemSelectionFilter;
+
+  /** If length tuning and differential pair skew equalization are enabled. */
+  private Boolean lengthTuning;
+
+  /** Minimum amplitude for trace length tuning meanders in millimeters. */
+  private Double meanderMinAmplitudeMm;
+
+  /** Maximum amplitude for trace length tuning meanders in millimeters. */
+  private Double meanderMaxAmplitudeMm;
+
+  /** Spacing between parallel meander traces in millimeters. */
+  private Double meanderSpacingMm;
+
+  /** Corner style for meander turns ("FILLET" or "CHAMFER"). */
+  private String meanderCornerStyle;
+
+  /** Corner radius percentage for meander turns (0.0 to 100.0). */
+  private Double meanderRadiusPercentage;
+
+  /** Single sided constraint for meanders. */
+  private Boolean meanderSingleSided;
 
   /**
    * Indicates, if the data of this class are not allowed to be changed in interactive board
@@ -354,11 +382,39 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
       RouterSettings clone = baseSettings.clone();
       clone.tracePullTightAccuracy = this.getTracePullTightAccuracy();
       clone.automaticNeckdown = this.getAutomaticNeckdown();
+      if (this.lengthTuning != null) {
+        clone.lengthTuning = this.lengthTuning;
+      }
+      if (this.meanderMinAmplitudeMm != null) {
+        clone.meanderMinAmplitudeMm = this.meanderMinAmplitudeMm;
+      }
+      if (this.meanderMaxAmplitudeMm != null) {
+        clone.meanderMaxAmplitudeMm = this.meanderMaxAmplitudeMm;
+      }
+      if (this.meanderSpacingMm != null) {
+        clone.meanderSpacingMm = this.meanderSpacingMm;
+      }
+      if (this.meanderCornerStyle != null) {
+        clone.meanderCornerStyle = this.meanderCornerStyle;
+      }
+      if (this.meanderRadiusPercentage != null) {
+        clone.meanderRadiusPercentage = this.meanderRadiusPercentage;
+      }
+      if (this.meanderSingleSided != null) {
+        clone.meanderSingleSided = this.meanderSingleSided;
+      }
       return clone;
     }
     RouterSettings snapshot = new RouterSettings();
     snapshot.tracePullTightAccuracy = this.tracePullTightAccuracy;
     snapshot.automaticNeckdown = this.automaticNeckdown;
+    snapshot.lengthTuning = this.lengthTuning;
+    snapshot.meanderMinAmplitudeMm = this.meanderMinAmplitudeMm;
+    snapshot.meanderMaxAmplitudeMm = this.meanderMaxAmplitudeMm;
+    snapshot.meanderSpacingMm = this.meanderSpacingMm;
+    snapshot.meanderCornerStyle = this.meanderCornerStyle;
+    snapshot.meanderRadiusPercentage = this.meanderRadiusPercentage;
+    snapshot.meanderSingleSided = this.meanderSingleSided;
     return snapshot;
   }
 
@@ -383,6 +439,27 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
     }
     if (settings.automaticNeckdown != null) {
       this.automaticNeckdown = settings.automaticNeckdown;
+    }
+    if (settings.lengthTuning != null) {
+      this.lengthTuning = settings.lengthTuning;
+    }
+    if (settings.meanderMinAmplitudeMm != null) {
+      this.meanderMinAmplitudeMm = settings.meanderMinAmplitudeMm;
+    }
+    if (settings.meanderMaxAmplitudeMm != null) {
+      this.meanderMaxAmplitudeMm = settings.meanderMaxAmplitudeMm;
+    }
+    if (settings.meanderSpacingMm != null) {
+      this.meanderSpacingMm = settings.meanderSpacingMm;
+    }
+    if (settings.meanderCornerStyle != null) {
+      this.meanderCornerStyle = settings.meanderCornerStyle;
+    }
+    if (settings.meanderRadiusPercentage != null) {
+      this.meanderRadiusPercentage = settings.meanderRadiusPercentage;
+    }
+    if (settings.meanderSingleSided != null) {
+      this.meanderSingleSided = settings.meanderSingleSided;
     }
   }
 
@@ -698,6 +775,111 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
     }
     itemSelectionFilter.setSelected(itemType, value);
     pcs.firePropertyChange(PROP_ITEM_SELECTION_FILTER, null, itemSelectionFilter);
+  }
+
+  /** Returns whether length tuning is enabled. */
+  public Boolean isLengthTuningEnabled() {
+    return this.lengthTuning;
+  }
+
+  /** Sets whether length tuning is enabled. Fires {@link #PROP_LENGTH_TUNING}. */
+  public void setLengthTuningEnabled(Boolean value) {
+    if (readOnly) {
+      return;
+    }
+    Boolean old = this.lengthTuning;
+    this.lengthTuning = value;
+    pcs.firePropertyChange(PROP_LENGTH_TUNING, old, value);
+  }
+
+  /** Returns the minimum amplitude for trace length tuning meanders in millimeters. */
+  public Double getMeanderMinAmplitudeMm() {
+    return this.meanderMinAmplitudeMm;
+  }
+
+  /** Sets the minimum amplitude in millimeters. Fires {@link #PROP_MEANDER_MIN_AMPLITUDE_MM}. */
+  public void setMeanderMinAmplitudeMm(Double value) {
+    if (readOnly) {
+      return;
+    }
+    Double old = this.meanderMinAmplitudeMm;
+    this.meanderMinAmplitudeMm = value;
+    pcs.firePropertyChange(PROP_MEANDER_MIN_AMPLITUDE_MM, old, value);
+  }
+
+  /** Returns the maximum amplitude for trace length tuning meanders in millimeters. */
+  public Double getMeanderMaxAmplitudeMm() {
+    return this.meanderMaxAmplitudeMm;
+  }
+
+  /** Sets the maximum amplitude in millimeters. Fires {@link #PROP_MEANDER_MAX_AMPLITUDE_MM}. */
+  public void setMeanderMaxAmplitudeMm(Double value) {
+    if (readOnly) {
+      return;
+    }
+    Double old = this.meanderMaxAmplitudeMm;
+    this.meanderMaxAmplitudeMm = value;
+    pcs.firePropertyChange(PROP_MEANDER_MAX_AMPLITUDE_MM, old, value);
+  }
+
+  /** Returns the spacing between parallel meander traces in millimeters. */
+  public Double getMeanderSpacingMm() {
+    return this.meanderSpacingMm;
+  }
+
+  /** Sets the meander spacing in millimeters. Fires {@link #PROP_MEANDER_SPACING_MM}. */
+  public void setMeanderSpacingMm(Double value) {
+    if (readOnly) {
+      return;
+    }
+    Double old = this.meanderSpacingMm;
+    this.meanderSpacingMm = value;
+    pcs.firePropertyChange(PROP_MEANDER_SPACING_MM, old, value);
+  }
+
+  /** Returns the corner style for meander turns. */
+  public String getMeanderCornerStyle() {
+    return this.meanderCornerStyle;
+  }
+
+  /** Sets the corner style for meander turns. Fires {@link #PROP_MEANDER_CORNER_STYLE}. */
+  public void setMeanderCornerStyle(String value) {
+    if (readOnly) {
+      return;
+    }
+    String old = this.meanderCornerStyle;
+    this.meanderCornerStyle = value;
+    pcs.firePropertyChange(PROP_MEANDER_CORNER_STYLE, old, value);
+  }
+
+  /** Returns the corner radius percentage for meander turns. */
+  public Double getMeanderRadiusPercentage() {
+    return this.meanderRadiusPercentage;
+  }
+
+  /** Sets the corner radius percentage. Fires {@link #PROP_MEANDER_RADIUS_PERCENTAGE}. */
+  public void setMeanderRadiusPercentage(Double value) {
+    if (readOnly) {
+      return;
+    }
+    Double old = this.meanderRadiusPercentage;
+    this.meanderRadiusPercentage = value;
+    pcs.firePropertyChange(PROP_MEANDER_RADIUS_PERCENTAGE, old, value);
+  }
+
+  /** Returns whether meanders are single-sided. */
+  public Boolean isMeanderSingleSided() {
+    return this.meanderSingleSided;
+  }
+
+  /** Sets whether meanders are single-sided. Fires {@link #PROP_MEANDER_SINGLE_SIDED}. */
+  public void setMeanderSingleSided(Boolean value) {
+    if (readOnly) {
+      return;
+    }
+    Boolean old = this.meanderSingleSided;
+    this.meanderSingleSided = value;
+    pcs.firePropertyChange(PROP_MEANDER_SINGLE_SIDED, old, value);
   }
 
   /** Defines, if the setting attributes are allowed to be changed interactively or not. */
