@@ -148,6 +148,56 @@ class WorkspaceSettingsPropertyChangeTest {
     assertEquals(1, changedEvents.size());
   }
 
+  @Test
+  void lengthTuningSettersFireExpectedPropertyEvents() {
+    var ltEvents =
+        collectEvents(
+            WorkspaceSettings.PROP_LENGTH_TUNING, () -> settings.setLengthTuningEnabled(true));
+    assertEquals(1, ltEvents.size());
+    assertEquals(true, ltEvents.get(0).getNewValue());
+
+    var minAmpEvents =
+        collectEvents(
+            WorkspaceSettings.PROP_MEANDER_MIN_AMPLITUDE_MM,
+            () -> settings.setMeanderMinAmplitudeMm(0.3));
+    assertEquals(1, minAmpEvents.size());
+    assertEquals(0.3, minAmpEvents.get(0).getNewValue());
+
+    var maxAmpEvents =
+        collectEvents(
+            WorkspaceSettings.PROP_MEANDER_MAX_AMPLITUDE_MM,
+            () -> settings.setMeanderMaxAmplitudeMm(1.5));
+    assertEquals(1, maxAmpEvents.size());
+    assertEquals(1.5, maxAmpEvents.get(0).getNewValue());
+
+    var spacingEvents =
+        collectEvents(
+            WorkspaceSettings.PROP_MEANDER_SPACING_MM, () -> settings.setMeanderSpacingMm(0.8));
+    assertEquals(1, spacingEvents.size());
+    assertEquals(0.8, spacingEvents.get(0).getNewValue());
+
+    var styleEvents =
+        collectEvents(
+            WorkspaceSettings.PROP_MEANDER_CORNER_STYLE,
+            () -> settings.setMeanderCornerStyle("CHAMFER"));
+    assertEquals(1, styleEvents.size());
+    assertEquals("CHAMFER", styleEvents.get(0).getNewValue());
+
+    var radiusEvents =
+        collectEvents(
+            WorkspaceSettings.PROP_MEANDER_RADIUS_PERCENTAGE,
+            () -> settings.setMeanderRadiusPercentage(65.0));
+    assertEquals(1, radiusEvents.size());
+    assertEquals(65.0, radiusEvents.get(0).getNewValue());
+
+    var singleSidedEvents =
+        collectEvents(
+            WorkspaceSettings.PROP_MEANDER_SINGLE_SIDED,
+            () -> settings.setMeanderSingleSided(true));
+    assertEquals(1, singleSidedEvents.size());
+    assertEquals(true, singleSidedEvents.get(0).getNewValue());
+  }
+
   // -------------------------------------------------------------------------
   // Listener add/remove
   // -------------------------------------------------------------------------
