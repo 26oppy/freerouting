@@ -1,10 +1,16 @@
 package app.freerouting.autoroute.tuning;
 
 import app.freerouting.board.facade.RoutingBoard;
+import app.freerouting.board.model.items.DrillItem;
+import app.freerouting.board.model.items.Item;
 import app.freerouting.board.model.structure.AngleRestriction;
 import app.freerouting.board.model.structure.FixedState;
+import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.board.trace.TraceCorridorScanner;
 import app.freerouting.board.trace.TraceCorridorScanner.CandidateCorridor;
+import app.freerouting.geometry.planar.Direction;
+import app.freerouting.geometry.planar.FloatPoint;
+import app.freerouting.geometry.planar.IntPoint;
 import app.freerouting.geometry.planar.MeanderGenerator;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.geometry.planar.Polyline;
@@ -15,6 +21,7 @@ import app.freerouting.rules.MeanderPatternType;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetMeanderConstraint;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -159,13 +166,23 @@ public final class DifferentialPairSkewTuner {
         break;
       }
 
-      double effSpacing = Math.min(spacing, Math.max(300.0, currentSkew));
-      double minLength = Math.min(4.0 * spacing, Math.max(1000.0, 1.2 * effSpacing));
-      double scanMinAmp = Math.min(constraint.minAmplitude(), Math.max(50.0, currentSkew / 4.0));
+      // Compact spacing for localized skew compensation bumps
+      double effSpacing = Math.min(spacing, Math.max(300.0, Math.min(2000.0, currentSkew / 2.0)));
+      double minLength = Math.max(1000.0, 2.0 * effSpacing);
+      double scanMinAmp = Math.min(constraint.minAmplitude(), Math.max(30.0, currentSkew / 4.0));
 
+      // Locate bends where intra-pair phase divergence was introduced
+      List<Point> bends = findBendsOnNet(board, shorterNet);
+      Point primaryBend = (!bends.isEmpty()) ? bends.get(0) : null;
+
+      // Prioritize straight corridors immediately adjacent to or exiting the bend
       List<CandidateCorridor> corridors =
-          TraceCorridorScanner.scanCorridors(
-              board, shorterNet, minLength, scanMinAmp, constraint.maxAmplitude());
+          (primaryBend != null)
+              ? TraceCorridorScanner.scanCorridorsNearPoint(
+                  board, shorterNet, minLength, scanMinAmp, constraint.maxAmplitude(), primaryBend)
+              : TraceCorridorScanner.scanCorridors(
+                  board, shorterNet, minLength, scanMinAmp, constraint.maxAmplitude());
+
       if (corridors.isEmpty()) {
         break;
       }
@@ -176,7 +193,16 @@ public final class DifferentialPairSkewTuner {
           continue;
         }
 
-        double maxClear = corridor.maxClearDepth();
+        // Guarantee outward deflection away from the partner trace into open board space
+        Direction normalDir = determineOutwardNormal(corridor, board, partnerNet);
+        if (normalDir == null) {
+          normalDir = corridor.preferredNormal();
+        }
+
+        double maxClear =
+            (normalDir.equals(corridor.preferredNormal()) && corridor.maxClearDepth() > 0)
+                ? corridor.maxClearDepth()
+                : Math.max(corridor.leftClearDepth(), corridor.rightClearDepth());
         double startAmp = Math.min(maxClear, constraint.maxAmplitude());
         double minAmp = Math.min(scanMinAmp, Math.max(20.0, currentSkew / 4.0));
         if (startAmp < minAmp) {
@@ -186,7 +212,7 @@ public final class DifferentialPairSkewTuner {
         // Amplitude relaxation: start with best amplitude, step down if obstacles intervene
         double step = Math.max(100.0, (startAmp - minAmp) / 4.0);
         for (double testAmp = startAmp; testAmp >= minAmp; testAmp -= step) {
-          double passSpacing = Math.min(spacing, corridor.length() / 4.0);
+          double passSpacing = Math.min(effSpacing, corridor.length() / 4.0);
           NetMeanderConstraint stepConstraint =
               new NetMeanderConstraint(
                   minAmp,
@@ -202,7 +228,7 @@ public final class DifferentialPairSkewTuner {
                   corridor.endPoint(),
                   currentSkew,
                   stepConstraint,
-                  corridor.preferredNormal(),
+                  normalDir,
                   testAmp,
                   fortyFiveDegreeOnly);
 
@@ -256,6 +282,131 @@ public final class DifferentialPairSkewTuner {
     }
 
     return bumpsAdded;
+  }
+
+  /**
+   * Identifies all corners where a net changes direction (bends), representing points of curvature
+   * where intra-pair phase skew accumulates.
+   */
+  private static List<Point> findBendsOnNet(RoutingBoard board, Net net) {
+    List<Point> bends = new ArrayList<>();
+    Collection<Item> items = board.getConnectableItems(net.netNumber);
+    for (Item item : items) {
+      if (item instanceof PolylineTrace trace) {
+        Polyline poly = trace.polyline();
+        int count = poly.cornerCount();
+        for (int i = 1; i < count - 1; i++) {
+          Point prev = poly.corner(i - 1);
+          Point curr = poly.corner(i);
+          Point next = poly.corner(i + 1);
+          Direction d1 = Direction.getInstance(prev, curr);
+          Direction d2 = Direction.getInstance(curr, next);
+          if (d1 != null && d2 != null && !d1.equals(d2)) {
+            bends.add(curr);
+          }
+        }
+      }
+    }
+    return bends;
+  }
+
+  /**
+   * Determines the outward normal direction pointing away from the partner net to preserve
+   * differential coupling and odd-mode impedance.
+   */
+  private static Direction determineOutwardNormal(
+      CandidateCorridor corridor, RoutingBoard board, Net partnerNet) {
+    Direction baseDir = Direction.getInstance(corridor.startPoint(), corridor.endPoint());
+    if (baseDir == null) {
+      return corridor.preferredNormal();
+    }
+    Direction leftDir = baseDir.turn45Degree(2);
+    Direction rightDir = baseDir.turn45Degree(-2);
+
+    FloatPoint p0 = corridor.startPoint().toFloat();
+    FloatPoint p1 = corridor.endPoint().toFloat();
+    Point midPoint =
+        new IntPoint((int) Math.round((p0.x + p1.x) / 2.0), (int) Math.round((p0.y + p1.y) / 2.0));
+
+    Point nearestPartnerPoint = findNearestPointOnNet(board, partnerNet, midPoint);
+    if (nearestPartnerPoint == null) {
+      return corridor.preferredNormal();
+    }
+
+    FloatPoint mid = midPoint.toFloat();
+    FloatPoint partner = nearestPartnerPoint.toFloat();
+    double toPartnerX = partner.x - mid.x;
+    double toPartnerY = partner.y - mid.y;
+
+    FloatPoint leftVec = leftDir.getVector().toFloat();
+    double leftDot = leftVec.x * toPartnerX + leftVec.y * toPartnerY;
+
+    FloatPoint rightVec = rightDir.getVector().toFloat();
+    double rightDot = rightVec.x * toPartnerX + rightVec.y * toPartnerY;
+
+    // Normal with smaller/negative dot product points AWAY from the partner net
+    Direction outwardDir = (leftDot <= rightDot) ? leftDir : rightDir;
+    double outwardClear =
+        (outwardDir.equals(leftDir)) ? corridor.leftClearDepth() : corridor.rightClearDepth();
+
+    if (outwardClear >= 50.0) {
+      return outwardDir;
+    }
+    return corridor.preferredNormal();
+  }
+
+  /** Finds the closest point on any trace or terminal of the specified net to the query point. */
+  private static Point findNearestPointOnNet(RoutingBoard board, Net net, Point queryPoint) {
+    if (board == null || net == null || queryPoint == null) {
+      return null;
+    }
+    FloatPoint qp = queryPoint.toFloat();
+    Point bestPoint = null;
+    double minDistanceSq = Double.MAX_VALUE;
+
+    Collection<Item> items = board.getConnectableItems(net.netNumber);
+    for (Item item : items) {
+      if (item instanceof PolylineTrace trace) {
+        Polyline poly = trace.polyline();
+        int count = poly.cornerCount();
+        for (int i = 0; i < count - 1; i++) {
+          FloatPoint p0 = poly.corner(i).toFloat();
+          FloatPoint p1 = poly.corner(i + 1).toFloat();
+          double segLenSq = (p1.x - p0.x) * (p1.x - p0.x) + (p1.y - p0.y) * (p1.y - p0.y);
+          if (segLenSq <= 0.0) {
+            double dSq = qp.distanceSquare(p0);
+            if (dSq < minDistanceSq) {
+              minDistanceSq = dSq;
+              bestPoint = poly.corner(i);
+            }
+            continue;
+          }
+          double t =
+              Math.max(
+                  0.0,
+                  Math.min(
+                      1.0,
+                      ((qp.x - p0.x) * (p1.x - p0.x) + (qp.y - p0.y) * (p1.y - p0.y)) / segLenSq));
+          double projX = p0.x + t * (p1.x - p0.x);
+          double projY = p0.y + t * (p1.y - p0.y);
+          double dSq = (qp.x - projX) * (qp.x - projX) + (qp.y - projY) * (qp.y - projY);
+          if (dSq < minDistanceSq) {
+            minDistanceSq = dSq;
+            bestPoint = new IntPoint((int) Math.round(projX), (int) Math.round(projY));
+          }
+        }
+      } else if (item instanceof DrillItem drillItem) {
+        Point center = drillItem.getCenter();
+        if (center != null) {
+          double dSq = qp.distanceSquare(center.toFloat());
+          if (dSq < minDistanceSq) {
+            minDistanceSq = dSq;
+            bestPoint = center;
+          }
+        }
+      }
+    }
+    return bestPoint;
   }
 
   private static double toMm(RoutingBoard board, double boardUnits) {
