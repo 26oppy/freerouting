@@ -1,6 +1,5 @@
 package app.freerouting.board.trace;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -93,19 +92,24 @@ class TraceCorridorScannerTest extends RoutingFixtureTest {
           "Corridors should be ordered by capacity descending");
     }
 
-    // Verify distanceTo and scanCorridorsNearPoint
+    // Verify distanceTo and scanCorridorsNearPoint sorted by qualityScore descending
     Point targetPoint = posCorridors.get(0).startPoint();
     List<TraceCorridorScanner.CandidateCorridor> nearCorridors =
         TraceCorridorScanner.scanCorridorsNearPoint(
             job.board, mcuPos, 1000.0, 50.0, 5000.0, targetPoint);
     assertFalse(nearCorridors.isEmpty());
-    assertEquals(0.0, nearCorridors.get(0).distanceTo(targetPoint), 1e-6);
 
+    double charDist =
+        (job.board.communication != null)
+            ? 2.5
+                * job.board.communication.getResolution(
+                    app.freerouting.board.model.structure.Unit.MM)
+            : 25000.0;
     for (int i = 0; i < nearCorridors.size() - 1; i++) {
       assertTrue(
-          nearCorridors.get(i).distanceTo(targetPoint)
-              <= nearCorridors.get(i + 1).distanceTo(targetPoint),
-          "Near corridors should be sorted by distanceTo target ascending");
+          nearCorridors.get(i).qualityScore(targetPoint, charDist)
+              >= nearCorridors.get(i + 1).qualityScore(targetPoint, charDist) - 1e-6,
+          "Near corridors should be sorted by qualityScore descending");
     }
   }
 }

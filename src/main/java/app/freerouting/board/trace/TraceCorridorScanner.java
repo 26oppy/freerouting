@@ -100,6 +100,24 @@ public final class TraceCorridorScanner {
       double projY = s.y + t * (e.y - s.y);
       return Math.hypot(fp.x - projX, fp.y - projY);
     }
+
+    /**
+     * Computes an EDA quality-weighted score balancing corridor usable capacity with proximity to a
+     * target point. Spacious, high-clearance corridors near the target score highest, while cramped
+     * stubs are heavily penalized.
+     *
+     * @param targetPoint the reference point (e.g. uncoupled bend or pin)
+     * @param characteristicDistance distance normalization constant in board units
+     * @return quality score for sorting candidate corridors
+     */
+    public double qualityScore(Point targetPoint, double characteristicDistance) {
+      if (targetPoint == null) {
+        return capacity();
+      }
+      double dist = distanceTo(targetPoint);
+      double normDist = dist / Math.max(1000.0, characteristicDistance);
+      return capacity() / (1.0 + normDist);
+    }
   }
 
   /**
@@ -130,9 +148,10 @@ public final class TraceCorridorScanner {
       }
     }
 
-    // Safe minimum length required for segments touching terminal pads/vias to ensure
-    // meanders do not crowd breakout or entry zones
-    double minTerminalLength = Math.max(minLength * 1.5, 4.0 * minAmplitude);
+    double oneMm =
+        (board.communication != null)
+            ? board.communication.getResolution(app.freerouting.board.model.structure.Unit.MM)
+            : 10000.0;
 
     for (Item item : connectables) {
       if (!(item instanceof PolylineTrace trace)) {
@@ -151,8 +170,13 @@ public final class TraceCorridorScanner {
       int halfWidth = trace.getHalfWidth();
       int clearanceClass = trace.clearanceClassIndex();
 
-      boolean startsAtTerminal = isNearTerminal(trace.firstCorner(), terminalCenters);
-      boolean endsAtTerminal = isNearTerminal(trace.lastCorner(), terminalCenters);
+      double terminalTolerance = Math.max(500.0, 3.0 * halfWidth);
+      double leadInDistance = Math.max(oneMm, 6.0 * halfWidth);
+
+      boolean startsAtTerminal =
+          isNearTerminal(trace.firstCorner(), terminalCenters, terminalTolerance);
+      boolean endsAtTerminal =
+          isNearTerminal(trace.lastCorner(), terminalCenters, terminalTolerance);
 
       for (int i = 0; i < cornerCount - 1; i++) {
         Point p0 = trace.polyline().corner(i);
@@ -162,15 +186,18 @@ public final class TraceCorridorScanner {
         FloatPoint fp1 = p1.toFloat();
         double segLength = fp0.distance(fp1);
 
-        // Protect short terminal breakout and entry stubs from meandering
-        if (i == 0 && startsAtTerminal && segLength < minTerminalLength) {
-          continue;
-        }
-        if (i == cornerCount - 2 && endsAtTerminal && segLength < minTerminalLength) {
-          continue;
-        }
+        boolean segStartsAtTerminal =
+            (i == 0 && startsAtTerminal) || isNearTerminal(p0, terminalCenters, terminalTolerance);
+        boolean segEndsAtTerminal =
+            (i == cornerCount - 2 && endsAtTerminal)
+                || isNearTerminal(p1, terminalCenters, terminalTolerance);
 
-        if (segLength < minLength) {
+        double leadInStart = segStartsAtTerminal ? leadInDistance : 0.0;
+        double leadInEnd = segEndsAtTerminal ? leadInDistance : 0.0;
+        double totalLeadIn = leadInStart + leadInEnd;
+
+        // Reject stubs too short to accommodate required terminal breakout keepout plus meanders
+        if (segLength < minLength + totalLeadIn) {
           continue;
         }
 
@@ -178,6 +205,36 @@ public final class TraceCorridorScanner {
         if (baseDir == null || !baseDir.isMultipleOf45Degree()) {
           continue;
         }
+
+        // Trim segment endpoints away from terminals so meanders never violate breakout keepouts
+        Point effStart = p0;
+        Point effEnd = p1;
+        double effLength = segLength;
+
+        if (totalLeadIn > 0.0) {
+          double ux = (fp1.x - fp0.x) / segLength;
+          double uy = (fp1.y - fp0.y) / segLength;
+
+          if (segStartsAtTerminal) {
+            effStart =
+                new IntPoint(
+                    (int) Math.round(fp0.x + ux * leadInStart),
+                    (int) Math.round(fp0.y + uy * leadInStart));
+          }
+          if (segEndsAtTerminal) {
+            effEnd =
+                new IntPoint(
+                    (int) Math.round(fp1.x - ux * leadInEnd),
+                    (int) Math.round(fp1.y - uy * leadInEnd));
+          }
+          effLength = effStart.toFloat().distance(effEnd.toFloat());
+          if (effLength < minLength) {
+            continue;
+          }
+        }
+
+        FloatPoint effFp0 = effStart.toFloat();
+        FloatPoint effFp1 = effEnd.toFloat();
 
         // Left normal (+90) and right normal (-90)
         Direction leftDir = baseDir.turn45Degree(2);
@@ -187,14 +244,14 @@ public final class TraceCorridorScanner {
         double[] leftOffset = getNormalOffset(leftDir, probeDist);
         double[] rightOffset = getNormalOffset(rightDir, probeDist);
 
-        // Sample clearance at points along segment to detect intruding obstacles
+        // Sample clearance at points along trimmed segment to detect intruding obstacles
         double leftClear = probeDist;
         double rightClear = probeDist;
         for (double f : SAMPLE_FRACTIONS) {
           IntPoint samplePoint =
               new IntPoint(
-                  (int) Math.round(fp0.x + f * (fp1.x - fp0.x)),
-                  (int) Math.round(fp0.y + f * (fp1.y - fp0.y)));
+                  (int) Math.round(effFp0.x + f * (effFp1.x - effFp0.x)),
+                  (int) Math.round(effFp0.y + f * (effFp1.y - effFp0.y)));
           double curLeft =
               probeClearance(
                   board,
@@ -220,7 +277,8 @@ public final class TraceCorridorScanner {
         }
 
         if (Math.max(leftClear, rightClear) >= minAmplitude) {
-          candidates.add(new CandidateCorridor(trace, i, p0, p1, segLength, leftClear, rightClear));
+          candidates.add(
+              new CandidateCorridor(trace, i, effStart, effEnd, effLength, leftClear, rightClear));
         }
       }
     }
@@ -235,9 +293,10 @@ public final class TraceCorridorScanner {
   }
 
   /**
-   * Scans candidate straight corridors for the specified net and sorts them by proximity to a
-   * target point (e.g. an uncoupled differential pair bend or pin), prioritizing corridors with
-   * adequate capacity closest to the target.
+   * Scans candidate straight corridors for the specified net and sorts them using an EDA quality
+   * metric that balances usable capacity with proximity to a target point (e.g. an uncoupled
+   * differential pair bend or pin), prioritizing spacious, high-clearance corridors near the target
+   * over cramped stubs.
    *
    * @param board the routing board
    * @param net the net whose traces should be scanned
@@ -245,7 +304,7 @@ public final class TraceCorridorScanner {
    * @param minAmplitude minimum required amplitude
    * @param maxTestAmplitude maximum amplitude depth to probe
    * @param targetPoint the reference point to measure proximity against
-   * @return list of candidate corridors sorted by proximity to targetPoint ascending
+   * @return list of candidate corridors sorted by EDA quality score descending
    */
   public static List<CandidateCorridor> scanCorridorsNearPoint(
       RoutingBoard board,
@@ -259,14 +318,20 @@ public final class TraceCorridorScanner {
     if (corridors.isEmpty() || targetPoint == null) {
       return corridors;
     }
+    double charDist =
+        (board != null && board.communication != null)
+            ? 2.5 * board.communication.getResolution(app.freerouting.board.model.structure.Unit.MM)
+            : 25000.0;
+
     List<CandidateCorridor> sorted = new ArrayList<>(corridors);
     sorted.sort(
-        Comparator.comparingDouble((CandidateCorridor c) -> c.distanceTo(targetPoint))
+        Comparator.comparingDouble((CandidateCorridor c) -> c.qualityScore(targetPoint, charDist))
+            .reversed()
             .thenComparing(Comparator.comparingDouble(CandidateCorridor::capacity).reversed()));
     return sorted;
   }
 
-  private static boolean isNearTerminal(Point point, Set<Point> terminalCenters) {
+  private static boolean isNearTerminal(Point point, Set<Point> terminalCenters, double tolerance) {
     if (point == null || terminalCenters.isEmpty()) {
       return false;
     }
@@ -275,7 +340,7 @@ public final class TraceCorridorScanner {
     }
     FloatPoint fp = point.toFloat();
     for (Point tc : terminalCenters) {
-      if (fp.distance(tc.toFloat()) <= 5.0) {
+      if (fp.distance(tc.toFloat()) <= tolerance) {
         return true;
       }
     }
