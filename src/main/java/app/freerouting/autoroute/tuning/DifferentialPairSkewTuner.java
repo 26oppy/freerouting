@@ -166,9 +166,18 @@ public final class DifferentialPairSkewTuner {
         break;
       }
 
-      // Compact spacing for localized skew compensation bumps
-      double effSpacing = Math.min(spacing, Math.max(300.0, Math.min(2000.0, currentSkew / 2.0)));
-      double minLength = Math.max(1000.0, 2.0 * effSpacing);
+      // Determine physical DRC clearance floor: 2 * halfWidth + clearance
+      int defaultHalfWidth =
+          board.rules != null ? board.rules.getTraceHalfWidth(shorterNet.netNumber, 0) : 1000;
+      int clClass =
+          shorterNet.getNetClass() != null ? shorterNet.getNetClass().getTraceClearanceClass() : 0;
+      int minClearance =
+          board.rules != null && board.rules.clearanceMatrix != null
+              ? board.rules.clearanceMatrix.getValue(clClass, clClass, 0, false)
+              : 1500;
+      double minPhysicalSpacing = 2.0 * defaultHalfWidth + minClearance;
+      double effSpacing = Math.max(spacing > 0 ? spacing : 6000.0, minPhysicalSpacing);
+      double minLength = 3.0 * effSpacing;
       double scanMinAmp = Math.min(constraint.minAmplitude(), Math.max(30.0, currentSkew / 4.0));
 
       // Locate bends where intra-pair phase divergence was introduced
@@ -209,10 +218,23 @@ public final class DifferentialPairSkewTuner {
           continue;
         }
 
+        int traceHalfWidth = corridor.trace().getHalfWidth();
+        int traceClClass = corridor.trace().clearanceClassIndex();
+        int traceLayer = corridor.trace().getLayer();
+        int traceClearance =
+            (board.rules != null && board.rules.clearanceMatrix != null)
+                ? board.rules.clearanceMatrix.getValue(
+                    traceClClass, traceClClass, traceLayer, false)
+                : 0;
+        double corridorMinSpacing = 2.0 * traceHalfWidth + traceClearance;
+        double passSpacing = Math.max(effSpacing, corridorMinSpacing);
+        if (corridor.length() < 3.0 * passSpacing) {
+          continue;
+        }
+
         // Amplitude relaxation: start with best amplitude, step down if obstacles intervene
         double step = Math.max(100.0, (startAmp - minAmp) / 4.0);
         for (double testAmp = startAmp; testAmp >= minAmp; testAmp -= step) {
-          double passSpacing = Math.min(effSpacing, corridor.length() / 4.0);
           NetMeanderConstraint stepConstraint =
               new NetMeanderConstraint(
                   minAmp,

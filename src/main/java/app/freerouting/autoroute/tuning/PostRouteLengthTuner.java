@@ -221,8 +221,17 @@ public final class PostRouteLengthTuner {
     int maxIterations = 20;
 
     NetMeanderConstraint meanderConstraint = net.getMeanderConstraint();
-    double spacing = meanderConstraint.spacing() > 0 ? meanderConstraint.spacing() : 600.0;
-    double minLength = Math.min(4.0 * spacing, Math.max(1500.0, 1.5 * spacing));
+    int defaultHalfWidth =
+        board.rules != null ? board.rules.getTraceHalfWidth(net.netNumber, 0) : 1000;
+    int clClass = net.getNetClass() != null ? net.getNetClass().getTraceClearanceClass() : 0;
+    int minClearance =
+        board.rules != null && board.rules.clearanceMatrix != null
+            ? board.rules.clearanceMatrix.getValue(clClass, clClass, 0, false)
+            : 1500;
+    double minPhysicalSpacing = 2.0 * defaultHalfWidth + minClearance;
+    double baseSpacing = meanderConstraint.spacing() > 0 ? meanderConstraint.spacing() : 6000.0;
+    double effSpacing = Math.max(baseSpacing, minPhysicalSpacing);
+    double minLength = 3.0 * effSpacing;
     double scanMinAmp = Math.min(250.0, meanderConstraint.minAmplitude());
 
     for (int iter = 0; iter < maxIterations; iter++) {
@@ -243,6 +252,20 @@ public final class PostRouteLengthTuner {
       boolean replacedAny = false;
       for (CandidateCorridor corridor : corridors) {
         if (corridor.trace() == null || !corridor.trace().isOnTheBoard()) {
+          continue;
+        }
+
+        int traceHalfWidth = corridor.trace().getHalfWidth();
+        int traceClClass = corridor.trace().clearanceClassIndex();
+        int traceLayer = corridor.trace().getLayer();
+        int traceClearance =
+            (board.rules != null && board.rules.clearanceMatrix != null)
+                ? board.rules.clearanceMatrix.getValue(
+                    traceClClass, traceClClass, traceLayer, false)
+                : 0;
+        double corridorMinSpacing = 2.0 * traceHalfWidth + traceClearance;
+        double corridorSpacing = Math.max(effSpacing, corridorMinSpacing);
+        if (corridor.length() < 3.0 * corridorSpacing) {
           continue;
         }
 
@@ -288,13 +311,21 @@ public final class PostRouteLengthTuner {
 
           // Smoothly distribute large deficits across multiple corridors when available
           double targetForCorridor = remainingDeficit;
-          if (corridors.size() > 1 && remainingDeficit > 4.0 * (2.0 * spacing)) {
+          if (corridors.size() > 1 && remainingDeficit > 4.0 * (2.0 * corridorSpacing)) {
             targetForCorridor =
-                Math.min(remainingDeficit, Math.max(remainingDeficit / 2.0, 3.0 * (2.0 * spacing)));
+                Math.min(
+                    remainingDeficit,
+                    Math.max(remainingDeficit / 2.0, 3.0 * (2.0 * corridorSpacing)));
           }
 
           NetMeanderConstraint activeConstraint =
-              config.forceSingleSided ? meanderConstraint.withSingleSided(true) : meanderConstraint;
+              new NetMeanderConstraint(
+                  meanderConstraint.minAmplitude(),
+                  meanderConstraint.maxAmplitude(),
+                  corridorSpacing,
+                  meanderConstraint.cornerStyle(),
+                  meanderConstraint.radiusPercentage(),
+                  config.forceSingleSided);
 
           double step = Math.max(100.0, (startAmp - minAmp) / 4.0);
           for (double testAmp = startAmp; testAmp >= minAmp; testAmp -= step) {
