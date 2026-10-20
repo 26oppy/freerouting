@@ -56,6 +56,11 @@ public final class TraceCorridorScanner {
       return Math.max(leftClearDepth, rightClearDepth);
     }
 
+    /** Returns the usable area capacity score (length * maxClearDepth). */
+    public double capacity() {
+      return length * maxClearDepth();
+    }
+
     /** Returns true if at least one side has clear depth >= minAmplitude. */
     public boolean hasMinimumClearance(double minAmplitude) {
       return maxClearDepth() >= minAmplitude;
@@ -70,6 +75,30 @@ public final class TraceCorridorScanner {
       return (leftClearDepth >= rightClearDepth)
           ? baseDir.turn45Degree(2)
           : baseDir.turn45Degree(-2);
+    }
+
+    /**
+     * Calculates the minimum Euclidean distance from this corridor segment to a target point.
+     * Useful for prioritizing corridors closest to uncoupled differential pair bends.
+     */
+    public double distanceTo(Point point) {
+      if (point == null) {
+        return Double.MAX_VALUE;
+      }
+      FloatPoint fp = point.toFloat();
+      FloatPoint s = startPoint.toFloat();
+      FloatPoint e = endPoint.toFloat();
+      double segLenSq = (e.x - s.x) * (e.x - s.x) + (e.y - s.y) * (e.y - s.y);
+      if (segLenSq <= 0.0) {
+        return fp.distance(s);
+      }
+      double t =
+          Math.max(
+              0.0,
+              Math.min(1.0, ((fp.x - s.x) * (e.x - s.x) + (fp.y - s.y) * (e.y - s.y)) / segLenSq));
+      double projX = s.x + t * (e.x - s.x);
+      double projY = s.y + t * (e.y - s.y);
+      return Math.hypot(fp.x - projX, fp.y - projY);
     }
   }
 
@@ -101,6 +130,10 @@ public final class TraceCorridorScanner {
       }
     }
 
+    // Safe minimum length required for segments touching terminal pads/vias to ensure
+    // meanders do not crowd breakout or entry zones
+    double minTerminalLength = Math.max(minLength * 1.5, 4.0 * minAmplitude);
+
     for (Item item : connectables) {
       if (!(item instanceof PolylineTrace trace)) {
         continue;
@@ -118,24 +151,24 @@ public final class TraceCorridorScanner {
       int halfWidth = trace.getHalfWidth();
       int clearanceClass = trace.clearanceClassIndex();
 
-      boolean startsAtTerminal = terminalCenters.contains(trace.firstCorner());
-      boolean endsAtTerminal = terminalCenters.contains(trace.lastCorner());
+      boolean startsAtTerminal = isNearTerminal(trace.firstCorner(), terminalCenters);
+      boolean endsAtTerminal = isNearTerminal(trace.lastCorner(), terminalCenters);
 
       for (int i = 0; i < cornerCount - 1; i++) {
-        // Protect terminal pad exit segments from meandering
-        if (i == 0 && startsAtTerminal) {
-          continue;
-        }
-        if (i == cornerCount - 2 && endsAtTerminal) {
-          continue;
-        }
-
         Point p0 = trace.polyline().corner(i);
         Point p1 = trace.polyline().corner(i + 1);
 
         FloatPoint fp0 = p0.toFloat();
         FloatPoint fp1 = p1.toFloat();
         double segLength = fp0.distance(fp1);
+
+        // Protect short terminal breakout and entry stubs from meandering
+        if (i == 0 && startsAtTerminal && segLength < minTerminalLength) {
+          continue;
+        }
+        if (i == cornerCount - 2 && endsAtTerminal && segLength < minTerminalLength) {
+          continue;
+        }
 
         if (segLength < minLength) {
           continue;
@@ -151,8 +184,10 @@ public final class TraceCorridorScanner {
         Direction rightDir = baseDir.turn45Degree(-2);
 
         double probeDist = (maxTestAmplitude > 0) ? maxTestAmplitude : 2000.0;
+        double[] leftOffset = getNormalOffset(leftDir, probeDist);
+        double[] rightOffset = getNormalOffset(rightDir, probeDist);
 
-        // Sample clearance at 3 points along segment (25%, 50%, 75%) to detect intruding obstacles
+        // Sample clearance at points along segment to detect intruding obstacles
         double leftClear = probeDist;
         double rightClear = probeDist;
         for (double f : SAMPLE_FRACTIONS) {
@@ -164,7 +199,7 @@ public final class TraceCorridorScanner {
               probeClearance(
                   board,
                   samplePoint,
-                  leftDir,
+                  leftOffset,
                   probeDist,
                   layer,
                   netNoArr,
@@ -174,7 +209,7 @@ public final class TraceCorridorScanner {
               probeClearance(
                   board,
                   samplePoint,
-                  rightDir,
+                  rightOffset,
                   probeDist,
                   layer,
                   netNoArr,
@@ -190,20 +225,67 @@ public final class TraceCorridorScanner {
       }
     }
 
-    // Sort corridors by longest available length first
-    candidates.sort(Comparator.comparingDouble(CandidateCorridor::length).reversed());
+    // Sort corridors primarily by usable area capacity descending, tie-breaking by length
+    // descending
+    candidates.sort(
+        Comparator.comparingDouble(CandidateCorridor::capacity)
+            .thenComparingDouble(CandidateCorridor::length)
+            .reversed());
     return candidates;
   }
 
-  private static double probeClearance(
+  /**
+   * Scans candidate straight corridors for the specified net and sorts them by proximity to a
+   * target point (e.g. an uncoupled differential pair bend or pin), prioritizing corridors with
+   * adequate capacity closest to the target.
+   *
+   * @param board the routing board
+   * @param net the net whose traces should be scanned
+   * @param minLength minimum straight segment length required
+   * @param minAmplitude minimum required amplitude
+   * @param maxTestAmplitude maximum amplitude depth to probe
+   * @param targetPoint the reference point to measure proximity against
+   * @return list of candidate corridors sorted by proximity to targetPoint ascending
+   */
+  public static List<CandidateCorridor> scanCorridorsNearPoint(
       RoutingBoard board,
-      IntPoint fromPoint,
-      Direction normalDir,
-      double probeDistance,
-      int layer,
-      int[] netNumbers,
-      int halfWidth,
-      int clearanceClass) {
+      Net net,
+      double minLength,
+      double minAmplitude,
+      double maxTestAmplitude,
+      Point targetPoint) {
+    List<CandidateCorridor> corridors =
+        scanCorridors(board, net, minLength, minAmplitude, maxTestAmplitude);
+    if (corridors.isEmpty() || targetPoint == null) {
+      return corridors;
+    }
+    List<CandidateCorridor> sorted = new ArrayList<>(corridors);
+    sorted.sort(
+        Comparator.comparingDouble((CandidateCorridor c) -> c.distanceTo(targetPoint))
+            .thenComparing(Comparator.comparingDouble(CandidateCorridor::capacity).reversed()));
+    return sorted;
+  }
+
+  private static boolean isNearTerminal(Point point, Set<Point> terminalCenters) {
+    if (point == null || terminalCenters.isEmpty()) {
+      return false;
+    }
+    if (terminalCenters.contains(point)) {
+      return true;
+    }
+    FloatPoint fp = point.toFloat();
+    for (Point tc : terminalCenters) {
+      if (fp.distance(tc.toFloat()) <= 5.0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static double[] getNormalOffset(Direction normalDir, double distance) {
+    if (normalDir == null || distance <= 0.0) {
+      return new double[] {0.0, 0.0};
+    }
     double vx;
     double vy;
     if (normalDir instanceof IntDirection intDir) {
@@ -216,14 +298,28 @@ public final class TraceCorridorScanner {
     }
     double normLen = Math.hypot(vx, vy);
     if (normLen <= 0.0) {
+      return new double[] {0.0, 0.0};
+    }
+    return new double[] {(vx / normLen) * distance, (vy / normLen) * distance};
+  }
+
+  private static double probeClearance(
+      RoutingBoard board,
+      IntPoint fromPoint,
+      double[] normalOffset,
+      double probeDistance,
+      int layer,
+      int[] netNumbers,
+      int halfWidth,
+      int clearanceClass) {
+    if (normalOffset == null || (normalOffset[0] == 0.0 && normalOffset[1] == 0.0)) {
       return 0.0;
     }
 
-    double dx = (vx / normLen) * probeDistance;
-    double dy = (vy / normLen) * probeDistance;
-
     IntPoint targetPoint =
-        new IntPoint((int) Math.round(fromPoint.x + dx), (int) Math.round(fromPoint.y + dy));
+        new IntPoint(
+            (int) Math.round(fromPoint.x + normalOffset[0]),
+            (int) Math.round(fromPoint.y + normalOffset[1]));
     double allowed =
         board.checkTraceSegment(
             fromPoint, targetPoint, layer, netNumbers, halfWidth, clearanceClass, false);
