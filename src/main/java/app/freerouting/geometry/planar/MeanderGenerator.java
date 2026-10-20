@@ -101,13 +101,15 @@ public final class MeanderGenerator {
       return null;
     }
 
-    double effSpacing = spacing;
-    if (effSpacing * 4.0 > length) {
-      effSpacing = Math.max(300.0, length / 4.0);
+    double effSpacing = spacing > 0 ? spacing : 600.0;
+    // A single cycle needs 2 * effSpacing cycle width plus at least 0.5 * effSpacing margin at each
+    // end.
+    if (length < 3.0 * effSpacing) {
+      return null;
     }
 
-    // A cycle spans 2 * effSpacing along baseline. We leave 1 * effSpacing margin at each end.
-    double usableLength = length - 2.0 * effSpacing;
+    // A cycle spans 2 * effSpacing along baseline. We leave margin at each end.
+    double usableLength = length - effSpacing;
     int maxCycles = (int) Math.floor(usableLength / (2.0 * effSpacing));
     if (maxCycles < 1) {
       return null;

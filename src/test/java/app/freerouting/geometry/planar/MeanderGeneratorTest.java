@@ -162,7 +162,7 @@ class MeanderGeneratorTest {
 
     @Test
     void returnsNullWhenSegmentIsTooShort() {
-      // 1000 units is shorter than required 2 * spacing margin + 2 * spacing cycle
+      // 1000 units is shorter than required 3 * spacing (3 * 600 = 1800)
       Point start = new IntPoint(0, 0);
       Point end = new IntPoint(1000, 0);
 
@@ -173,6 +173,53 @@ class MeanderGeneratorTest {
           MeanderGenerator.generateMeander(start, end, 500.0, constraint, null, 1000.0, true);
 
       assertNull(result);
+    }
+
+    @Test
+    void preservesConfiguredWideSpacingWithoutShrinking() {
+      // 10000 units segment with 2000 spacing (2 mm)
+      Point start = new IntPoint(0, 0);
+      Point end = new IntPoint(10000, 0);
+
+      NetMeanderConstraint constraint =
+          new NetMeanderConstraint(500.0, 2000.0, 2000.0, CornerStyle.CHAMFER, 0.0, true);
+
+      Point[] result =
+          MeanderGenerator.generateMeander(
+              start, end, 1500.0, constraint, Direction.UP, 2000.0, true);
+
+      assertNotNull(result, "Meander should fit in 10000 unit segment with 2000 spacing");
+      // Find corners at excursion peaks: distance between outbound leg and return leg must match
+      // spacing (2000)
+      int foundSpacing = -1;
+      for (int i = 0; i < result.length - 1; i++) {
+        IntPoint p1 = (IntPoint) result[i];
+        IntPoint p2 = (IntPoint) result[i + 1];
+        if (p1.y > 0 && p2.y > 0 && p1.y == p2.y) {
+          foundSpacing = Math.abs(p2.x - p1.x);
+          break;
+        }
+      }
+      assertEquals(
+          2000, foundSpacing, "Meander leg spacing must strictly equal user-configured 2000 units");
+    }
+
+    @Test
+    void returnsNullRatherThanCrushingSpacingWhenSegmentTooShortForSpacing() {
+      // Segment of length 4000 cannot fit 2000 spacing (requires 3 * 2000 = 6000)
+      Point start = new IntPoint(0, 0);
+      Point end = new IntPoint(4000, 0);
+
+      NetMeanderConstraint constraint =
+          new NetMeanderConstraint(500.0, 2000.0, 2000.0, CornerStyle.CHAMFER, 0.0, true);
+
+      Point[] result =
+          MeanderGenerator.generateMeander(
+              start, end, 1000.0, constraint, Direction.UP, 2000.0, true);
+
+      assertNull(
+          result,
+          "Must return null instead of shrinking 2000 spacing down to fit into 4000 segment");
     }
 
     @Test
