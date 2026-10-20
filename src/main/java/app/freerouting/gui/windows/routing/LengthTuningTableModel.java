@@ -1,6 +1,8 @@
 package app.freerouting.gui.windows.routing;
 
 import app.freerouting.board.facade.RoutingBoard;
+import app.freerouting.board.model.structure.Unit;
+import app.freerouting.board.state.CoordinateTransform;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetLengthConstraint;
 import java.util.ArrayList;
@@ -54,12 +56,22 @@ public class LengthTuningTableModel extends AbstractTableModel {
   private String filterText = "";
   private boolean showConstrainedOnly = false;
   private boolean showUnsatisfiedOnly = false;
+  private String unitString = "mm";
 
   public LengthTuningTableModel() {}
 
-  /** Populates table rows by querying all nets on the specified board. */
+  /** Populates table rows by querying all nets on the specified board using default transform. */
   public void refreshData(RoutingBoard board) {
+    refreshData(board, null);
+  }
+
+  /** Populates table rows using the specified coordinate transform for user unit display. */
+  public void refreshData(RoutingBoard board, CoordinateTransform coordinateTransform) {
     allRows.clear();
+    CoordinateTransform ct =
+        coordinateTransform != null ? coordinateTransform : resolveCoordinateTransform(board);
+    this.unitString = ct != null && ct.userUnit != null ? ct.userUnit.toString() : "mm";
+
     if (board == null || board.rules == null || board.rules.nets == null) {
       applyFilter();
       return;
@@ -72,23 +84,23 @@ public class LengthTuningTableModel extends AbstractTableModel {
         continue;
       }
 
-      double currentMm = toMm(board, net.getTraceLength());
+      double currentLength = toUser(ct, net.getTraceLength());
       NetLengthConstraint constraint = net.getLengthConstraint();
 
-      Double targetMm = null;
-      Double tolMm = null;
+      Double targetLength = null;
+      Double tol = null;
       String status = "Unconstrained";
       boolean isConstrained = false;
       boolean isUnsatisfied = false;
 
       if (constraint != null && constraint.isConstrained()) {
         isConstrained = true;
-        targetMm = toMm(board, constraint.targetLength());
+        targetLength = toUser(ct, constraint.targetLength());
         if (constraint.hasMin() && constraint.hasMax()) {
-          tolMm = toMm(board, (constraint.maxLength() - constraint.minLength()) / 2.0);
+          tol = toUser(ct, (constraint.maxLength() - constraint.minLength()) / 2.0);
         }
 
-        if (currentMm <= 0.0) {
+        if (currentLength <= 0.0) {
           status = "Unrouted";
           isUnsatisfied = true;
         } else if (constraint.isSatisfied(net.getTraceLength())) {
@@ -100,12 +112,12 @@ public class LengthTuningTableModel extends AbstractTableModel {
           status = "Excess";
           isUnsatisfied = true;
         }
-      } else if (currentMm <= 0.0) {
+      } else if (currentLength <= 0.0) {
         status = "Unrouted";
       }
 
       allRows.add(
-          new NetRow(net, currentMm, targetMm, tolMm, status, isConstrained, isUnsatisfied));
+          new NetRow(net, currentLength, targetLength, tol, status, isConstrained, isUnsatisfied));
     }
 
     applyFilter();
@@ -138,6 +150,30 @@ public class LengthTuningTableModel extends AbstractTableModel {
       filteredRows.add(row);
     }
     fireTableDataChanged();
+  }
+
+  public int getTotalNetCount() {
+    return allRows.size();
+  }
+
+  public int getConstrainedCount() {
+    int count = 0;
+    for (NetRow row : allRows) {
+      if (row.isConstrained) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  public int getUnsatisfiedCount() {
+    int count = 0;
+    for (NetRow row : allRows) {
+      if (row.isUnsatisfied) {
+        count++;
+      }
+    }
+    return count;
   }
 
   public NetRow getRowAt(int rowIndex) {
@@ -176,24 +212,33 @@ public class LengthTuningTableModel extends AbstractTableModel {
     return switch (columnIndex) {
       case 0 -> row.name;
       case 1 -> row.className;
-      case 2 -> String.format(Locale.US, "%.2f mm", row.currentLengthMm);
+      case 2 -> String.format(Locale.US, "%.2f %s", row.currentLengthMm, unitString);
       case 3 ->
           row.targetLengthMm != null
-              ? String.format(Locale.US, "%.2f mm", row.targetLengthMm)
+              ? String.format(Locale.US, "%.2f %s", row.targetLengthMm, unitString)
               : "—";
       case 4 ->
-          row.toleranceMm != null ? String.format(Locale.US, "±%.2f mm", row.toleranceMm) : "—";
+          row.toleranceMm != null
+              ? String.format(Locale.US, "±%.2f %s", row.toleranceMm, unitString)
+              : "—";
       case 5 -> row.status;
       default -> "";
     };
   }
 
-  private static double toMm(RoutingBoard board, double boardUnits) {
-    if (board != null
-        && board.communication != null
-        && board.communication.coordinateTransform != null) {
-      return board.communication.coordinateTransform.boardToDsn(boardUnits);
+  public static CoordinateTransform resolveCoordinateTransform(RoutingBoard board) {
+    if (board != null && board.communication != null) {
+      double unitFactor =
+          board.communication.coordinateTransform != null
+              ? board.communication.coordinateTransform.boardToDsn(1)
+              : 1.0;
+      Unit u = board.communication.unit != null ? board.communication.unit : Unit.MM;
+      return new CoordinateTransform(1.0, u, unitFactor, u);
     }
-    return boardUnits;
+    return null;
+  }
+
+  private static double toUser(CoordinateTransform ct, double boardUnits) {
+    return ct != null ? ct.boardToUser(boardUnits) : boardUnits;
   }
 }

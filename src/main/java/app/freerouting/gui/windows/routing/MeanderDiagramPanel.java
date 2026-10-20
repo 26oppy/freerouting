@@ -38,6 +38,7 @@ public class MeanderDiagramPanel extends JPanel {
   private double radiusPercentage = 80.0;
   private boolean singleSided = false;
   private boolean diffPairMode = false;
+  private String unitString = "mm";
 
   /** Creates a new meander diagram preview panel. */
   public MeanderDiagramPanel() {
@@ -54,12 +55,25 @@ public class MeanderDiagramPanel extends JPanel {
       double radiusPct,
       boolean singleSided,
       boolean diffPairMode) {
+    updateParameters(style, amplitude, spacing, radiusPct, singleSided, diffPairMode, "mm");
+  }
+
+  /** Updates the displayed parameters with active user unit and triggers a repaint. */
+  public void updateParameters(
+      CornerStyle style,
+      double amplitude,
+      double spacing,
+      double radiusPct,
+      boolean singleSided,
+      boolean diffPairMode,
+      String unit) {
     this.cornerStyle = style != null ? style : CornerStyle.FILLET;
     this.amplitudeMm = amplitude > 0 ? amplitude : 1.0;
     this.spacingMm = spacing > 0 ? spacing : 0.6;
     this.radiusPercentage = Math.max(0.0, Math.min(100.0, radiusPct));
     this.singleSided = singleSided;
     this.diffPairMode = diffPairMode;
+    this.unitString = (unit != null && !unit.isBlank()) ? unit : "mm";
     repaint();
   }
 
@@ -76,6 +90,7 @@ public class MeanderDiagramPanel extends JPanel {
       int height = getHeight();
 
       drawGrid(g2, width, height);
+      drawHeaderBanner(g2, width);
 
       if (diffPairMode) {
         drawDiffPairDiagram(g2, width, height);
@@ -87,22 +102,42 @@ public class MeanderDiagramPanel extends JPanel {
     }
   }
 
+  private void drawHeaderBanner(Graphics2D g2, int width) {
+    g2.setColor(new Color(36, 39, 45));
+    g2.fillRect(0, 0, width, 26);
+    g2.setColor(new Color(55, 60, 70));
+    g2.drawLine(0, 26, width, 26);
+
+    g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+    g2.setColor(TEXT_COLOR);
+    String styleStr =
+        String.format(
+            Locale.US,
+            "Style: %s (%.1f%% %s) | %s",
+            cornerStyle.name(),
+            radiusPercentage,
+            cornerStyle == CornerStyle.FILLET ? "Radius" : "Bevel",
+            singleSided ? "Single-Sided" : "Two-Sided");
+    g2.drawString(styleStr, 12, 17);
+  }
+
   private void drawGrid(Graphics2D g2, int width, int height) {
     g2.setColor(GRID_COLOR);
     g2.setStroke(new BasicStroke(1.0f));
     int step = 20;
     for (int x = 0; x < width; x += step) {
-      g2.drawLine(x, 0, x, height);
+      g2.drawLine(x, 26, x, height);
     }
-    for (int y = 0; y < height; y += step) {
+    for (int y = 26; y < height; y += step) {
       g2.drawLine(0, y, width, y);
     }
   }
 
   private void drawSingleNetDiagram(Graphics2D g2, int width, int height) {
-    int baselineY = singleSided ? height - 55 : height / 2;
-    int ampPx = Math.min(singleSided ? height - 90 : (height / 2) - 40, (int) (amplitudeMm * 35));
-    ampPx = Math.max(25, ampPx);
+    int topMargin = 32;
+    int baselineY = singleSided ? height - 35 : (topMargin + height - 20) / 2;
+    int maxAllowedAmp = singleSided ? baselineY - topMargin - 20 : (height - topMargin - 40) / 2;
+    int ampPx = Math.max(20, Math.min(maxAllowedAmp, (int) (amplitudeMm * 35)));
     int spacingPx = Math.max(24, Math.min(60, (int) (spacingMm * 40)));
 
     // Draw dashed baseline
@@ -169,37 +204,24 @@ public class MeanderDiagramPanel extends JPanel {
         baselineY,
         startX + spacingPx,
         baselineY - ampPx,
-        String.format(Locale.US, "A = %.2f mm", amplitudeMm),
+        String.format(Locale.US, "A = %.2f %s", amplitudeMm, unitString),
         true);
 
     drawDimension(
         g2,
         startX,
-        baselineY - ampPx - 12,
+        baselineY - ampPx - 10,
         startX + spacingPx,
-        baselineY - ampPx - 12,
-        String.format(Locale.US, "s = %.2f mm", spacingMm),
+        baselineY - ampPx - 10,
+        String.format(Locale.US, "s = %.2f %s", spacingMm, unitString),
         false);
-
-    // Callout text for style and radius
-    g2.setFont(new Font("SansSerif", Font.BOLD, 11));
-    g2.setColor(TEXT_COLOR);
-    String styleStr =
-        String.format(
-            Locale.US,
-            "Style: %s (%d%% %s) | %s",
-            cornerStyle.name(),
-            (int) radiusPercentage,
-            cornerStyle == CornerStyle.FILLET ? "Radius" : "Bevel",
-            singleSided ? "Single-Sided" : "Two-Sided");
-    g2.drawString(styleStr, 25, 22);
   }
 
   private void drawDiffPairDiagram(Graphics2D g2, int width, int height) {
-    int topY = 65;
+    int topY = 55;
     int gap = 30;
     int botY = topY + gap;
-    int bumpHeight = Math.max(25, Math.min(50, (int) (amplitudeMm * 30)));
+    int bumpHeight = Math.max(22, Math.min(45, (int) (amplitudeMm * 30)));
     int bumpLen = 80;
     int startX = (width - bumpLen) / 2;
 
@@ -235,15 +257,15 @@ public class MeanderDiagramPanel extends JPanel {
         botY,
         startX + (bumpLen / 2),
         botY + bumpHeight,
-        String.format(Locale.US, "Skew Bump A = %.2f mm", amplitudeMm),
+        String.format(Locale.US, "Skew Bump A = %.2f %s", amplitudeMm, unitString),
         true);
 
     // Labels
     g2.setFont(new Font("SansSerif", Font.BOLD, 11));
     g2.setColor(TRACE_PAIR_COLOR);
-    g2.drawString("Net+ (Reference trace)", 25, topY - 10);
+    g2.drawString("Net+ (Reference trace)", 25, topY - 8);
     g2.setColor(TRACE_COLOR);
-    g2.drawString("Net- (Shorter trace with skew compensation bump)", 25, botY + bumpHeight + 25);
+    g2.drawString("Net- (Shorter trace with skew compensation bump)", 25, botY + bumpHeight + 22);
   }
 
   private void drawDimension(
@@ -253,26 +275,34 @@ public class MeanderDiagramPanel extends JPanel {
     g2.draw(new Line2D.Double(x1, y1, x2, y2));
 
     int arrowSize = 4;
+    g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
+    FontMetrics fm = g2.getFontMetrics();
+    int tw = fm.stringWidth(text);
+
     if (vertical) {
       int minY = Math.min(y1, y2);
       int maxY = Math.max(y1, y2);
       drawArrow(g2, x1, minY, 0, 1, arrowSize);
       drawArrow(g2, x1, maxY, 0, -1, arrowSize);
 
-      g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
+      int tx = x1 + 8;
+      int ty = (minY + maxY) / 2 + 4;
+      g2.setColor(new Color(28, 30, 34, 220));
+      g2.fillRoundRect(tx - 3, ty - fm.getAscent() - 1, tw + 6, fm.getHeight() + 2, 4, 4);
       g2.setColor(TEXT_COLOR);
-      g2.drawString(text, x1 + 8, (minY + maxY) / 2 + 4);
+      g2.drawString(text, tx, ty);
     } else {
       int minX = Math.min(x1, x2);
       int maxX = Math.max(x1, x2);
       drawArrow(g2, minX, y1, 1, 0, arrowSize);
       drawArrow(g2, maxX, y1, -1, 0, arrowSize);
 
-      g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
-      FontMetrics fm = g2.getFontMetrics();
-      int tw = fm.stringWidth(text);
+      int tx = (minX + maxX - tw) / 2;
+      int ty = y1 - 4;
+      g2.setColor(new Color(28, 30, 34, 220));
+      g2.fillRoundRect(tx - 3, ty - fm.getAscent() - 1, tw + 6, fm.getHeight() + 2, 4, 4);
       g2.setColor(TEXT_COLOR);
-      g2.drawString(text, (minX + maxX - tw) / 2, y1 - 4);
+      g2.drawString(text, tx, ty);
     }
   }
 
