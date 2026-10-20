@@ -16,8 +16,8 @@ import java.util.Locale;
 import javax.swing.JPanel;
 
 /**
- * Interactive vector-rendered Swing panel that visually demonstrates the geometric configuration
- * of serpentine meanders and differential pair skew compensation bumps.
+ * Interactive vector-rendered Swing panel that visually demonstrates the geometric configuration of
+ * serpentine meanders and differential pair skew compensation bumps.
  *
  * <p>Dynamically updates when amplitude, spacing, corner radius, corner style (fillet vs chamfer),
  * or side mode are modified, providing intuitive visual feedback mirroring EDA design dialogs.
@@ -108,7 +108,8 @@ public class MeanderDiagramPanel extends JPanel {
     // Draw dashed baseline
     g2.setColor(BASELINE_COLOR);
     float[] dash = {4.0f, 4.0f};
-    g2.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dash, 0.0f));
+    g2.setStroke(
+        new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, dash, 0.0f));
     g2.drawLine(20, baselineY, width - 20, baselineY);
 
     int startX = 40;
@@ -216,8 +217,7 @@ public class MeanderDiagramPanel extends JPanel {
     if (cornerStyle == CornerStyle.FILLET) {
       bump.quadTo(startX + (bevel / 2.0), botY + bumpHeight, startX + bevel, botY + bumpHeight);
       bump.lineTo(startX + bumpLen - bevel, botY + bumpHeight);
-      bump.quadTo(
-          startX + bumpLen - (bevel / 2.0), botY + bumpHeight, startX + bumpLen, botY);
+      bump.quadTo(startX + bumpLen - (bevel / 2.0), botY + bumpHeight, startX + bumpLen, botY);
     } else {
       bump.lineTo(startX + bevel, botY + bumpHeight);
       bump.lineTo(startX + bumpLen - bevel, botY + bumpHeight);
@@ -290,4 +290,3 @@ public class MeanderDiagramPanel extends JPanel {
     g2.fill(arrow);
   }
 }
-

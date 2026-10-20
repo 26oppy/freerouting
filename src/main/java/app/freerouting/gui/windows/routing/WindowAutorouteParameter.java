@@ -970,8 +970,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
       RouterSettings autorouteSettings = boardHandling.getCurrentRoutingJob().routerSettings;
       isUpdatingFromSettings = true;
       try {
-        autorouteSettings.setLengthTuningEnabled(
-            settingsAutorouterLengthTuningButton.isSelected());
+        autorouteSettings.setLengthTuningEnabled(settingsAutorouterLengthTuningButton.isSelected());
       } finally {
         isUpdatingFromSettings = false;
       }

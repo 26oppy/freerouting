@@ -37,7 +37,8 @@ public class LengthTuningTableModel extends AbstractTableModel {
         boolean isUnsatisfied) {
       this.net = net;
       this.name = net != null ? net.name : "";
-      this.className = (net != null && net.getNetClass() != null) ? net.getNetClass().getName() : "";
+      this.className =
+          (net != null && net.getNetClass() != null) ? net.getNetClass().getName() : "";
       this.currentLengthMm = currentLengthMm;
       this.targetLengthMm = targetLengthMm;
       this.toleranceMm = toleranceMm;
@@ -104,8 +105,7 @@ public class LengthTuningTableModel extends AbstractTableModel {
       }
 
       allRows.add(
-          new NetRow(
-              net, currentMm, targetMm, tolMm, status, isConstrained, isUnsatisfied));
+          new NetRow(net, currentMm, targetMm, tolMm, status, isConstrained, isUnsatisfied));
     }
 
     applyFilter();
@@ -177,8 +177,12 @@ public class LengthTuningTableModel extends AbstractTableModel {
       case 0 -> row.name;
       case 1 -> row.className;
       case 2 -> String.format(Locale.US, "%.2f mm", row.currentLengthMm);
-      case 3 -> row.targetLengthMm != null ? String.format(Locale.US, "%.2f mm", row.targetLengthMm) : "—";
-      case 4 -> row.toleranceMm != null ? String.format(Locale.US, "±%.2f mm", row.toleranceMm) : "—";
+      case 3 ->
+          row.targetLengthMm != null
+              ? String.format(Locale.US, "%.2f mm", row.targetLengthMm)
+              : "—";
+      case 4 ->
+          row.toleranceMm != null ? String.format(Locale.US, "±%.2f mm", row.toleranceMm) : "—";
       case 5 -> row.status;
       default -> "";
     };

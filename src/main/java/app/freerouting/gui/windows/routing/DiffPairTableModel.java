@@ -40,8 +40,10 @@ public class DiffPairTableModel extends AbstractTableModel {
         boolean isUnsatisfied) {
       this.pair = pair;
       this.baseName = pair != null ? pair.baseName() : "";
-      this.positiveNetName = (pair != null && pair.positiveNet() != null) ? pair.positiveNet().name : "";
-      this.negativeNetName = (pair != null && pair.negativeNet() != null) ? pair.negativeNet().name : "";
+      this.positiveNetName =
+          (pair != null && pair.positiveNet() != null) ? pair.positiveNet().name : "";
+      this.negativeNetName =
+          (pair != null && pair.negativeNet() != null) ? pair.negativeNet().name : "";
       this.positiveLengthMm = posLenMm;
       this.negativeLengthMm = negLenMm;
       this.currentSkewMm = skewMm;

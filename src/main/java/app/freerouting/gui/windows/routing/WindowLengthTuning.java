@@ -1,22 +1,16 @@
 package app.freerouting.gui.windows.routing;
 
-import app.freerouting.board.actions.ItemInfoPrinter;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
-import app.freerouting.board.model.structure.FixedState;
-import app.freerouting.board.state.CoordinateTransform;
 import app.freerouting.gui.board.BoardFrame;
 import app.freerouting.gui.board.BoardSavableSubWindow;
 import app.freerouting.gui.workspace.GuiBoardManager;
-import app.freerouting.gui.workspace.WorkspaceSettings;
-import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.CornerStyle;
 import app.freerouting.rules.DifferentialPair;
 import app.freerouting.rules.Net;
 import app.freerouting.rules.NetLengthConstraint;
 import app.freerouting.rules.NetMeanderConstraint;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -25,10 +19,7 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import javax.swing.BorderFactory;
@@ -37,7 +28,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -55,9 +45,9 @@ import javax.swing.event.DocumentListener;
  * Interactive master-detail studio subwindow for configuring post-route trace length tuning,
  * differential pair intra-pair skew tolerances, and serpentine meander geometry.
  *
- * <p>Features a dynamic 2D vector preview panel ({@link MeanderDiagramPanel}), tabular net and
- * pair management, automatic pair detection, bus matching ("Match to Longest"), and immediate
- * on-demand tuning execution.
+ * <p>Features a dynamic 2D vector preview panel ({@link MeanderDiagramPanel}), tabular net and pair
+ * management, automatic pair detection, bus matching ("Match to Longest"), and immediate on-demand
+ * tuning execution.
  */
 public class WindowLengthTuning extends BoardSavableSubWindow {
 
@@ -83,7 +73,8 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
   private final JTextField minAmpField = new JTextField(6);
   private final JTextField maxAmpField = new JTextField(6);
   private final JTextField spacingField = new JTextField(6);
-  private final JComboBox<String> cornerStyleCombo = new JComboBox<>(new String[] {"FILLET", "CHAMFER"});
+  private final JComboBox<String> cornerStyleCombo =
+      new JComboBox<>(new String[] {"FILLET", "CHAMFER"});
   private final JSlider radiusSlider = new JSlider(0, 100, 80);
   private final JLabel radiusLabel = new JLabel("80%");
   private final JCheckBox singleSidedCheckBox = new JCheckBox();
@@ -338,10 +329,11 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
 
     // Parameter changes update the live vector diagram
     cornerStyleCombo.addActionListener(_ -> updateDiagram());
-    radiusSlider.addChangeListener(_ -> {
-      radiusLabel.setText(radiusSlider.getValue() + "%");
-      updateDiagram();
-    });
+    radiusSlider.addChangeListener(
+        _ -> {
+          radiusLabel.setText(radiusSlider.getValue() + "%");
+          updateDiagram();
+        });
     singleSidedCheckBox.addActionListener(_ -> updateDiagram());
 
     DocumentListener geomDocListener =
@@ -399,7 +391,9 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       targetLengthField.setText(FMT.format(toUser(board, lengthConstraint.targetLength())));
       if (lengthConstraint.hasMin() && lengthConstraint.hasMax()) {
         toleranceField.setText(
-            FMT.format(toUser(board, (lengthConstraint.maxLength() - lengthConstraint.minLength()) / 2.0)));
+            FMT.format(
+                toUser(
+                    board, (lengthConstraint.maxLength() - lengthConstraint.minLength()) / 2.0)));
       } else {
         toleranceField.setText("0.20");
       }
@@ -413,7 +407,8 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       minAmpField.setText(FMT.format(toUser(board, meander.minAmplitude())));
       maxAmpField.setText(FMT.format(toUser(board, meander.maxAmplitude())));
       spacingField.setText(FMT.format(toUser(board, meander.spacing())));
-      cornerStyleCombo.setSelectedItem(meander.cornerStyle() != null ? meander.cornerStyle().name() : "FILLET");
+      cornerStyleCombo.setSelectedItem(
+          meander.cornerStyle() != null ? meander.cornerStyle().name() : "FILLET");
       radiusSlider.setValue((int) Math.round(meander.radiusPercentage()));
       singleSidedCheckBox.setSelected(meander.singleSided());
     }
@@ -442,7 +437,8 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       minAmpField.setText(FMT.format(toUser(board, meander.minAmplitude())));
       maxAmpField.setText(FMT.format(toUser(board, meander.maxAmplitude())));
       spacingField.setText(FMT.format(toUser(board, meander.spacing())));
-      cornerStyleCombo.setSelectedItem(meander.cornerStyle() != null ? meander.cornerStyle().name() : "FILLET");
+      cornerStyleCombo.setSelectedItem(
+          meander.cornerStyle() != null ? meander.cornerStyle().name() : "FILLET");
       radiusSlider.setValue((int) Math.round(meander.radiusPercentage()));
       singleSidedCheckBox.setSelected(true); // Diff pair bumps are naturally single sided
     }
@@ -686,9 +682,7 @@ public class WindowLengthTuning extends BoardSavableSubWindow {
       JOptionPane.showMessageDialog(
           this,
           java.text.MessageFormat.format(
-              tm.getText("skew_complete_message"),
-              report.pairsEqualized(),
-              report.bumpsInserted()),
+              tm.getText("skew_complete_message"), report.pairsEqualized(), report.bumpsInserted()),
           tm.getText("skew_complete_title"),
           JOptionPane.INFORMATION_MESSAGE);
     }
