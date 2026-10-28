@@ -267,7 +267,6 @@ public class DesignRulesChecker {
       for (int i = 0; i < islands.size(); i++) {
         PolygonBooleanEngine.PolygonShape island = islands.get(i);
         List<Item> items = islandItems.get(i);
-        java.awt.geom.Area islandAwt = island.unwrap() instanceof java.awt.geom.Area a ? a : null;
 
         if (!items.isEmpty()) {
           if (i != primaryIndex) {
@@ -288,7 +287,7 @@ public class DesignRulesChecker {
             if (!connectedToPrimary) {
               violations.add(
                   new ZoneIslandViolation(
-                      ca, islandAwt, layer, netNumber, "isolated_island_unconnected", items));
+                      ca, island, layer, netNumber, "isolated_island_unconnected", items));
             }
           }
         } else {
@@ -298,7 +297,7 @@ public class DesignRulesChecker {
             violations.add(
                 new ZoneIslandViolation(
                     ca,
-                    islandAwt,
+                    island,
                     layer,
                     netNumber,
                     "isolated_island_dead_copper",

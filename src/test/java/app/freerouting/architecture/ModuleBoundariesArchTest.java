@@ -114,7 +114,8 @@ class ModuleBoundariesArchTest {
             "app.freerouting.rules..",
             "app.freerouting.drc..",
             "app.freerouting.geometry..",
-            "app.freerouting.settings..")
+            "app.freerouting.settings..",
+            "app.freerouting.core..")
         .should()
         .dependOnClassesThat(resideInAnyPackage("com.sun.management.."))
         .because(

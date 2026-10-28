@@ -199,13 +199,20 @@ public class RouterSettings implements Serializable, Cloneable {
   public transient Boolean boardSpecificTraceCostsApplied;
 
   // Change listeners for bidirectional binding with GUI or external controllers
-  private transient List<SettingsChangeListener> listeners;
+  private transient volatile List<SettingsChangeListener> listeners;
 
   private List<SettingsChangeListener> getListeners() {
-    if (this.listeners == null) {
-      this.listeners = new CopyOnWriteArrayList<>();
+    List<SettingsChangeListener> list = this.listeners;
+    if (list == null) {
+      synchronized (this) {
+        list = this.listeners;
+        if (list == null) {
+          list = new CopyOnWriteArrayList<>();
+          this.listeners = list;
+        }
+      }
     }
-    return this.listeners;
+    return list;
   }
 
   /**

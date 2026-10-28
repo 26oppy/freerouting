@@ -154,4 +154,62 @@ class FreeroutingHeadlessEngineTest {
     assertEquals("design.dsn", streamRequest.designName());
     assertEquals(dsnBytes.length, streamRequest.dsnBytes().length);
   }
+
+  @Test
+  void testRoutingWithOptimizerAndSesValidation() throws IOException {
+    byte[] dsnBytes;
+    try (var is = DsnTestFixtures.openResource(FIXTURE)) {
+      dsnBytes = is.readAllBytes();
+    }
+
+    RouterSettings overrides = new RouterSettings();
+    overrides.autorouter.maxPasses = 1;
+    overrides.autorouter.maxItems = 3;
+    overrides.optimizer.maxPasses = 1;
+    overrides.setRunOptimizer(true);
+
+    HeadlessRoutingRequest request =
+        HeadlessRoutingRequest.builder()
+            .dsnBytes(dsnBytes)
+            .designName(FIXTURE)
+            .settings(overrides)
+            .runDrc(true)
+            .computeSes(true)
+            .build();
+
+    HeadlessRoutingResult result = FreeroutingHeadlessEngine.route(request);
+
+    assertTrue(result.isSuccess(), "Routing with optimizer should succeed");
+    assertTrue(result.isDrcClean(), "DRC should be clean with 0 clearance violations");
+    assertNotNull(result.statistics(), "Statistics should not be null");
+    assertTrue(result.sesContent().contains("(session"), "SES content should contain (session");
+    assertTrue(result.sesContent().contains("(routes"), "SES content should contain (routes");
+  }
+
+  @Test
+  void testRoutingFromDsnString() throws IOException {
+    String dsnString;
+    try (var is = DsnTestFixtures.openResource(FIXTURE)) {
+      dsnString = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    RouterSettings overrides = new RouterSettings();
+    overrides.autorouter.maxPasses = 1;
+    overrides.autorouter.maxItems = 2;
+    overrides.setRunOptimizer(false);
+
+    HeadlessRoutingRequest request =
+        HeadlessRoutingRequest.builder()
+            .dsnContent(dsnString)
+            .designName("string_test.dsn")
+            .settings(overrides)
+            .computeSes(true)
+            .build();
+
+    HeadlessRoutingResult result = FreeroutingHeadlessEngine.route(request);
+
+    assertTrue(result.isSuccess(), "String-based routing should succeed");
+    assertNotNull(result.board(), "Board should be present");
+    assertTrue(result.sesBytes().length > 0, "SES bytes should be produced");
+  }
 }

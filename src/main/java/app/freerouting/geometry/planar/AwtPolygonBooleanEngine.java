@@ -243,6 +243,7 @@ public class AwtPolygonBooleanEngine implements PolygonBooleanEngine {
         } else {
           existing.exclusiveOr(piece);
         }
+        islands.set(i, new AwtPolygonShape(existing));
         incorporated = true;
         break;
       }
