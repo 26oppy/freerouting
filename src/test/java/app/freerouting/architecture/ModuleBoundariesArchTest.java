@@ -88,6 +88,20 @@ class ModuleBoundariesArchTest {
   }
 
   @Test
+  void settingsMustStayIndependentFromJavaDesktopAndBeans() {
+    JavaClasses classes = importMainClasses();
+
+    noClasses()
+        .that()
+        .resideInAnyPackage("app.freerouting.settings..")
+        .should()
+        .dependOnClassesThat(resideInAnyPackage("java.beans..", "java.awt..", "javax.swing.."))
+        .because(
+            "settings must stay lightweight and headless/WASM ready with zero java.desktop dependencies")
+        .check(classes);
+  }
+
+  @Test
   void apiAndManagementMustNotDependOnGuiBoardManagerOrInteractiveStateMachine() {
     JavaClasses classes = importMainClasses();
 

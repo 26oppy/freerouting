@@ -8,6 +8,7 @@ import app.freerouting.gui.board.BoardSavableSubWindow;
 import app.freerouting.gui.support.GuiTextManager;
 import app.freerouting.gui.workspace.GuiBoardManager;
 import app.freerouting.settings.RouterSettings;
+import app.freerouting.settings.SettingsChangeEvent;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
@@ -507,7 +508,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
     this.boardHandling
         .getCurrentRoutingJob()
         .routerSettings
-        .addPropertyChangeListener(this::onSettingsChanged);
+        .addSettingsChangeListener(this::onSettingsChanged);
   }
 
   public static int normalizeIntInput(Object input, int oldValue, int minValue, int maxValue) {
@@ -559,7 +560,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
   }
 
   /** Handle property change events from RouterSettings to update GUI controls. */
-  private void onSettingsChanged(java.beans.PropertyChangeEvent evt) {
+  private void onSettingsChanged(SettingsChangeEvent evt) {
     if (isUpdatingFromSettings) {
       return; // Prevent circular updates
     }

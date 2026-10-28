@@ -6,11 +6,10 @@ import app.freerouting.logger.FRLogger;
 import app.freerouting.util.ReflectionUtil;
 import com.google.gson.annotations.SerializedName;
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.beans.PropertyChangeListener;
-import java.beans.PropertyChangeSupport;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /** Mutable router configuration assembled from the configured settings sources. */
 public class RouterSettings implements Serializable, Cloneable {
@@ -199,8 +198,15 @@ public class RouterSettings implements Serializable, Cloneable {
    */
   public transient Boolean boardSpecificTraceCostsApplied;
 
-  // PropertyChangeSupport for bidirectional binding with GUI
-  private transient PropertyChangeSupport pcs = new PropertyChangeSupport(this);
+  // Change listeners for bidirectional binding with GUI or external controllers
+  private transient List<SettingsChangeListener> listeners;
+
+  private List<SettingsChangeListener> getListeners() {
+    if (this.listeners == null) {
+      this.listeners = new CopyOnWriteArrayList<>();
+    }
+    return this.listeners;
+  }
 
   /**
    * We need a parameterless constructor for the serialization. Initializes all fields with default
@@ -241,17 +247,45 @@ public class RouterSettings implements Serializable, Cloneable {
   }
 
   /** Registers a listener for changes made through the settings API. */
-  public void addPropertyChangeListener(PropertyChangeListener listener) {
-    if (pcs == null) {
-      pcs = new PropertyChangeSupport(this);
+  public void addSettingsChangeListener(SettingsChangeListener listener) {
+    if (listener != null) {
+      getListeners().add(listener);
     }
-    pcs.addPropertyChangeListener(listener);
   }
 
-  /** Removes a previously registered property-change listener. */
-  public void removePropertyChangeListener(PropertyChangeListener listener) {
-    if (pcs != null) {
-      pcs.removePropertyChangeListener(listener);
+  /**
+   * Compatibility alias for {@link #addSettingsChangeListener(SettingsChangeListener)}.
+   *
+   * @param listener listener to receive change notifications
+   */
+  public void addPropertyChangeListener(SettingsChangeListener listener) {
+    addSettingsChangeListener(listener);
+  }
+
+  /** Removes a previously registered settings-change listener. */
+  public void removeSettingsChangeListener(SettingsChangeListener listener) {
+    if (listener != null && this.listeners != null) {
+      this.listeners.remove(listener);
+    }
+  }
+
+  /**
+   * Compatibility alias for {@link #removeSettingsChangeListener(SettingsChangeListener)}.
+   *
+   * @param listener listener to remove
+   */
+  public void removePropertyChangeListener(SettingsChangeListener listener) {
+    removeSettingsChangeListener(listener);
+  }
+
+  /** Notifies all registered listeners of a property change. */
+  public void firePropertyChange(String propertyName, Object oldValue, Object newValue) {
+    if (this.listeners == null || this.listeners.isEmpty()) {
+      return;
+    }
+    SettingsChangeEvent event = new SettingsChangeEvent(propertyName, oldValue, newValue);
+    for (SettingsChangeListener listener : this.listeners) {
+      listener.settingChanged(event);
     }
   }
 
@@ -266,18 +300,14 @@ public class RouterSettings implements Serializable, Cloneable {
   public void setMaxPasses(Integer value) {
     Integer oldValue = autorouter().maxPasses;
     autorouter().maxPasses = value;
-    if (pcs != null) {
-      pcs.firePropertyChange("maxPasses", oldValue, value);
-    }
+    firePropertyChange("maxPasses", oldValue, value);
   }
 
   /** Sets and normalizes the maximum number of worker threads. */
   public void setMaxThreads(Integer value) {
     Integer oldValue = this.maxThreads;
     this.maxThreads = normalizeMaxThreads(value);
-    if (pcs != null) {
-      pcs.firePropertyChange("maxThreads", oldValue, this.maxThreads);
-    }
+    firePropertyChange("maxThreads", oldValue, this.maxThreads);
     // Keep the legacy flat knob, the nested autorouter knob, and the optimizer
     // pool in sync when the GUI / setMaxThreads path is used. Nested CLI flags
     // (--router.autorouter.max_threads, --router.optimizer.max_threads) set those
@@ -305,27 +335,21 @@ public class RouterSettings implements Serializable, Cloneable {
   public void setJobTimeoutString(String value) {
     String oldValue = this.jobTimeoutString;
     this.jobTimeoutString = value;
-    if (pcs != null) {
-      pcs.firePropertyChange("jobTimeoutString", oldValue, value);
-    }
+    firePropertyChange("jobTimeoutString", oldValue, value);
   }
 
   /** Enables or disables the autorouter. */
   public void setEnabled(Boolean value) {
     Boolean oldValue = autorouter().enabled;
     autorouter().enabled = value;
-    if (pcs != null) {
-      pcs.firePropertyChange("enabled", oldValue, value);
-    }
+    firePropertyChange("enabled", oldValue, value);
   }
 
   /** Sets whether the autorouter may place vias. */
   public void setViasAllowed(Boolean value) {
     Boolean oldValue = this.viasAllowed;
     this.viasAllowed = value;
-    if (pcs != null) {
-      pcs.firePropertyChange("viasAllowed", oldValue, value);
-    }
+    firePropertyChange("viasAllowed", oldValue, value);
   }
 
   /** Sets whether the autorouter may place vias using a primitive boolean. */
@@ -337,9 +361,7 @@ public class RouterSettings implements Serializable, Cloneable {
   public void setAlgorithm(String value) {
     String oldValue = autorouter().algorithm;
     autorouter().algorithm = value;
-    if (pcs != null) {
-      pcs.firePropertyChange("algorithm", oldValue, value);
-    }
+    firePropertyChange("algorithm", oldValue, value);
   }
 
   /** Enables or disables the post-routing optimizer. */
@@ -348,9 +370,7 @@ public class RouterSettings implements Serializable, Cloneable {
     if (this.optimizer != null) {
       this.optimizer.enabled = value;
     }
-    if (pcs != null) {
-      pcs.firePropertyChange("optimizer.enabled", oldValue, value);
-    }
+    firePropertyChange("optimizer.enabled", oldValue, value);
   }
 
   /**
@@ -800,9 +820,7 @@ public class RouterSettings implements Serializable, Cloneable {
     }
     Boolean oldValue = this.fanout.enabled;
     this.fanout.enabled = value;
-    if (pcs != null) {
-      pcs.firePropertyChange("fanout.enabled", oldValue, value);
-    }
+    firePropertyChange("fanout.enabled", oldValue, value);
   }
 
   /** Returns whether the autorouter may place vias. */
@@ -845,9 +863,7 @@ public class RouterSettings implements Serializable, Cloneable {
   public void setPlaneNets(String[] value) {
     String[] old = this.planeNets;
     this.planeNets = value != null ? value.clone() : null;
-    if (pcs != null) {
-      pcs.firePropertyChange("planeNets", old, this.planeNets);
-    }
+    firePropertyChange("planeNets", old, this.planeNets);
   }
 
   /** Returns whether conduction areas (copper pours) act as obstacles, or null if unconfigured. */
@@ -864,9 +880,7 @@ public class RouterSettings implements Serializable, Cloneable {
   public void setPlaneAsObstacle(Boolean value) {
     Boolean old = this.planeAsObstacle;
     this.planeAsObstacle = value;
-    if (pcs != null) {
-      pcs.firePropertyChange("planeAsObstacle", old, value);
-    }
+    firePropertyChange("planeAsObstacle", old, value);
   }
 
   /**
@@ -1175,22 +1189,18 @@ public class RouterSettings implements Serializable, Cloneable {
       return 0;
     }
 
-    int changedCount = ReflectionUtil.copyFields(settings, this);
+    final int changedCount = ReflectionUtil.copyFields(settings, this);
 
     // Fire property change events for key properties to update GUI
     // Note: We fire events even if values didn't change to ensure GUI is in sync
-    if (pcs != null) {
-      pcs.firePropertyChange(
-          "maxPasses", null, this.autorouter != null ? this.autorouter.maxPasses : null);
-      pcs.firePropertyChange("maxThreads", null, this.maxThreads);
-      pcs.firePropertyChange("jobTimeoutString", null, this.jobTimeoutString);
-      pcs.firePropertyChange(
-          "enabled", null, this.autorouter != null ? this.autorouter.enabled : null);
-      pcs.firePropertyChange(
-          "optimizer.enabled", null, this.optimizer != null ? this.optimizer.enabled : null);
-      pcs.firePropertyChange(
-          "fanout.enabled", null, this.fanout != null ? this.fanout.enabled : null);
-    }
+    firePropertyChange(
+        "maxPasses", null, this.autorouter != null ? this.autorouter.maxPasses : null);
+    firePropertyChange("maxThreads", null, this.maxThreads);
+    firePropertyChange("jobTimeoutString", null, this.jobTimeoutString);
+    firePropertyChange("enabled", null, this.autorouter != null ? this.autorouter.enabled : null);
+    firePropertyChange(
+        "optimizer.enabled", null, this.optimizer != null ? this.optimizer.enabled : null);
+    firePropertyChange("fanout.enabled", null, this.fanout != null ? this.fanout.enabled : null);
 
     return changedCount;
   }
