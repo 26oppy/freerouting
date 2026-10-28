@@ -12,6 +12,8 @@ import app.freerouting.board.trace.PolylineTrace;
 import app.freerouting.constants.Constants;
 import app.freerouting.core.library.Package;
 import app.freerouting.geometry.planar.Point;
+import app.freerouting.geometry.planar.PolygonBooleanEngine;
+import app.freerouting.geometry.planar.PolygonBooleanEngines;
 import app.freerouting.io.kicad.KiCadDrcPosition;
 import app.freerouting.io.kicad.KiCadDrcReport;
 import app.freerouting.io.kicad.KiCadDrcViolation;
@@ -202,13 +204,14 @@ public class DesignRulesChecker {
             * board.communication.getResolution(Unit.MM)
             * board.communication.getResolution(Unit.MM);
 
+    PolygonBooleanEngine engine = PolygonBooleanEngines.get();
     for (ConductionArea ca : conductionAreas) {
-      java.awt.geom.Area detailedFill = ca.getDetailedFillArea();
+      PolygonBooleanEngine.PolygonShape detailedFill = ca.getDetailedFillPolygon();
       if (detailedFill == null || detailedFill.isEmpty()) {
         continue;
       }
 
-      List<java.awt.geom.Area> islands = decomposeAreaIntoIslands(detailedFill);
+      List<PolygonBooleanEngine.PolygonShape> islands = engine.decomposeIntoIslands(detailedFill);
       if (islands.size() <= 1) {
         continue; // Single continuous pour, no fragmentation
       }
@@ -229,7 +232,7 @@ public class DesignRulesChecker {
 
       // Map items to each island
       List<List<Item>> islandItems = new ArrayList<>(islands.size());
-      for (java.awt.geom.Area island : islands) {
+      for (PolygonBooleanEngine.PolygonShape island : islands) {
         List<Item> contained = new ArrayList<>();
         for (Item item : sameNetItemsOnLayer) {
           Point center = null;
@@ -262,8 +265,9 @@ public class DesignRulesChecker {
 
       // Check each island against the primary
       for (int i = 0; i < islands.size(); i++) {
-        java.awt.geom.Area island = islands.get(i);
+        PolygonBooleanEngine.PolygonShape island = islands.get(i);
         List<Item> items = islandItems.get(i);
+        java.awt.geom.Area islandAwt = island.unwrap() instanceof java.awt.geom.Area a ? a : null;
 
         if (!items.isEmpty()) {
           if (i != primaryIndex) {
@@ -284,18 +288,17 @@ public class DesignRulesChecker {
             if (!connectedToPrimary) {
               violations.add(
                   new ZoneIslandViolation(
-                      ca, island, layer, netNumber, "isolated_island_unconnected", items));
+                      ca, islandAwt, layer, netNumber, "isolated_island_unconnected", items));
             }
           }
         } else {
           // Island with zero contact items: check if it exceeds minimum dead copper threshold
-          java.awt.geom.Rectangle2D bounds = island.getBounds2D();
-          double approxArea = bounds.getWidth() * bounds.getHeight();
+          double approxArea = island.getBoundsWidth() * island.getBoundsHeight();
           if (approxArea >= minDeadCopperArea) {
             violations.add(
                 new ZoneIslandViolation(
                     ca,
-                    island,
+                    islandAwt,
                     layer,
                     netNumber,
                     "isolated_island_dead_copper",
@@ -306,98 +309,6 @@ public class DesignRulesChecker {
     }
 
     return violations;
-  }
-
-  /** Decomposes a potentially disjoint java.awt.geom.Area into separate contiguous island Areas. */
-  private List<java.awt.geom.Area> decomposeAreaIntoIslands(java.awt.geom.Area area) {
-    List<java.awt.geom.Area> islands = new ArrayList<>();
-    if (area == null || area.isEmpty()) {
-      return islands;
-    }
-
-    java.awt.geom.PathIterator it = area.getPathIterator(null);
-    java.awt.geom.Path2D.Double currentPolygon = null;
-    double[] coords = new double[6];
-
-    while (!it.isDone()) {
-      int segType = it.currentSegment(coords);
-      switch (segType) {
-        case java.awt.geom.PathIterator.SEG_MOVETO -> {
-          if (currentPolygon != null) {
-            java.awt.geom.Area piece = new java.awt.geom.Area(currentPolygon);
-            if (!piece.isEmpty()) {
-              mergeOrAddIsland(islands, piece);
-            }
-          }
-          currentPolygon = new java.awt.geom.Path2D.Double();
-          currentPolygon.moveTo(coords[0], coords[1]);
-        }
-        case java.awt.geom.PathIterator.SEG_LINETO -> {
-          if (currentPolygon != null) {
-            currentPolygon.lineTo(coords[0], coords[1]);
-          }
-        }
-        case java.awt.geom.PathIterator.SEG_QUADTO -> {
-          if (currentPolygon != null) {
-            currentPolygon.quadTo(coords[0], coords[1], coords[2], coords[3]);
-          }
-        }
-        case java.awt.geom.PathIterator.SEG_CUBICTO -> {
-          if (currentPolygon != null) {
-            currentPolygon.curveTo(
-                coords[0], coords[1], coords[2], coords[3], coords[4], coords[5]);
-          }
-        }
-        case java.awt.geom.PathIterator.SEG_CLOSE -> {
-          if (currentPolygon != null) {
-            currentPolygon.closePath();
-          }
-        }
-        default -> {}
-      }
-      it.next();
-    }
-
-    if (currentPolygon != null) {
-      java.awt.geom.Area piece = new java.awt.geom.Area(currentPolygon);
-      if (!piece.isEmpty()) {
-        mergeOrAddIsland(islands, piece);
-      }
-    }
-
-    return islands;
-  }
-
-  private void mergeOrAddIsland(List<java.awt.geom.Area> islands, java.awt.geom.Area piece) {
-    // In java.awt.geom.Area path iteration, an Area can consist of outer contours (additive)
-    // and inner hole contours (subtractive).
-    // If piece is entirely contained within the bounding box/area of an existing island, it
-    // represents
-    // a hole that should be subtracted from that island rather than added as a separate copper
-    // island.
-    boolean incorporated = false;
-    for (int i = 0; i < islands.size(); i++) {
-      java.awt.geom.Area existing = islands.get(i);
-      java.awt.geom.Area intersection = new java.awt.geom.Area(existing);
-      intersection.intersect(piece);
-      if (!intersection.isEmpty()) {
-        // If the piece is contained within the existing island's outline, subtract the hole.
-        // Otherwise, xor or combine overlapping sub-paths belonging to the same component.
-        java.awt.geom.Area testSubtract = new java.awt.geom.Area(piece);
-        testSubtract.subtract(existing);
-        if (testSubtract.isEmpty()) {
-          // 'piece' is completely inside 'existing' -> hole contour, subtract it
-          existing.subtract(piece);
-        } else {
-          existing.exclusiveOr(piece);
-        }
-        incorporated = true;
-        break;
-      }
-    }
-    if (!incorporated) {
-      islands.add(piece);
-    }
   }
 
   /**
