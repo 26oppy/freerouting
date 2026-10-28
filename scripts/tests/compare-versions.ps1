@@ -243,9 +243,15 @@ function Invoke-Version {
     $env:FREEROUTING_LOG_DIR = $LogBaseDir
 
     # Construct flat argument list with specific log location and output file
-    $ProcessArgs = @("-jar", "`"$JarPath`"") + $BaseArgs + @(
-        "--router.autorouter.max_passes=$max_passes"
-        "--router.autorouter.max_items=$max_items"
+    $PassArgs = @()
+    if ($max_passes -gt 0) {
+        $PassArgs += @("-mp", "$max_passes", "--router.autorouter.max_passes=$max_passes")
+    }
+    if ($max_items -gt 0) {
+        $PassArgs += @("--router.autorouter.max_items=$max_items")
+    }
+
+    $ProcessArgs = @("-jar", "`"$JarPath`"") + $BaseArgs + $PassArgs + @(
         "--logging.file.location=`"$LogPath`""
         "-do", "`"$OutputFile`""
     )
