@@ -97,7 +97,29 @@ class ModuleBoundariesArchTest {
         .should()
         .dependOnClassesThat(resideInAnyPackage("java.beans..", "java.awt..", "javax.swing.."))
         .because(
-            "settings must stay lightweight and headless/WASM ready with zero java.desktop dependencies")
+            "settings must stay lightweight and headless/WASM ready with zero java.desktop"
+                + " dependencies")
+        .check(classes);
+  }
+
+  @Test
+  void coreRoutingEngineMustNotDependOnSunManagement() {
+    JavaClasses classes = importMainClasses();
+
+    noClasses()
+        .that()
+        .resideInAnyPackage(
+            "app.freerouting.autoroute..",
+            "app.freerouting.board..",
+            "app.freerouting.rules..",
+            "app.freerouting.drc..",
+            "app.freerouting.geometry..",
+            "app.freerouting.settings..")
+        .should()
+        .dependOnClassesThat(resideInAnyPackage("com.sun.management.."))
+        .because(
+            "core algorithmic routing engine must stay decoupled from com.sun.management for"
+                + " clean AOT/WASM compilation")
         .check(classes);
   }
 

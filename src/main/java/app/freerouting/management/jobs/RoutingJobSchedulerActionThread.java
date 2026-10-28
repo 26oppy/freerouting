@@ -8,11 +8,10 @@ import app.freerouting.autoroute.pipeline.RoutingPipeline;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
 import app.freerouting.core.StoppableThread;
+import app.freerouting.core.metrics.RuntimeMetrics;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.GlobalSettings;
 import app.freerouting.util.TextManager;
-import com.sun.management.ThreadMXBean;
-import java.lang.management.ManagementFactory;
 import java.time.Instant;
 
 /** Runs a stoppable routing action on behalf of the job scheduler. */
@@ -286,53 +285,27 @@ public class RoutingJobSchedulerActionThread extends StoppableThread {
   }
 
   private void monitorCpuAndMemoryUsage(RoutingJob job) {
+    if (job == null || job.thread == null) {
+      return;
+    }
     try {
-      // Get the ThreadMXBean instance and cast it to com.sun.management.ThreadMXBean
-      ThreadMXBean threadManagementBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-
-      // Get all live thread IDs
-      long[] threadIds = threadManagementBean.getAllThreadIds();
-
-      // Iterate through the thread IDs and get memory usage
-      for (long threadId : threadIds) {
-        if (threadId == job.thread.threadId()) {
-          // CPU time and memory usage
-          float cpuTime =
-              threadManagementBean.getThreadCpuTime(threadId) / 1000.0f / 1000.0f / 1000.0f;
-
-          // Enable thread memory allocation measurement
-          threadManagementBean.setThreadAllocatedMemoryEnabled(true);
-
-          // Get the thread's allocated memory in bytes
-          long allocatedMemory = threadManagementBean.getThreadAllocatedBytes(threadId);
-          float allocatedMemoryMb = allocatedMemory / (1024.0f * 1024.0f);
-
-          // Update the job's resource usage
-          // Fix: Use assignment instead of accumulation for total time, as
-          // getThreadCpuTime returns cumulative time
-          // Note: This only tracks the main thread. Worker threads add their stats
-          // separately.
-          job.resourceUsage.cpuTimeUsed = cpuTime;
-          // Fix: maxMemoryUsed represents total allocated bytes here, so we accumulate if
-          // we track partials,
-          // but here it tracks the monotonically increasing allocation of the main
-          // thread.
-          job.resourceUsage.maxMemoryUsed = allocatedMemoryMb;
-        }
+      long threadId = job.thread.threadId();
+      float cpuTime = RuntimeMetrics.threadCpuSeconds(threadId);
+      if (cpuTime >= 0) {
+        job.resourceUsage.cpuTimeUsed = cpuTime;
       }
 
-      // Track peak heap memory usage across all threads
-      java.lang.management.MemoryMXBean memoryManagementBean = ManagementFactory.getMemoryMXBean();
-      long heapUsed = memoryManagementBean.getHeapMemoryUsage().getUsed();
-      float heapUsedMb = heapUsed / (1024.0f * 1024.0f);
+      float allocatedMemoryMb = RuntimeMetrics.threadAllocatedMb(threadId);
+      if (allocatedMemoryMb >= 0) {
+        job.resourceUsage.maxMemoryUsed = allocatedMemoryMb;
+      }
 
-      // Update peak memory if current usage is higher
+      float heapUsedMb = RuntimeMetrics.currentHeapUsageMb();
       if (heapUsedMb > job.resourceUsage.peakMemoryUsed) {
         job.resourceUsage.peakMemoryUsed = heapUsedMb;
       }
-    } catch (Throwable t) {
-      // java.management or jdk.management module may not be available in minimal JRE builds;
-      // resource usage stats will remain at their current values.
+    } catch (Throwable ignored) {
+      // Telemetry unavailable in minimal runtime environments
     }
   }
 

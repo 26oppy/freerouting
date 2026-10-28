@@ -16,6 +16,7 @@ import app.freerouting.board.model.structure.AngleRestriction;
 import app.freerouting.board.model.structure.Unit;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
+import app.freerouting.core.metrics.RuntimeMetrics;
 import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.geometry.planar.FloatLine;
 import app.freerouting.geometry.planar.FloatPoint;
@@ -29,11 +30,9 @@ import app.freerouting.logger.FRLogger;
 import app.freerouting.management.jobs.RoutingJobSchedulerActionThread;
 import app.freerouting.management.jobs.ThreadActionListener;
 import app.freerouting.util.TextManager;
-import com.sun.management.ThreadMXBean;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.io.ByteArrayOutputStream;
-import java.lang.management.ManagementFactory;
 import java.time.Instant;
 
 /**
@@ -750,26 +749,25 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
    * RoutingJobSchedulerActionThread}.
    */
   private void monitorCpuAndMemoryUsage(app.freerouting.core.RoutingJob job) {
+    if (job == null || job.thread == null) {
+      return;
+    }
     try {
-      ThreadMXBean threadBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-      long[] threadIds = threadBean.getAllThreadIds();
-      for (long threadId : threadIds) {
-        if (job.thread != null && threadId == job.thread.threadId()) {
-          float cpuTime = threadBean.getThreadCpuTime(threadId) / 1_000_000_000.0f;
-          threadBean.setThreadAllocatedMemoryEnabled(true);
-          long allocatedMemory = threadBean.getThreadAllocatedBytes(threadId);
-          float allocatedMegabytes = allocatedMemory / (1024.0f * 1024.0f);
-          job.resourceUsage.cpuTimeUsed = cpuTime;
-          job.resourceUsage.maxMemoryUsed = allocatedMegabytes;
-        }
+      long threadId = job.thread.threadId();
+      float cpuTime = RuntimeMetrics.threadCpuSeconds(threadId);
+      if (cpuTime >= 0) {
+        job.resourceUsage.cpuTimeUsed = cpuTime;
       }
-      java.lang.management.MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
-      float heapUsedMegabytes = memoryBean.getHeapMemoryUsage().getUsed() / (1024.0f * 1024.0f);
+      float allocatedMegabytes = RuntimeMetrics.threadAllocatedMb(threadId);
+      if (allocatedMegabytes >= 0) {
+        job.resourceUsage.maxMemoryUsed = allocatedMegabytes;
+      }
+      float heapUsedMegabytes = RuntimeMetrics.currentHeapUsageMb();
       if (heapUsedMegabytes > job.resourceUsage.peakMemoryUsed) {
         job.resourceUsage.peakMemoryUsed = heapUsedMegabytes;
       }
-    } catch (Throwable t) {
-      // java.management or jdk.management module not available in this JRE build
+    } catch (Throwable ignored) {
+      // Telemetry unavailable in minimal runtime environments
     }
   }
 

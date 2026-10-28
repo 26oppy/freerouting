@@ -18,8 +18,6 @@ import app.freerouting.datastructures.UndoableObjects;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.sources.DefaultSettings;
-import com.sun.management.ThreadMXBean;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -118,33 +116,15 @@ public final class BatchOptimizer extends NamedAlgorithm {
   }
 
   private static float sampleCurrentThreadCpuSeconds() {
-    try {
-      ThreadMXBean threadMxBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-      long cpuNanos = threadMxBean.getThreadCpuTime(Thread.currentThread().threadId());
-      return cpuNanos < 0 ? -1f : cpuNanos / 1_000_000_000.0f;
-    } catch (Throwable t) {
-      return -1f;
-    }
+    return AutorouteRuntimeMetrics.currentThreadCpuSeconds();
   }
 
   private static float sampleCurrentThreadAllocatedMb() {
-    try {
-      ThreadMXBean threadMxBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-      threadMxBean.setThreadAllocatedMemoryEnabled(true);
-      long allocatedBytes = threadMxBean.getThreadAllocatedBytes(Thread.currentThread().threadId());
-      return allocatedBytes < 0 ? -1f : allocatedBytes / (1024.0f * 1024.0f);
-    } catch (Throwable t) {
-      return -1f;
-    }
+    return AutorouteRuntimeMetrics.currentThreadAllocatedMb();
   }
 
   private static float sampleHeapUsageMb() {
-    try {
-      long heapUsed = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed();
-      return heapUsed / (1024.0f * 1024.0f);
-    } catch (Throwable t) {
-      return 0f;
-    }
+    return AutorouteRuntimeMetrics.currentHeapUsageMb();
   }
 
   /**
@@ -1163,15 +1143,8 @@ public final class BatchOptimizer extends NamedAlgorithm {
         return new CandidateResult(new ItemRouteResult(itemId), null, null, 0, 0);
       }
 
-      long cpuStart = -1;
-      long allocStart = -1;
-      ThreadMXBean mxBean = null;
-      try {
-        mxBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-        cpuStart = mxBean.getThreadCpuTime(Thread.currentThread().threadId());
-        allocStart = mxBean.getThreadAllocatedBytes(Thread.currentThread().threadId());
-      } catch (Throwable ignored) {
-      }
+      long cpuStart = AutorouteRuntimeMetrics.currentThreadCpuNanos();
+      long allocStart = AutorouteRuntimeMetrics.currentThreadAllocatedBytes();
 
       WorkerBoardState workerBoardState = workerBoardStates.get();
       RoutingBoard workerBoard = workerBoardState.acquire(baselineBoard);
@@ -1208,18 +1181,13 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
         long cpuUsed = 0;
         long allocUsed = 0;
-        if (mxBean != null) {
-          try {
-            long cpuEnd = mxBean.getThreadCpuTime(Thread.currentThread().threadId());
-            if (cpuStart >= 0 && cpuEnd >= cpuStart) {
-              cpuUsed = cpuEnd - cpuStart;
-            }
-            long allocEnd = mxBean.getThreadAllocatedBytes(Thread.currentThread().threadId());
-            if (allocStart >= 0 && allocEnd >= allocStart) {
-              allocUsed = allocEnd - allocStart;
-            }
-          } catch (Throwable ignored) {
-          }
+        long cpuEnd = AutorouteRuntimeMetrics.currentThreadCpuNanos();
+        if (cpuStart >= 0 && cpuEnd >= cpuStart) {
+          cpuUsed = cpuEnd - cpuStart;
+        }
+        long allocEnd = AutorouteRuntimeMetrics.currentThreadAllocatedBytes();
+        if (allocStart >= 0 && allocEnd >= allocStart) {
+          allocUsed = allocEnd - allocStart;
         }
 
         boolean improved = result.improved();
