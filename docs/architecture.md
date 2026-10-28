@@ -116,9 +116,11 @@ Use the table below to jump to the package most likely to own the behavior you a
 | GUI windows, panels, menus, editor state, accessibility locators, or drawing | `app.freerouting.gui.windows.board`, `app.freerouting.gui.windows.routing`, `app.freerouting.gui.menus`, `app.freerouting.gui.board`, `app.freerouting.gui.controls`, `app.freerouting.gui.support`, `app.freerouting.gui.workspace`, `app.freerouting.gui.interactive`, `app.freerouting.gui.a11y`, and `app.freerouting.gui.rendering` |
 | API endpoints or background job execution | `app.freerouting.api.v1` and `app.freerouting.management` |
 | MCP server protocol bridge | `app.freerouting.api.mcp` |
+| Headless in-memory routing facade or embedding | `app.freerouting.core.facade` (`FreeroutingHeadlessEngine`) |
+| Runtime telemetry / thread metrics SPI | `app.freerouting.core.metrics` (`RuntimeMetricsProvider`) |
 | Runtime settings and settings sources | `app.freerouting.settings` |
 | Router or optimizer board scores | `app.freerouting.core.scoring` (`BoardStatistics.getRouterScore` / `getOptimizerScore`) |
-| Geometry, shapes, points, and planar math | `app.freerouting.geometry.planar` |
+| Geometry, shapes, points, and planar math | `app.freerouting.geometry.planar` (including `PolygonBooleanEngine`) |
 | CLI entry point and native execution | `app.freerouting.cli` |
 | Startup bootstrap, settings initialization, and CPU calibration | `app.freerouting.startup` |
 
@@ -330,7 +332,8 @@ mutators still require callers to manage board search trees and connectivity.
 
 ### `app.freerouting.geometry.planar`
 
-Planar geometry primitives and helper classes used throughout routing and board operations.
+Planar geometry primitives, constructive solid geometry (CSG) clipping operations via `PolygonBooleanEngine`,
+and helper classes used throughout routing and board operations.
 
 ### `app.freerouting.gui`
 
@@ -383,7 +386,9 @@ Headless board management (using `BoardManager` and `HeadlessBoardManager`), com
 ### `app.freerouting.core`
 
 Shared application data such as routing jobs, sessions, job/board-file events (`core.events`),
-scoring (`core.scoring`), CLI result manifests (`core.results`), and board library definitions (`core.library`).
+scoring (`core.scoring`), CLI result manifests (`core.results`), board library definitions (`core.library`),
+headless in-memory orchestration facade (`core.facade.FreeroutingHeadlessEngine`), and runtime telemetry SPI
+(`core.metrics.RuntimeMetricsProvider`).
 
 ### `app.freerouting.settings`
 
@@ -412,7 +417,9 @@ GUI rendering entry points; `BasicBoard` and `autoroute` remain headless and do 
 
 Several implementation areas live one level below the top-level package grouping above:
 
-- `app.freerouting.geometry.planar` contains the actual planar primitives and helper classes; start with [Point.java](../src/main/java/app/freerouting/geometry/planar/Point.java) and [Shape.java](../src/main/java/app/freerouting/geometry/planar/Shape.java).
+- `app.freerouting.geometry.planar` contains planar primitives, the `PolygonBooleanEngine` interface, and balanced CSG clipping engines; start with [Point.java](../src/main/java/app/freerouting/geometry/planar/Point.java), [Shape.java](../src/main/java/app/freerouting/geometry/planar/Shape.java), and [PolygonBooleanEngine.java](../src/main/java/app/freerouting/geometry/planar/PolygonBooleanEngine.java).
+- `app.freerouting.core.facade` contains the headless in-memory routing engine facade and request/result DTOs; start with [FreeroutingHeadlessEngine.java](../src/main/java/app/freerouting/core/facade/FreeroutingHeadlessEngine.java).
+- `app.freerouting.core.metrics` contains the headless runtime metrics SPI decoupling JVM ThreadMXBean dependencies; start with [RuntimeMetricsProvider.java](../src/main/java/app/freerouting/core/metrics/RuntimeMetricsProvider.java).
 - `app.freerouting.io.specctra` contains DSN and SES import/export; parser internals live in `parser/`. Start with [DsnReader.java](../src/main/java/app/freerouting/io/specctra/DsnReader.java), [DsnWriter.java](../src/main/java/app/freerouting/io/specctra/DsnWriter.java), [SesReader.java](../src/main/java/app/freerouting/io/specctra/SesReader.java), and [SesWriter.java](../src/main/java/app/freerouting/io/specctra/SesWriter.java).
 - `app.freerouting.analytics` contains analytics telemetry and dispatch; start with [FRAnalytics.java](../src/main/java/app/freerouting/analytics/FRAnalytics.java).
 - `app.freerouting.util.gson` contains Gson adapters and JSON provider helpers; start with [GsonProvider.java](../src/main/java/app/freerouting/util/gson/GsonProvider.java).
@@ -581,6 +588,26 @@ Server-side operation is handled by `api.v1` and `management`.
 - `management` coordinates jobs, sessions, and background services.
 
 When diagnosing headless execution or API behavior, begin here.
+
+### Headless In-Memory Facade & WebAssembly (WASM) Architecture
+
+For embedded applications, serverless runtimes, language bindings (such as the Python client library), and WebAssembly transpilation targets (TeaVM, CheerpJ), Freerouting provides a pure in-memory orchestration facade in `app.freerouting.core.facade`:
+
+- **Single Entry Point (`FreeroutingHeadlessEngine`):**
+  Executes the full routing pipeline—input parsing, fanout, autorouting passes, optimization passes, design-rule checking (DRC), and Specctra SES serialization—entirely in memory with zero file-system, Swing, or server dependencies.
+  - Takes a `HeadlessRoutingRequest` containing the DSN string content, an optional `RouterSettings` override, an optional `CancellationToken`, and a thread-safe `Consumer<HeadlessProgressEvent>` for real-time progress callbacks.
+  - Returns an immutable `HeadlessRoutingResult` containing the serialized SES output string, completion status (`SUCCESS`, `CANCELLED`, `ERROR`), unrouted connection count, DRC violations, board statistics, and elapsed execution time.
+
+- **Pluggable Constructive Solid Geometry (`PolygonBooleanEngine`):**
+  Copper pour area calculation, thermal relief cutouts, and DRC island decomposition require constructive solid geometry (CSG) polygon union and subtraction. These operations are isolated behind the `PolygonBooleanEngine` SPI (`app.freerouting.geometry.planar`):
+  - Default: `AwtPolygonBooleanEngine` backed by `java.awt.geom.Area` with $O(n \log n)$ balanced pairwise reductions (`subtractAll`, `unionAll`).
+  - WASM / Embedded: Downstream targets that do not emulate `java.desktop` or `java.awt.geom` can register alternative polygon clipping engines (e.g. Clipper2 / Martinez-Rueda) at startup via `PolygonBooleanEngines.setEngine(customEngine)`.
+
+- **Decoupled Telemetry SPI (`RuntimeMetricsProvider`):**
+  JVM thread CPU time and heap allocation metrics in `AutorouteRuntimeMetrics` and `BatchOptimizer` are abstracted behind `RuntimeMetricsProvider` (`app.freerouting.core.metrics`). The default implementation uses dynamic reflection to query `com.sun.management.ThreadMXBean` when available, falling back gracefully to standard `System.nanoTime()` without hard compile-time symbol dependencies on JVM management classes.
+
+- **Zero `java.beans` Dependency in Core Settings:**
+  `RouterSettings` uses an internal, thread-safe `SettingsChangeListener` / `SettingsChangeEvent` mechanism rather than `java.beans.PropertyChangeSupport`, ensuring the configuration system runs cleanly in restricted runtime environments.
 
 ### File I/O Path
 

@@ -421,4 +421,10 @@ You can override the base configuration/data root directory using `--user_data_p
 
 If any field were initialised to a non-null value inside the `RouterSettings` constructor (e.g. `public Integer maxPasses = 9999;`), every source's settings object would carry that value, and the merger would incorrectly treat it as an explicit override. A low-priority source (such as the JSON file) would then silently win over a higher-priority source (such as the API) whenever the user left that field unspecified in the high-priority source.
 
-**Keep all `RouterSettings` fields null-initialised.** Concrete defaults belong exclusively in `DefaultSettings.getSettings()`, which is always the first source applied and therefore acts as the safe fallback for every field
+**Keep all `RouterSettings` fields null-initialised.** Concrete defaults belong exclusively in `DefaultSettings.getSettings()`, which is always the first source applied and therefore acts as the safe fallback for every field.
+
+### Decoupled Settings Change Notification
+
+`RouterSettings` dispatches property change notifications using a lightweight, self-contained listener interface `SettingsChangeListener` and immutable event record `SettingsChangeEvent` (`app.freerouting.settings`).
+
+Historical versions relied on `java.beans.PropertyChangeSupport`. To eliminate dependencies on `java.desktop` and facilitate Ahead-Of-Time (GraalVM native image) and WebAssembly (TeaVM, CheerpJ) compilation targets, all change event dispatching is decoupled from `java.beans`. Existing listeners register via `settings.addSettingsChangeListener(...)` and receive notifications whenever mutable properties update.
