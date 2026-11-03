@@ -28,6 +28,26 @@ public final class DecouplingPairResolver {
   private DecouplingPairResolver() {}
 
   /**
+   * Convenience overload that builds {@link BoardIndex} and runs {@link DecouplingIdentifier}
+   * directly on the board with the given settings.
+   */
+  public static List<DecouplingPair> resolve(
+      app.freerouting.board.facade.RoutingBoard board, RouterSettings settings) {
+    if (board == null) {
+      return List.of();
+    }
+    IdentifierConfig config = IdentifierConfig.fromSettings(settings);
+    BoardIndex boardIndex = BoardIndex.build(board, config);
+    IdentificationResult idResult = DecouplingIdentifier.identify(board, config);
+    return resolve(board, boardIndex, idResult, settings);
+  }
+
+  /** Convenience overload that resolves pairs on the board with default settings. */
+  public static List<DecouplingPair> resolve(app.freerouting.board.facade.RoutingBoard board) {
+    return resolve(board, new app.freerouting.settings.sources.DefaultSettings().getSettings());
+  }
+
+  /**
    * Resolves decoupling candidates into prioritized routing pairs.
    *
    * @param board the active routing board
