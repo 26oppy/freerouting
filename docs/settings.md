@@ -131,6 +131,16 @@ The primary way to configure Freerouting is through a JSON settings file. This f
 
 - **`default_preferred_direction_trace_cost`**: Cost factor for routing traces in the preferred direction.
 - **`default_undesired_direction_trace_cost`**: Cost factor for routing traces in undesired directions.
+- **`decoupling`**: Decoupling capacitor detection and pre-routing knobs. Executed before fanout and autorouting.
+    - **`enabled`**: Whether decoupling capacitor routing is enabled. Default is `false`. Canonical CLI: `--router.decoupling.enabled=true`.
+    - **`only`**: Whether to run in decoupling-only mode. When `true`, runs only the decoupling routing stage, then finishes without fanout, autorouting, or optimization. Canonical CLI: `--router.decoupling.only=true`.
+    - **`max_radius_mm`**: Maximum search distance (in millimeters) from a capacitor pad to candidate IC power pins. Default is `15.0`. Canonical CLI: `--router.decoupling.max_radius_mm=15.0`.
+    - **`min_score_threshold`**: Minimum confidence score (0 to 100) required to route a candidate capacitor. Default is `60`. Canonical CLI: `--router.decoupling.min_score_threshold=60`.
+    - **`trace_width_mode`**: Trace width policy for the decoupling link (`NET_CLASS_RULE`, `IC_PAD_WIDTH`, `CAP_PAD_WIDTH`, `MAX_PAD_WIDTH`, `MIN_PAD_WIDTH`). Default is `NET_CLASS_RULE`. Canonical CLI: `--router.decoupling.trace_width_mode=NET_CLASS_RULE`.
+    - **`allow_neckdown`**: Whether to fall back to the net class neckdown width if the target trace width fails DRC. Default is `true`. Canonical CLI: `--router.decoupling.allow_neckdown=true`.
+    - **`max_trace_length_um`**: Maximum allowed routed trace length (in micrometers) between capacitor and IC power pin before failing the detour check. Default is `30000.0` (30 mm). Canonical CLI: `--router.decoupling.max_trace_length_um=30000.0`.
+    - **`max_via_distance_um`**: Maximum search distance (in micrometers) from the capacitor ground pad for placing a fanout via to a ground plane. Default is `3000.0` (3 mm). Canonical CLI: `--router.decoupling.max_via_distance_um=3000.0`.
+    - **`via_outside_pad`**: Strict DRC enforcement requiring ground vias to be placed entirely outside the SMD pad boundary without intersecting or penetrating the copper pad. Default is `true`. Canonical CLI: `--router.decoupling.via_outside_pad=true`.
 - **`autorouter`**: Batch autorouter stage knobs. Canonical CLI is
   `--router.autorouter.max_passes`. Flat keys (`--router.max_passes`, `-mp`,
   `FREEROUTING__ROUTER__MAX_PASSES`) still apply and warn until they are removed.

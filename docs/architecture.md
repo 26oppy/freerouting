@@ -300,9 +300,11 @@ Found-connection reconstruction and insertion, including path connection value o
 
 ### `app.freerouting.autoroute.decoupling`
 
-Read-only, deterministic identification of IC supply decoupling capacitors on a `RoutingBoard`.
-Computes confidence scores, explainable bitmask reason codes, and candidate IC supply owners
-without modifying board items, routing traces, or locking copper.
+Deterministic identification, pair resolution, and transactional routing of IC supply decoupling capacitors on a `RoutingBoard`.
+Includes topological capacitor detection (`DecouplingIdentifier`), 1:1 greedy pin-pair conflict resolution (`DecouplingPairResolver`),
+surface trace crawling (`DecouplingTraceCrawler`), pin breakout escape guards (`DecouplingEscapeProbe`), single-layer low-inductance surface routing (`DecouplingSurfaceRouter`),
+plane-aware ground return routing with geometric no-via-in-pad enforcement (`DecouplingGroundRouter`), and the pipeline orchestration stage (`DecouplingRoutingStage`).
+Operates prior to SMD fanout with in-place snapshot rollback on any route or DRC failure.
 
 ### `app.freerouting.autoroute`
 
@@ -478,7 +480,7 @@ Freerouting has two related routing stages:
 | Autorouter | Attempts to make every required connection | Adds missing traces and vias so unfinished nets become complete |
 | Optimizer | Improve route quality | Reroutes parts of existing connections to reduce length, vias, and awkward shapes |
 
-In settings, fanout, autorouter, and optimizer options are nested under the same `router` object so they can be reviewed before you run a job. During execution, Freerouting runs fanout, then autorouter passes, then optimizer passes (if each stage is enabled and the run is not interrupted).
+In settings, decoupling, fanout, autorouter, and optimizer options are nested under the same `router` object so they can be reviewed before you run a job. During execution, Freerouting runs decoupling capacitor routing (if enabled), fanout, autorouter passes, then optimizer passes (if each stage is enabled and the run is not interrupted).
 
 #### Autorouter
 
