@@ -108,8 +108,8 @@ final class AutorouteBatchLoop {
       if (Boolean.TRUE.equals(router.settings.decoupling.only)) {
         job.logInfo(
             "Decoupling-only mode requested: skipping fanout, autorouter passes, and optimizer.");
+        job.board = router.board;
         router.lastStopReason = BatchAutorouter.StopReason.COMPLETED;
-        job.state = RoutingJobState.COMPLETED;
         router.fireTaskStateChangedEvent(
             new TaskStateChangedEvent(router, TaskState.FINISHED, 0, router.board.getHash()));
         return true;

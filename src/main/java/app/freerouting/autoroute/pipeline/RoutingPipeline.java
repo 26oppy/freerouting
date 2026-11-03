@@ -136,6 +136,8 @@ public final class RoutingPipeline {
     boolean decouplingEnabled =
         this.job.routerSettings.decoupling != null
             && Boolean.TRUE.equals(this.job.routerSettings.decoupling.enabled);
+    boolean isDecouplingOnly =
+        decouplingEnabled && Boolean.TRUE.equals(this.job.routerSettings.decoupling.only);
 
     if (routerEnabled || this.job.routerSettings.isFanoutEnabled() || decouplingEnabled) {
       this.job.stage = RoutingStage.ROUTING;
@@ -153,7 +155,7 @@ public final class RoutingPipeline {
                           + knownStrategyNames()
                           + "."));
       byte[] input = null;
-      if (!strategies.isEmpty() && this.job.board != null) {
+      if (!isDecouplingOnly && !strategies.isEmpty() && this.job.board != null) {
         try {
           input = this.job.board.serialize(false);
         } catch (RuntimeException e) {
@@ -162,12 +164,14 @@ public final class RoutingPipeline {
         }
       }
       this.autorouter.runBatchLoop();
-      RoutingFallbackRunner fallback = new RoutingFallbackRunner(this.autorouter);
-      if (input != null) {
-        this.autorouter = fallback.run(this.job, this.autorouter, strategies, input);
-      }
-      if (RoutingSupervisor.explores(this.job.routerSettings)) {
-        this.autorouter = fallback.explore(this.job, this.autorouter);
+      if (!isDecouplingOnly) {
+        RoutingFallbackRunner fallback = new RoutingFallbackRunner(this.autorouter);
+        if (input != null) {
+          this.autorouter = fallback.run(this.job, this.autorouter, strategies, input);
+        }
+        if (RoutingSupervisor.explores(this.job.routerSettings)) {
+          this.autorouter = fallback.explore(this.job, this.autorouter);
+        }
       }
     } else if ((this.job.routerSettings.isFanoutEnabled() || decouplingEnabled)
         && !this.job.thread.isStopAutoRouterRequested()) {
