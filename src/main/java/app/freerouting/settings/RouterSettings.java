@@ -26,6 +26,10 @@ public class RouterSettings implements Serializable, Cloneable {
   @SerializedName("fanout")
   public FanoutSettings fanout;
 
+  /** Configuration for the decoupling capacitor routing stage. */
+  @SerializedName("decoupling")
+  public DecouplingSettings decoupling;
+
   @SerializedName("copper_to_edge_clearance_um")
   public Double copperToEdgeClearanceUm;
 
@@ -213,6 +217,7 @@ public class RouterSettings implements Serializable, Cloneable {
     this.optimizerScoring = new OptimizerScoreSettings();
     this.fanout = new FanoutSettings();
     this.autorouter = new AutorouterSettings();
+    this.decoupling = new DecouplingSettings();
   }
 
   /** Creates router settings sized and tuned for the supplied board. */
@@ -731,6 +736,8 @@ public class RouterSettings implements Serializable, Cloneable {
     result.fanout = this.fanout != null ? this.fanout.clone() : new FanoutSettings();
     result.autorouter =
         this.autorouter != null ? this.autorouter.clone() : new AutorouterSettings();
+    result.decoupling =
+        this.decoupling != null ? this.decoupling.clone() : new DecouplingSettings();
     result.boardSpecificTraceCostsApplied = this.boardSpecificTraceCostsApplied;
 
     return result;
@@ -1207,6 +1214,8 @@ public class RouterSettings implements Serializable, Cloneable {
           "optimizer.enabled", null, this.optimizer != null ? this.optimizer.enabled : null);
       pcs.firePropertyChange(
           "fanout.enabled", null, this.fanout != null ? this.fanout.enabled : null);
+      pcs.firePropertyChange(
+          "decoupling.enabled", null, this.decoupling != null ? this.decoupling.enabled : null);
     }
 
     return changedCount;
@@ -1340,6 +1349,48 @@ public class RouterSettings implements Serializable, Cloneable {
           FRLogger.warn(warning);
           this.validationWarnings.add(warning);
         }
+      }
+    }
+
+    // Validate decoupling settings
+    if (this.decoupling != null) {
+      if (Boolean.TRUE.equals(this.decoupling.only)
+          && Boolean.FALSE.equals(this.decoupling.enabled)) {
+        throw new IllegalArgumentException(
+            "Contradictory decoupling settings: decoupling.only=true cannot be combined with"
+                + " decoupling.enabled=false");
+      }
+      if (Boolean.TRUE.equals(this.decoupling.only)) {
+        this.decoupling.enabled = true;
+      }
+      if (this.decoupling.maxRadiusMm != null && this.decoupling.maxRadiusMm <= 0.0) {
+        String warning =
+            "Invalid decoupling maxRadiusMm: "
+                + this.decoupling.maxRadiusMm
+                + ", using default 15.0 mm";
+        FRLogger.warn(warning);
+        this.validationWarnings.add(warning);
+        this.decoupling.maxRadiusMm = 15.0;
+      }
+      if (this.decoupling.maxDetourRatio != null && this.decoupling.maxDetourRatio < 1.0) {
+        String warning =
+            "Invalid decoupling maxDetourRatio: "
+                + this.decoupling.maxDetourRatio
+                + ", using default 2.0";
+        FRLogger.warn(warning);
+        this.validationWarnings.add(warning);
+        this.decoupling.maxDetourRatio = 2.0;
+      }
+      if (this.decoupling.minScoreThreshold != null
+          && (this.decoupling.minScoreThreshold < 0 || this.decoupling.minScoreThreshold > 100)) {
+        String warning =
+            "Invalid decoupling minScoreThreshold: "
+                + this.decoupling.minScoreThreshold
+                + ", clamping between 0 and 100";
+        FRLogger.warn(warning);
+        this.validationWarnings.add(warning);
+        this.decoupling.minScoreThreshold =
+            Math.max(0, Math.min(100, this.decoupling.minScoreThreshold));
       }
     }
   }

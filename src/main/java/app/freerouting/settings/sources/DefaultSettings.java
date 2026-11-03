@@ -6,6 +6,7 @@ import app.freerouting.settings.OptimizerScoringVersion;
 import app.freerouting.settings.RouterScoringVersion;
 import app.freerouting.settings.RouterSettings;
 import app.freerouting.settings.SettingsSource;
+import app.freerouting.settings.TraceWidthMode;
 
 /**
  * Provides hardcoded default values for all router settings. This has the lowest priority and
@@ -246,6 +247,15 @@ public class DefaultSettings implements SettingsSource {
     settings.fanout.retryWithoutEscapeWindow = false;
     settings.fanout.strategy = "eager";
     settings.fanout.twoLayerBga = "no_fanout";
+
+    // Decoupling capacitor routing defaults
+    settings.decoupling.enabled = false;
+    settings.decoupling.only = false;
+    settings.decoupling.maxRadiusMm = 15.0;
+    settings.decoupling.minScoreThreshold = 65;
+    settings.decoupling.traceWidthMode = TraceWidthMode.CLASS_WIDTH;
+    settings.decoupling.maxDetourRatio = 2.0;
+    settings.decoupling.lockTraces = false;
 
     // Optimizer defaults
     settings.optimizer.enabled = true;

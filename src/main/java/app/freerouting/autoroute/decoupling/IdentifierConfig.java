@@ -52,4 +52,35 @@ public record IdentifierConfig(
     return new IdentifierConfig(
         15.0, 0.20, 12.0, 0.85, 60, 40, 4, true, true, DEFAULT_GROUND_PATTERNS, Set.of(), Set.of());
   }
+
+  /**
+   * Creates an identification configuration populated from router settings.
+   *
+   * @param settings the router settings, or null for defaults
+   * @return resolved identification configuration
+   */
+  public static IdentifierConfig fromSettings(app.freerouting.settings.RouterSettings settings) {
+    if (settings == null || settings.decoupling == null) {
+      return defaultConfig();
+    }
+    double maxRadius =
+        settings.decoupling.maxRadiusMm != null && settings.decoupling.maxRadiusMm > 0.0
+            ? settings.decoupling.maxRadiusMm
+            : 15.0;
+    int threshold =
+        settings.decoupling.minScoreThreshold != null ? settings.decoupling.minScoreThreshold : 60;
+    return new IdentifierConfig(
+        maxRadius,
+        0.20,
+        12.0,
+        0.85,
+        threshold,
+        40,
+        4,
+        true,
+        true,
+        DEFAULT_GROUND_PATTERNS,
+        Set.of(),
+        Set.of());
+  }
 }

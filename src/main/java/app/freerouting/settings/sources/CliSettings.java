@@ -42,6 +42,16 @@ public class CliSettings implements SettingsSource {
       String arg = args[i];
 
       if (arg.startsWith("--")) {
+        // Handle standalone boolean flags without '=' (e.g. --decoupling-only)
+        if (!arg.contains("=")) {
+          String flag = arg.substring(2);
+          if ("decoupling-only".equalsIgnoreCase(flag)
+              || "decoupling_only".equalsIgnoreCase(flag)
+              || "router.decoupling.only".equalsIgnoreCase(flag)) {
+            applyRouterSetting(settings, "router.decoupling.only", "true");
+            continue;
+          }
+        }
         // Handle --property=value format
         if (arg.contains("=")) {
           String[] parts = arg.substring(2).split("=", 2);
@@ -56,6 +66,11 @@ public class CliSettings implements SettingsSource {
           if ("scoring-version".equals(propertyName)) {
             applyRouterSetting(settings, "router.scoring.version", value);
             applyRouterSetting(settings, "optimizer.scoring.version", value);
+          } else if ("decoupling-only".equalsIgnoreCase(propertyName)
+              || "decoupling_only".equalsIgnoreCase(propertyName)
+              || "decoupling.only".equalsIgnoreCase(propertyName)) {
+            applyRouterSetting(
+                settings, "router.decoupling.only", value.isEmpty() ? "true" : value);
           } else if (propertyName.startsWith("router.")
               || propertyName.startsWith("optimizer.")
               || "router-scoring-version".equals(propertyName)
