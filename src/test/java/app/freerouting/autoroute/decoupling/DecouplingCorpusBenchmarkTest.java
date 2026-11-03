@@ -14,8 +14,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+@Tag("slow")
 class DecouplingCorpusBenchmarkTest {
 
   private static final Pattern C_REFDES_PATTERN = Pattern.compile("(?i)^C\\d.*");
