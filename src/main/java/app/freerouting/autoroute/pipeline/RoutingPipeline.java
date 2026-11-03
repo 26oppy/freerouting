@@ -133,8 +133,11 @@ public final class RoutingPipeline {
         this.job.routerSettings.getRunRouter()
             && (this.job.routerSettings.autorouter.maxPasses == null
                 || this.job.routerSettings.autorouter.maxPasses >= 0);
+    boolean decouplingEnabled =
+        this.job.routerSettings.decoupling != null
+            && Boolean.TRUE.equals(this.job.routerSettings.decoupling.enabled);
 
-    if (routerEnabled || this.job.routerSettings.isFanoutEnabled()) {
+    if (routerEnabled || this.job.routerSettings.isFanoutEnabled() || decouplingEnabled) {
       this.job.stage = RoutingStage.ROUTING;
     }
 
@@ -166,7 +169,7 @@ public final class RoutingPipeline {
       if (RoutingSupervisor.explores(this.job.routerSettings)) {
         this.autorouter = fallback.explore(this.job, this.autorouter);
       }
-    } else if (this.job.routerSettings.isFanoutEnabled()
+    } else if ((this.job.routerSettings.isFanoutEnabled() || decouplingEnabled)
         && !this.job.thread.isStopAutoRouterRequested()) {
       Integer originalMaxPasses = this.job.routerSettings.autorouter.maxPasses;
       try {
@@ -184,7 +187,10 @@ public final class RoutingPipeline {
   }
 
   private void runOptimizationStage() {
-    if (this.optimizer == null || this.job.thread.isStopRequested()) {
+    if (this.optimizer == null
+        || this.job.thread.isStopRequested()
+        || (this.job.routerSettings.decoupling != null
+            && Boolean.TRUE.equals(this.job.routerSettings.decoupling.only))) {
       return;
     }
 

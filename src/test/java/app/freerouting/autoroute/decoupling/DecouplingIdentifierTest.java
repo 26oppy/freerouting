@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.io.specctra.DsnTestFixtures;
 import java.io.IOException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 class DecouplingIdentifierTest {
@@ -109,6 +110,7 @@ class DecouplingIdentifierTest {
   }
 
   @Test
+  @Tag("slow")
   void testMultiBoardComprehensiveBenchmark() throws IOException {
     record BoardEntry(String name, String path, boolean isUpload) {}
     java.util.List<BoardEntry> boards =

@@ -12,6 +12,8 @@ import static app.freerouting.autoroute.pipeline.BatchAutorouter.STOP_AT_PASS_MO
 
 import app.freerouting.autoroute.BoardHistory;
 import app.freerouting.autoroute.PerformanceProfiler;
+import app.freerouting.autoroute.decoupling.DecouplingRoutingStage;
+import app.freerouting.autoroute.decoupling.DecouplingStageResult;
 import app.freerouting.autoroute.events.TaskStateChangedEvent;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
@@ -27,6 +29,7 @@ import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.RouterSettings;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 
@@ -93,6 +96,26 @@ final class AutorouteBatchLoop {
           againstCosts);
     }
 
+    // Decoupling capacitor routing pre-pass
+    Set<Integer> decouplingRoutedIcPinIds = Collections.emptySet();
+    if (router.settings.decoupling != null
+        && Boolean.TRUE.equals(router.settings.decoupling.enabled)) {
+      DecouplingStageResult decouplingResult =
+          DecouplingRoutingStage.run(router.board, router.settings, router.thread);
+      if (decouplingResult != null) {
+        decouplingRoutedIcPinIds = decouplingResult.routedIcPinIds();
+      }
+      if (Boolean.TRUE.equals(router.settings.decoupling.only)) {
+        job.logInfo(
+            "Decoupling-only mode requested: skipping fanout, autorouter passes, and optimizer.");
+        router.lastStopReason = BatchAutorouter.StopReason.COMPLETED;
+        job.state = RoutingJobState.COMPLETED;
+        router.fireTaskStateChangedEvent(
+            new TaskStateChangedEvent(router, TaskState.FINISHED, 0, router.board.getHash()));
+        return true;
+      }
+    }
+
     job.logDebug(
         "Checking fanout pre-pass. settings.fanout.enabled="
             + router.settings.isFanoutEnabled()
@@ -124,7 +147,7 @@ final class AutorouteBatchLoop {
         int ignoredSmdPins = 0;
         for (app.freerouting.board.model.items.Pin pin : router.board.getSmdPins()) {
           if (pin.netCount() > 0) {
-            if (pin.hasIgnoredNets()) {
+            if (pin.hasIgnoredNets() || decouplingRoutedIcPinIds.contains(pin.getId())) {
               ignoredSmdPins++;
             } else {
               netConnectedSmdPins++;
@@ -199,7 +222,8 @@ final class AutorouteBatchLoop {
                             status.ripupCosts());
                     job.logInfo(fanoutMessage);
                   }
-                });
+                },
+                decouplingRoutedIcPinIds);
         router.fanoutTimedOut = fanoutSummary.isTimedOut();
 
         float fanoutCpuSecondsEnd = AutorouteRuntimeMetrics.currentThreadCpuSeconds();

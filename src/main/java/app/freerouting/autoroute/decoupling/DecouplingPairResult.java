@@ -30,4 +30,16 @@ public record DecouplingPairResult(
   public static DecouplingPairResult failure(DecouplingPair pair, String reason) {
     return new DecouplingPairResult(false, pair, null, null, reason);
   }
+
+  /** Returns the total number of vias placed across power and ground legs. */
+  public int totalViaCount() {
+    return groundResult != null ? groundResult.viaCount() : 0;
+  }
+
+  /** Returns the total trace length added in micrometers across power and ground legs. */
+  public double totalTraceLengthUm() {
+    double powerLen = powerResult != null ? powerResult.routedTraceLength() : 0.0;
+    double groundLen = groundResult != null ? groundResult.routedTraceLength() : 0.0;
+    return powerLen + groundLen;
+  }
 }

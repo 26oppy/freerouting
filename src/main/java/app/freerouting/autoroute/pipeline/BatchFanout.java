@@ -12,9 +12,11 @@ import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.settings.RouterSettings;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
@@ -24,6 +26,7 @@ public final class BatchFanout {
   private final StoppableThread thread;
   private final RoutingBoard routingBoard;
   private final RouterSettings settings;
+  private final Set<Integer> excludedPinIds;
   private final SortedSet<Component> sortedComponents;
   private final int totalSmdPinCount;
   private final int alreadyConnectedPinCount;
@@ -40,20 +43,27 @@ public final class BatchFanout {
   /** Successful escapes in a component. A change allows a previously failed pin to be retried. */
   private final Map<Integer, Integer> componentGeneration = new HashMap<>();
 
-  private BatchFanout(RoutingBoard board, RouterSettings settings, StoppableThread thread) {
+  private BatchFanout(
+      RoutingBoard board,
+      RouterSettings settings,
+      StoppableThread thread,
+      Set<Integer> excludedPinIds) {
     this.thread = thread;
     this.routingBoard = board;
     this.settings = settings;
+    this.excludedPinIds = excludedPinIds != null ? excludedPinIds : Collections.emptySet();
     String sortingOrder =
         settings.fanout != null && settings.fanout.pinSortingOrder != null
             ? settings.fanout.pinSortingOrder
             : "outer_first";
     Collection<app.freerouting.board.model.items.Pin> boardSmdPinList = routingBoard.getSmdPins();
-    // Filter out SMD pins that belong to no net or an ignored net class — they don't need
-    // fanout and would inflate total pin counts and escape statistics.
+    // Filter out SMD pins that belong to no net, an ignored net class, or an excluded pin set
+    // (such as pins already served by a dedicated decoupling capacitor route).
     Collection<app.freerouting.board.model.items.Pin> boardSmdPinListWithNets = new LinkedList<>();
     for (app.freerouting.board.model.items.Pin pin : boardSmdPinList) {
-      if (pin.netCount() > 0 && !pin.hasIgnoredNets()) {
+      if (pin.netCount() > 0
+          && !pin.hasIgnoredNets()
+          && !this.excludedPinIds.contains(pin.getId())) {
         boardSmdPinListWithNets.add(pin);
       }
     }
@@ -88,7 +98,7 @@ public final class BatchFanout {
   /** Performs fanout routing for SMD components on board. */
   public static FanoutRunSummary fanoutBoard(
       RoutingBoard board, RouterSettings settings, StoppableThread thread) {
-    return fanoutBoard(board, settings, thread, null);
+    return fanoutBoard(board, settings, thread, null, Collections.emptySet());
   }
 
   /** Performs fanout routing for SMD components on board with a progress listener. */
@@ -97,10 +107,22 @@ public final class BatchFanout {
       RouterSettings settings,
       StoppableThread thread,
       FanoutProgressListener progressListener) {
+    return fanoutBoard(board, settings, thread, progressListener, Collections.emptySet());
+  }
+
+  /**
+   * Performs fanout routing for SMD components on board with progress listener and excluded pins.
+   */
+  public static FanoutRunSummary fanoutBoard(
+      RoutingBoard board,
+      RouterSettings settings,
+      StoppableThread thread,
+      FanoutProgressListener progressListener,
+      Set<Integer> excludedPinIds) {
     if (settings.usesDirectPinRouting()) {
       return DirectPinRouting.run(board, settings, thread);
     }
-    BatchFanout fanoutInstance = new BatchFanout(board, settings, thread);
+    BatchFanout fanoutInstance = new BatchFanout(board, settings, thread, excludedPinIds);
     long fanoutStart = System.currentTimeMillis();
     if (settings.fanout != null && settings.fanout.timeoutString != null) {
       Long timeoutSeconds =
@@ -241,7 +263,8 @@ public final class BatchFanout {
         }
         double maxMilliseconds = baseMillisPerPin * (passNo + 1);
         final TimeLimit timeLimit = new TimeLimit((int) maxMilliseconds);
-        if (currentPin.boardPin.hasIgnoredNets()) {
+        if (currentPin.boardPin.hasIgnoredNets()
+            || this.excludedPinIds.contains(currentPin.boardPin.getId())) {
           --pinsToGo;
           continue;
         }
