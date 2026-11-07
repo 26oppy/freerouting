@@ -12,6 +12,7 @@ import static app.freerouting.autoroute.pipeline.BatchAutorouter.STOP_AT_PASS_MO
 
 import app.freerouting.autoroute.BoardHistory;
 import app.freerouting.autoroute.PerformanceProfiler;
+import app.freerouting.autoroute.decoupling.BatchDecouplingRouter;
 import app.freerouting.autoroute.events.TaskStateChangedEvent;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
@@ -91,6 +92,11 @@ final class AutorouteBatchLoop {
           router.settings.getPlaneViaCosts(),
           prefCosts,
           againstCosts);
+    }
+
+    if (router.settings.isDecouplingEnabled()) {
+      job.logInfo("Decoupling capacitor pre-routing pass started.");
+      BatchDecouplingRouter.run(router.board, router.settings, router.thread);
     }
 
     job.logDebug(

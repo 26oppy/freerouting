@@ -50,6 +50,21 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 
 ### Routing Parameters
 
+- **`--router.decoupling.enabled=[true|false]`**
+  Enables or disables the decoupling capacitor pre-routing pass that runs before the fanout stage. Default is `false`. When enabled, it identifies decoupling capacitors placed next to IC power pins, routes direct same-layer surface straps, and places adjacent low-inductance ground vias.
+
+- **`--router.decoupling.max_strap_length_mm=[length in mm]`**
+  Maximum allowable physical trace length (in millimeters) for a surface strap connecting a capacitor power pad to an IC power pad. Default is `4.0`.
+
+- **`--router.decoupling.max_owner_radius_mm=[radius in mm]`**
+  Maximum Euclidean search radius (in millimeters) around each decoupling capacitor used to identify candidate owning ICs. Default is `8.0`.
+
+- **`--router.decoupling.lock_mode=[HARD|NONE]`**
+  Lock mode applied to successfully routed decoupling traces and vias (`HARD` for `SYSTEM_FIXED` protection, or `NONE`). Default is `HARD`.
+
+- **`--router.decoupling.include_review_candidates=[true|false]`**
+  Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.
+
 - **`--router.autorouter.max_passes=[number of passes]`**
   Sets the upper limit for the number of autorouter passes to perform. More passes may result in better optimization but will take longer.
 

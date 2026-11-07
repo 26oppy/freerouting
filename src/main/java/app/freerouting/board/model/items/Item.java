@@ -49,6 +49,11 @@ public abstract class Item
 
   public double smallestClearance = -1.0;
 
+  /** Bitmask flag: item was routed or protected by the decoupling capacitor pre-routing engine. */
+  public static final byte FLAG_DECOUPLING_PROTECTED = 1 << 0;
+
+  private byte decouplingFlags = 0;
+
   /** Not 0, if this item belongs to a component. */
   protected int componentId;
 
@@ -1045,6 +1050,30 @@ public abstract class Item
     FixedState oldState = this.fixedState;
     this.fixedState = fixedState;
     noteIfPreservedChanged(oldState);
+  }
+
+  /** Returns the decoupling flags bitmask for this item. */
+  public byte getDecouplingFlags() {
+    return this.decouplingFlags;
+  }
+
+  /** Sets the decoupling flags bitmask for this item. */
+  public void setDecouplingFlags(byte flags) {
+    this.decouplingFlags = flags;
+  }
+
+  /** Returns whether this item is protected by decoupling capacitor routing. */
+  public boolean isDecouplingProtected() {
+    return (this.decouplingFlags & FLAG_DECOUPLING_PROTECTED) != 0;
+  }
+
+  /** Sets whether this item is protected by decoupling capacitor routing. */
+  public void setDecouplingProtected(boolean protectedState) {
+    if (protectedState) {
+      this.decouplingFlags |= FLAG_DECOUPLING_PROTECTED;
+    } else {
+      this.decouplingFlags &= ~FLAG_DECOUPLING_PROTECTED;
+    }
   }
 
   /** Returns false, if this item is an obstacle for vias with the input net number. */

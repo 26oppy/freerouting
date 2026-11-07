@@ -145,6 +145,7 @@ public class Pin extends DrillItem implements Serializable {
             getFixedState(),
             board);
     copiedPin.netTieClusterId = this.netTieClusterId;
+    copiedPin.setDecouplingFlags(this.getDecouplingFlags());
     return copiedPin;
   }
 

@@ -721,12 +721,13 @@ To maintain clarity and consistency across the codebase, user interfaces, logs, 
 - **Job:**
   - An asynchronous execution instance of the routing pipeline on a board design using specific settings. A job goes through distinct workflow stages and produces routed output files and logs.
 - **Routing Pipeline:**
-  - The complete sequence of processing stages that a board design undergoes: Input DSN parsing -> Fanout -> Auto-routing -> Optimization -> Output SES/SCR writing.
+  - The complete sequence of processing stages that a board design undergoes: Input DSN parsing -> Decoupling Pre-Pass (optional) -> Fanout -> Auto-routing -> Optimization -> Output SES/SCR writing.
 - **Routing Stages:**
-  - High-level, distinct phases of the Routing Pipeline. The three primary stages are:
-    1. **Fanout Stage:** Generates escape vias/traces from dense pads (e.g. BGAs).
-    2. **Auto-routing Stage:** The main connection phase using maze routing. We refer to the process as **Auto-routing** and the underlying programmatic engine as the **Autorouter**.
-    3. **Optimization Stage:** Refines trace paths to reduce lengths and via counts. This is also referred to as the **Optimizer**. The term "Post-routing" or "Postroute" is deprecated.
+  - High-level, distinct phases of the Routing Pipeline:
+    1. **Decoupling Stage (Optional):** Pre-routes short, low-inductance surface straps and adjacent ground vias for decoupling capacitors before fanout escapes.
+    2. **Fanout Stage:** Generates escape vias/traces from dense pads (e.g. BGAs).
+    3. **Auto-routing Stage:** The main connection phase using maze routing. We refer to the process as **Auto-routing** and the underlying programmatic engine as the **Autorouter**.
+    4. **Optimization Stage:** Refines trace paths to reduce lengths and via counts. This is also referred to as the **Optimizer**. The term "Post-routing" or "Postroute" is deprecated.
 - **Pass:**
   - A single iteration loop over all nets or items within a specific routing stage (e.g. an Auto-routing pass, or an Optimization pass).
 

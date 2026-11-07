@@ -66,16 +66,19 @@ public class PolylineTrace extends Trace implements Serializable {
     for (int i = 0; i < currentNetNumbers.length; i++) {
       currentNetNumbers[i] = getNetNumber(i);
     }
-    return new PolylineTrace(
-        lines,
-        getLayer(),
-        getHalfWidth(),
-        currentNetNumbers,
-        clearanceClassIndex(),
-        id,
-        getComponentId(),
-        getFixedState(),
-        board);
+    PolylineTrace copiedTrace =
+        new PolylineTrace(
+            lines,
+            getLayer(),
+            getHalfWidth(),
+            currentNetNumbers,
+            clearanceClassIndex(),
+            id,
+            getComponentId(),
+            getFixedState(),
+            board);
+    copiedTrace.setDecouplingFlags(this.getDecouplingFlags());
+    return copiedTrace;
   }
 
   /** Checks, if this trace is on layer layer. */
@@ -362,6 +365,7 @@ public class PolylineTrace extends Trace implements Serializable {
     if (this.lines.lines.length < 3) {
       board.removeItem(this);
     }
+    this.setDecouplingFlags((byte) (this.getDecouplingFlags() & otherTrace.getDecouplingFlags()));
     board.removeItem(otherTrace);
     if (board instanceof RoutingBoard routingBoard) {
       routingBoard.joinChangedArea(startCorner.toFloat(), getLayer());
@@ -486,6 +490,7 @@ public class PolylineTrace extends Trace implements Serializable {
     if (this.lines.lines.length < 3) {
       board.removeItem(this);
     }
+    this.setDecouplingFlags((byte) (this.getDecouplingFlags() & otherTrace.getDecouplingFlags()));
     board.removeItem(otherTrace);
     if (board instanceof RoutingBoard routingBoard) {
       routingBoard.joinChangedArea(endCorner.toFloat(), getLayer());
@@ -793,6 +798,12 @@ public class PolylineTrace extends Trace implements Serializable {
             netNumbers,
             clearanceClassIndex(),
             getFixedState());
+    if (result[0] != null) {
+      result[0].setDecouplingFlags(this.getDecouplingFlags());
+    }
+    if (result[1] != null) {
+      result[1].setDecouplingFlags(this.getDecouplingFlags());
+    }
     return result;
   }
 

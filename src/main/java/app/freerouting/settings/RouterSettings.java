@@ -26,6 +26,10 @@ public class RouterSettings implements Serializable, Cloneable {
   @SerializedName("fanout")
   public FanoutSettings fanout;
 
+  /** Configuration for the decoupling capacitor pre-routing pass. */
+  @SerializedName("decoupling")
+  public DecouplingSettings decoupling;
+
   @SerializedName("copper_to_edge_clearance_um")
   public Double copperToEdgeClearanceUm;
 
@@ -729,6 +733,8 @@ public class RouterSettings implements Serializable, Cloneable {
             ? this.optimizerScoring.clone()
             : new OptimizerScoreSettings();
     result.fanout = this.fanout != null ? this.fanout.clone() : new FanoutSettings();
+    result.decoupling =
+        this.decoupling != null ? this.decoupling.clone() : new DecouplingSettings();
     result.autorouter =
         this.autorouter != null ? this.autorouter.clone() : new AutorouterSettings();
     result.boardSpecificTraceCostsApplied = this.boardSpecificTraceCostsApplied;
@@ -756,6 +762,11 @@ public class RouterSettings implements Serializable, Cloneable {
       throw new IllegalArgumentException("router.fanout.strategy must be eager or direct_first");
     }
     return true;
+  }
+
+  /** Returns whether decoupling capacitor pre-routing is enabled. */
+  public boolean isDecouplingEnabled() {
+    return this.decoupling != null && Boolean.TRUE.equals(this.decoupling.enabled);
   }
 
   /** Returns whether connections with newly introduced clearance violations are rejected. */
@@ -1207,6 +1218,8 @@ public class RouterSettings implements Serializable, Cloneable {
           "optimizer.enabled", null, this.optimizer != null ? this.optimizer.enabled : null);
       pcs.firePropertyChange(
           "fanout.enabled", null, this.fanout != null ? this.fanout.enabled : null);
+      pcs.firePropertyChange(
+          "decoupling.enabled", null, this.decoupling != null ? this.decoupling.enabled : null);
     }
 
     return changedCount;

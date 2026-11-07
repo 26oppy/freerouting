@@ -1178,6 +1178,36 @@
       "serializable": true
     },
     {
+      "type": "app.freerouting.settings.DecouplingLockMode"
+    },
+    {
+      "type": "app.freerouting.settings.DecouplingSettings",
+      "fields": [
+        {
+          "name": "enabled"
+        },
+        {
+          "name": "includeReviewCandidates"
+        },
+        {
+          "name": "lockMode"
+        },
+        {
+          "name": "maxOwnerRadiusMm"
+        },
+        {
+          "name": "maxStrapLengthMm"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ],
+      "serializable": true
+    },
+    {
       "type": "app.freerouting.settings.FanoutSettings",
       "fields": [
         {
@@ -1730,6 +1760,9 @@
         },
         {
           "name": "copperToEdgeClearanceUm"
+        },
+        {
+          "name": "decoupling"
         },
         {
           "name": "fanout"

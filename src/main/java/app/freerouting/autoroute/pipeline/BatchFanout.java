@@ -76,7 +76,8 @@ public final class BatchFanout {
         // and its unconnected set is empty — same logic as RoutingBoard.fanout().
         app.freerouting.board.model.items.Pin boardPin = pin.boardPin;
         int netNumber = boardPin.getNetNumber(0);
-        if (boardPin.getUnconnectedSet(netNumber).isEmpty()) {
+        if (boardPin.getUnconnectedSet(netNumber).isEmpty()
+            || hasDecouplingConnection(boardPin, netNumber)) {
           alreadyConnected++;
         }
       }
@@ -241,7 +242,8 @@ public final class BatchFanout {
         }
         double maxMilliseconds = baseMillisPerPin * (passNo + 1);
         final TimeLimit timeLimit = new TimeLimit((int) maxMilliseconds);
-        if (currentPin.boardPin.hasIgnoredNets()) {
+        if (currentPin.boardPin.hasIgnoredNets()
+            || hasDecouplingConnection(currentPin.boardPin, currentPin.boardPin.getNetNumber(0))) {
           --pinsToGo;
           continue;
         }
@@ -834,5 +836,18 @@ public final class BatchFanout {
         return result;
       }
     }
+  }
+
+  private static boolean hasDecouplingConnection(
+      app.freerouting.board.model.items.Pin pin, int netNumber) {
+    if (pin.isDecouplingProtected()) {
+      return true;
+    }
+    for (app.freerouting.board.model.items.Item item : pin.getNormalContacts()) {
+      if (item.isDecouplingProtected()) {
+        return true;
+      }
+    }
+    return false;
   }
 }

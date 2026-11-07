@@ -250,6 +250,16 @@ Configures the optional route-optimization stage that runs after autorouting.
 - **`max_consecutive_failures_pass1`**: Maximum consecutive candidate failures allowed in pass 1 before
   early-terminating the pass (canary probe). Default is `12`.
 
+##### **`decoupling` Sub-section**
+
+Configures the optional decoupling capacitor pre-routing pass that runs immediately before the fanout stage.
+
+- **`enabled`**: Whether to run the decoupling pre-pass. Default is `false`. When enabled, identifies decoupling capacitors placed adjacent to IC supply pins and pre-routes short, low-inductance surface straps and local ground vias before dense escape fanout begins.
+- **`max_strap_length_mm`**: Maximum allowable distance in millimeters between a capacitor power pad and the targeted IC power pad. Default is `4.0`.
+- **`max_owner_radius_mm`**: Maximum Euclidean search radius in millimeters around the capacitor to locate candidate owning IC components. Default is `8.0`.
+- **`lock_mode`**: Locking mode applied to successfully routed decoupling traces and vias (`HARD` for `SYSTEM_FIXED` protection, or `NONE`). Default is `HARD`.
+- **`include_review_candidates`**: Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.
+
 ##### **`fanout` Sub-section**
 
 Configures the SMD-pin fanout pre-pass stage.

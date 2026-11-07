@@ -2,6 +2,8 @@ package app.freerouting.settings.sources;
 
 import app.freerouting.autoroute.BoardUpdateStrategy;
 import app.freerouting.autoroute.ItemSelectionStrategy;
+import app.freerouting.settings.DecouplingLockMode;
+import app.freerouting.settings.DecouplingSettings;
 import app.freerouting.settings.OptimizerScoringVersion;
 import app.freerouting.settings.RouterScoringVersion;
 import app.freerouting.settings.RouterSettings;
@@ -120,6 +122,12 @@ public class DefaultSettings implements SettingsSource {
 
   /** Default single sided constraint for meanders. */
   public static final boolean DEFAULT_MEANDER_SINGLE_SIDED = false;
+
+  /** Default maximum Euclidean radius in millimetres to search for decoupling owner IC pins. */
+  public static final double DEFAULT_DECOUPLING_MAX_OWNER_RADIUS_MM = 8.0;
+
+  /** Default maximum strap length in millimetres for decoupling cap-to-IC surface straps. */
+  public static final double DEFAULT_DECOUPLING_MAX_STRAP_LENGTH_MM = 4.0;
 
   /** Current default router score formula. */
   public static final RouterScoringVersion DEFAULT_ROUTER_SCORING_VERSION =
@@ -246,6 +254,14 @@ public class DefaultSettings implements SettingsSource {
     settings.fanout.retryWithoutEscapeWindow = false;
     settings.fanout.strategy = "eager";
     settings.fanout.twoLayerBga = "no_fanout";
+
+    // Decoupling pre-pass defaults (disabled by default for non-regression)
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = false;
+    settings.decoupling.lockMode = DecouplingLockMode.HARD;
+    settings.decoupling.maxOwnerRadiusMm = DEFAULT_DECOUPLING_MAX_OWNER_RADIUS_MM;
+    settings.decoupling.maxStrapLengthMm = DEFAULT_DECOUPLING_MAX_STRAP_LENGTH_MM;
+    settings.decoupling.includeReviewCandidates = false;
 
     // Optimizer defaults
     settings.optimizer.enabled = true;

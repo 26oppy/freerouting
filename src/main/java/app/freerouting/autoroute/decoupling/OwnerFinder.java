@@ -76,7 +76,8 @@ public final class OwnerFinder {
         continue;
       }
 
-      Point capCenter = state.pinA.getCenter();
+      Pin capSupplyPin = (state.netA == state.railNet) ? state.pinA : state.pinB;
+      Point capCenter = capSupplyPin != null ? capSupplyPin.getCenter() : null;
       if (capCenter == null) {
         continue;
       }

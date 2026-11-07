@@ -77,7 +77,11 @@ final class DirectPinRouting {
         int layer = pin.firstLayer();
         Set<Item> source = pin.getConnectedSet(net);
         Set<Item> destinations = pin.getUnconnectedSet(net);
-        if (destinations.isEmpty() || touchesPlane(source) || !onLayer(destinations, layer)) {
+        if (destinations.isEmpty()
+            || touchesPlane(source)
+            || !onLayer(destinations, layer)
+            || pin.isDecouplingProtected()
+            || touchesDecoupling(pin.getNormalContacts())) {
           continue;
         }
         attempts++;
@@ -175,6 +179,15 @@ final class DirectPinRouting {
   private static boolean touchesPlane(Set<Item> source) {
     for (Item item : source) {
       if (item instanceof ConductionArea) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean touchesDecoupling(Set<Item> source) {
+    for (Item item : source) {
+      if (item.isDecouplingProtected()) {
         return true;
       }
     }
