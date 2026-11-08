@@ -3,6 +3,7 @@ package app.freerouting.autoroute.decoupling;
 import app.freerouting.autoroute.AutorouteAttemptResult;
 import app.freerouting.autoroute.AutorouteAttemptState;
 import app.freerouting.autoroute.maze.AutorouteControl;
+import app.freerouting.autoroute.maze.AutorouteEngine;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.ConductionArea;
 import app.freerouting.board.model.items.Item;
@@ -14,14 +15,13 @@ import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.board.model.structure.Unit;
 import app.freerouting.core.StoppableThread;
 import app.freerouting.datastructures.TimeLimit;
-import app.freerouting.drc.ClearanceViolation;
+import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.Net;
 import app.freerouting.settings.DecouplingLockMode;
 import app.freerouting.settings.RouterSettings;
 import app.freerouting.settings.sources.DefaultSettings;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -29,14 +29,19 @@ import java.util.TreeSet;
 /**
  * Pre-routing pass for decoupling capacitors.
  *
- * <p>Uses {@link DecouplingAssignmentPlanner} to optimally match decoupling capacitor supply pads
- * to their paired IC supply pins (or parallel sibling primary caps) via same-layer surface straps,
- * and drops dedicated ground/plane vias adjacent to capacitor ground pads, prior to SMD fanout and
- * general autorouting.
+ * <p>Uses {@link DecouplingAssignmentPlanner} to match decoupling capacitor supply pads to their
+ * paired IC supply pins via same-layer surface straps. Integrates {@link DecouplingRouteCheckpoint}
+ * to guarantee O(1) split-trace rollback fidelity (Issue #1054) and {@link CourtyardEscapeProbe}
+ * with trace width scaling and automatic downgrade (1.5x to 1.0x) to eliminate signal pin trapping
+ * in dense IC courtyards prior to fanout and general autorouting.
  */
 public final class BatchDecouplingRouter {
 
   private BatchDecouplingRouter() {}
+
+  /** Result record for a single strap routing attempt. */
+  private record StrapAttemptOutcome(
+      boolean success, String status, double lengthMm, List<Item> newItems) {}
 
   /**
    * Runs the decoupling capacitor pre-routing pass on the given board.
@@ -72,6 +77,10 @@ public final class BatchDecouplingRouter {
         settings.decoupling != null && settings.decoupling.maxStrapLengthMm != null
             ? settings.decoupling.maxStrapLengthMm
             : DefaultSettings.DEFAULT_DECOUPLING_MAX_STRAP_LENGTH_MM;
+    double traceWidthScale =
+        settings.decoupling != null && settings.decoupling.traceWidthScale != null
+            ? settings.decoupling.traceWidthScale
+            : 1.5;
 
     double mmResolution = board.communication.getResolution(Unit.MM);
     double maxStrapLengthUnits = maxStrapLengthMm * mmResolution;
@@ -204,73 +213,53 @@ public final class BatchDecouplingRouter {
                   tagDecouplingProtected(supplyPin, lockMode);
                   tagDecouplingProtected(ownerPin, lockMode);
                 } else {
-                  int maxIdBefore = board.communication.idGenerator.maxGeneratedId();
                   Set<Item> ownerConnected = ownerPin.getConnectedSet(railNetNo);
 
-                  var engine =
-                      board.initAutoroute(
-                          railNetNo,
-                          control.traceClearanceClassIndex,
-                          thread,
-                          new TimeLimit(1000),
-                          false);
-                  AutorouteAttemptResult attempt =
-                      engine.autorouteConnection(
-                          supplyConnected, ownerConnected, control, new TreeSet<>(), null);
+                  // 2-Phase width trial: try wide strap (e.g. 1.5x), then downgrade to 1.0x if
+                  // trapped/DRC
+                  double[] scalesToTry =
+                      (traceWidthScale > 1.0)
+                          ? new double[] {traceWidthScale, 1.0}
+                          : new double[] {1.0};
 
-                  if (attempt.state == AutorouteAttemptState.ROUTED) {
-                    int accuracy =
-                        settings.tracePullTightAccuracy != null
-                            ? settings.tracePullTightAccuracy
-                            : 500;
-                    board.optChangedArea(
-                        new int[] {railNetNo}, null, accuracy, control.traceCosts, thread);
+                  StrapAttemptOutcome outcome = null;
+                  for (double scale : scalesToTry) {
+                    Set<Item> currentSupplyConnected = supplyPin.getConnectedSet(railNetNo);
+                    Set<Item> currentOwnerConnected = ownerPin.getConnectedSet(railNetNo);
+                    outcome =
+                        tryRouteStrap(
+                            board,
+                            settings,
+                            thread,
+                            control,
+                            supplyPin,
+                            ownerPin,
+                            currentSupplyConnected,
+                            currentOwnerConnected,
+                            layer,
+                            railNetNo,
+                            candidate.groundNetNumber(),
+                            ownerPin.getComponentId(),
+                            candidate.componentId(),
+                            scale,
+                            maxStrapLengthMm,
+                            mmResolution);
 
-                    List<Item> newItems = new ArrayList<>();
-                    for (Item it : supplyPin.getConnectedSet(railNetNo)) {
-                      if (it.getId() > maxIdBefore) {
-                        newItems.add(it);
-                      }
+                    if (outcome.success()) {
+                      break;
                     }
+                  }
 
-                    candidateStrapLengthMm = 0.0;
-                    for (Item newItem : newItems) {
-                      if (newItem instanceof Trace trace) {
-                        candidateStrapLengthMm += trace.getLength() / mmResolution;
-                      }
-                    }
-
-                    boolean hasViolation = false;
-                    for (Item newItem : newItems) {
-                      Collection<ClearanceViolation> viols = newItem.clearanceViolations();
-                      if (!viols.isEmpty()) {
-                        hasViolation = true;
-                        break;
-                      }
-                    }
-
-                    if (hasViolation) {
-                      for (Item newItem : newItems) {
-                        board.removeItem(newItem);
-                      }
-                      failed++;
-                      strapStatus = "DRC_ROLLBACK";
-                    } else if (candidateStrapLengthMm > maxStrapLengthMm) {
-                      for (Item newItem : newItems) {
-                        board.removeItem(newItem);
-                      }
-                      failed++;
-                      strapStatus = "DISTANCE_EXCEEDED";
-                    } else {
-                      strapSuccess = true;
-                      strapStatus = "ROUTED";
-                      routedStraps++;
-                      totalStrapLengthMm += candidateStrapLengthMm;
-                      tagDecouplingProtected(supplyPin, lockMode);
-                      tagDecouplingProtected(ownerPin, lockMode);
-                      for (Item newItem : newItems) {
-                        tagDecouplingProtected(newItem, lockMode);
-                      }
+                  if (outcome != null && outcome.success()) {
+                    strapSuccess = true;
+                    strapStatus = outcome.status();
+                    routedStraps++;
+                    candidateStrapLengthMm = outcome.lengthMm();
+                    totalStrapLengthMm += candidateStrapLengthMm;
+                    tagDecouplingProtected(supplyPin, lockMode);
+                    tagDecouplingProtected(ownerPin, lockMode);
+                    for (Item newItem : outcome.newItems()) {
+                      tagDecouplingProtected(newItem, lockMode);
                     }
                   } else {
                     // Secondary overflow cap: fallback flanking attempt to primary cap pad
@@ -296,72 +285,46 @@ public final class BatchDecouplingRouter {
                                   .toFloat()
                                   .distance(primaryCapPin.getCenter().toFloat());
                           if (flankDistUnits <= maxStrapLengthUnits) {
-                            int maxIdBeforeFlank = board.communication.idGenerator.maxGeneratedId();
-                            var flankEngine =
-                                board.initAutoroute(
-                                    railNetNo,
-                                    control.traceClearanceClassIndex,
-                                    thread,
-                                    new TimeLimit(1000),
-                                    false);
-                            AutorouteAttemptResult flankAttempt =
-                                flankEngine.autorouteConnection(
-                                    supplyConnected,
-                                    primaryCapConnected,
-                                    control,
-                                    new TreeSet<>(),
-                                    null);
-
-                            if (flankAttempt.state == AutorouteAttemptState.ROUTED) {
-                              int accuracy =
-                                  settings.tracePullTightAccuracy != null
-                                      ? settings.tracePullTightAccuracy
-                                      : 500;
-                              board.optChangedArea(
-                                  new int[] {railNetNo},
-                                  null,
-                                  accuracy,
-                                  control.traceCosts,
-                                  thread);
-
-                              List<Item> flankItems = new ArrayList<>();
-                              for (Item it : supplyPin.getConnectedSet(railNetNo)) {
-                                if (it.getId() > maxIdBeforeFlank) {
-                                  flankItems.add(it);
-                                }
+                            StrapAttemptOutcome flankOutcome = null;
+                            for (double scale : scalesToTry) {
+                              Set<Item> currentSupplyConnected =
+                                  supplyPin.getConnectedSet(railNetNo);
+                              Set<Item> currentPrimaryConnected =
+                                  primaryCapPin.getConnectedSet(railNetNo);
+                              flankOutcome =
+                                  tryRouteStrap(
+                                      board,
+                                      settings,
+                                      thread,
+                                      control,
+                                      supplyPin,
+                                      primaryCapPin,
+                                      currentSupplyConnected,
+                                      currentPrimaryConnected,
+                                      layer,
+                                      railNetNo,
+                                      candidate.groundNetNumber(),
+                                      primaryCapPin.getComponentId(),
+                                      candidate.componentId(),
+                                      scale,
+                                      maxStrapLengthMm,
+                                      mmResolution);
+                              if (flankOutcome.success()) {
+                                break;
                               }
+                            }
 
-                              double flankLengthMm = 0.0;
-                              for (Item newItem : flankItems) {
-                                if (newItem instanceof Trace trace) {
-                                  flankLengthMm += trace.getLength() / mmResolution;
-                                }
-                              }
-
-                              boolean flankViolation = false;
-                              for (Item newItem : flankItems) {
-                                if (!newItem.clearanceViolations().isEmpty()) {
-                                  flankViolation = true;
-                                  break;
-                                }
-                              }
-
-                              if (!flankViolation && flankLengthMm <= maxStrapLengthMm) {
-                                flanked = true;
-                                strapSuccess = true;
-                                strapStatus = "ROUTED_FLANKING";
-                                routedStraps++;
-                                totalStrapLengthMm += flankLengthMm;
-                                candidateStrapLengthMm = flankLengthMm;
-                                tagDecouplingProtected(supplyPin, lockMode);
-                                tagDecouplingProtected(primaryCapPin, lockMode);
-                                for (Item newItem : flankItems) {
-                                  tagDecouplingProtected(newItem, lockMode);
-                                }
-                              } else {
-                                for (Item newItem : flankItems) {
-                                  board.removeItem(newItem);
-                                }
+                            if (flankOutcome != null && flankOutcome.success()) {
+                              flanked = true;
+                              strapSuccess = true;
+                              strapStatus = "ROUTED_FLANKING";
+                              routedStraps++;
+                              candidateStrapLengthMm = flankOutcome.lengthMm();
+                              totalStrapLengthMm += candidateStrapLengthMm;
+                              tagDecouplingProtected(supplyPin, lockMode);
+                              tagDecouplingProtected(primaryCapPin, lockMode);
+                              for (Item newItem : flankOutcome.newItems()) {
+                                tagDecouplingProtected(newItem, lockMode);
                               }
                             }
                           }
@@ -371,7 +334,7 @@ public final class BatchDecouplingRouter {
 
                     if (!flanked) {
                       failed++;
-                      strapStatus = "NO_ROUTE_FOUND";
+                      strapStatus = outcome != null ? outcome.status() : "NO_ROUTE_FOUND";
                     }
                   }
                 }
@@ -443,6 +406,7 @@ public final class BatchDecouplingRouter {
 
             if (viaViolation) {
               for (Item newItem : newViaItems) {
+                newItem.setFixedState(FixedState.UNFIXED);
                 board.removeItem(newItem);
               }
               if (task.isPlaneOnly()) {
@@ -520,6 +484,144 @@ public final class BatchDecouplingRouter {
             totalStrapLengthMm));
 
     return summary;
+  }
+
+  /**
+   * Attempts to route a surface strap between supply and target pins at the specified trace width
+   * scale. Validates DRC and verifies that adjacent unrouted SMD signal pins are not trapped.
+   */
+  private static StrapAttemptOutcome tryRouteStrap(
+      RoutingBoard board,
+      RouterSettings settings,
+      StoppableThread thread,
+      AutorouteControl control,
+      Pin supplyPin,
+      Pin targetPin,
+      Set<Item> supplyConnected,
+      Set<Item> targetConnected,
+      int layer,
+      int railNetNo,
+      int groundNetNo,
+      int ownerCompId,
+      int capCompId,
+      double widthScale,
+      double maxStrapLengthMm,
+      double mmResolution) {
+    IntBox padUnion = supplyPin.boundingBox().union(targetPin.boundingBox());
+    int maxClearance = board.rules.clearanceMatrix.maxValue(layer);
+    int searchRadius = (int) Math.ceil(maxStrapLengthMm * mmResolution) + maxClearance;
+    IntBox searchBox = padUnion.offset(searchRadius);
+
+    // Capture scoped local checkpoint before route attempt
+    DecouplingRouteCheckpoint checkpoint =
+        DecouplingRouteCheckpoint.capture(board, searchBox, layer, railNetNo);
+
+    // Apply scaled trace width clamped to >= max(netClassHalfWidth, neckWidthUm)
+    applyScaledTraceWidth(control, layer, railNetNo, widthScale, board, settings, mmResolution);
+
+    var engine =
+        board.initAutoroute(
+            railNetNo, control.traceClearanceClassIndex, thread, new TimeLimit(1000), false);
+
+    AutorouteAttemptResult attempt =
+        engine.autorouteConnection(
+            supplyConnected, targetConnected, control, new TreeSet<>(), null);
+
+    if (attempt.state != AutorouteAttemptState.ROUTED) {
+      checkpoint.rollback(board);
+      return new StrapAttemptOutcome(false, "NO_ROUTE_FOUND", 0.0, List.of());
+    }
+
+    // Deterministic pull-tight optimization with timeLimit = 0
+    int accuracy = settings.tracePullTightAccuracy != null ? settings.tracePullTightAccuracy : 500;
+    board.optChangedArea(new int[] {railNetNo}, null, accuracy, control.traceCosts, thread, 0);
+
+    // Collect newly added items
+    List<Item> newItems = new ArrayList<>();
+    int currentMaxId = board.communication.idGenerator.maxGeneratedId();
+    for (int id = checkpoint.maxIdBefore + 1; id <= currentMaxId; id++) {
+      Item it = board.getItem(id);
+      if (it != null) {
+        newItems.add(it);
+      }
+    }
+
+    double lengthMm = 0.0;
+    for (Item newItem : newItems) {
+      if (newItem instanceof Trace trace) {
+        lengthMm += trace.getLength() / mmResolution;
+      }
+    }
+
+    // Check DRC clearance violations
+    boolean hasViolation = false;
+    for (Item newItem : newItems) {
+      if (!newItem.clearanceViolations().isEmpty()) {
+        hasViolation = true;
+        break;
+      }
+    }
+
+    if (hasViolation) {
+      checkpoint.rollback(board);
+      return new StrapAttemptOutcome(false, "DRC_ROLLBACK", 0.0, List.of());
+    }
+
+    if (lengthMm > maxStrapLengthMm) {
+      checkpoint.rollback(board);
+      return new StrapAttemptOutcome(false, "DISTANCE_EXCEEDED", 0.0, List.of());
+    }
+
+    // Run CourtyardEscapeProbe on neighbor pins
+    IntBox strapBox = padUnion;
+    for (Item newItem : newItems) {
+      strapBox = strapBox.union(newItem.boundingBox());
+    }
+    IntBox probeBox = strapBox.offset(2 * Math.max(maxClearance, 1000));
+
+    boolean escapeSafe =
+        CourtyardEscapeProbe.isEscapePossible(
+            board, ownerCompId, capCompId, probeBox, layer, railNetNo, groundNetNo, thread);
+
+    if (!escapeSafe) {
+      checkpoint.rollback(board);
+      return new StrapAttemptOutcome(false, "TRAPPED_PIN_ROLLBACK", 0.0, List.of());
+    }
+
+    return new StrapAttemptOutcome(true, "ROUTED", lengthMm, newItems);
+  }
+
+  /** Applies scaled trace half-width to the control parameters, respecting neck-down limits. */
+  private static void applyScaledTraceWidth(
+      AutorouteControl control,
+      int layer,
+      int railNetNo,
+      double scale,
+      RoutingBoard board,
+      RouterSettings settings,
+      double mmResolution) {
+    int baseHalfWidth = board.rules.getTraceHalfWidth(railNetNo, layer);
+    double neckWidthUm = settings.getNeckWidthUm();
+    double neckHalfWidthUnits =
+        (neckWidthUm > 0) ? (neckWidthUm * (mmResolution / 1000.0) / 2.0) : 0.0;
+    int minAllowedHalfWidth = (int) Math.max(baseHalfWidth, Math.round(neckHalfWidthUnits));
+    int effectiveHalfWidth = (int) Math.max(minAllowedHalfWidth, Math.round(baseHalfWidth * scale));
+
+    control.traceHalfWidth[layer] = effectiveHalfWidth;
+    control.compensatedTraceHalfWidth[layer] =
+        effectiveHalfWidth
+            + board.rules.clearanceMatrix.clearanceCompensationValue(
+                control.traceClearanceClassIndex, layer);
+
+    int safetyMargin =
+        board.rules.clearanceMatrix.getValue(
+                control.traceClearanceClassIndex, control.traceClearanceClassIndex, layer, true)
+            - board.rules.clearanceMatrix.getValue(
+                control.traceClearanceClassIndex, control.traceClearanceClassIndex, layer, false);
+    control.traceClearanceOffset[layer] =
+        control.compensatedTraceHalfWidth[layer]
+            + AutorouteEngine.TRACE_WIDTH_TOLERANCE
+            + safetyMargin;
   }
 
   private static void tagDecouplingProtected(Item item, DecouplingLockMode lockMode) {

@@ -129,6 +129,9 @@ public class DefaultSettings implements SettingsSource {
   /** Default maximum strap length in millimetres for decoupling cap-to-IC surface straps. */
   public static final double DEFAULT_DECOUPLING_MAX_STRAP_LENGTH_MM = 4.0;
 
+  /** Default trace width scaling multiplier for low-inductance decoupling surface straps. */
+  public static final double DEFAULT_DECOUPLING_TRACE_WIDTH_SCALE = 1.5;
+
   /** Current default router score formula. */
   public static final RouterScoringVersion DEFAULT_ROUTER_SCORING_VERSION =
       RouterScoringVersion.V2_CONTINUOUS;
@@ -261,6 +264,7 @@ public class DefaultSettings implements SettingsSource {
     settings.decoupling.lockMode = DecouplingLockMode.HARD;
     settings.decoupling.maxOwnerRadiusMm = DEFAULT_DECOUPLING_MAX_OWNER_RADIUS_MM;
     settings.decoupling.maxStrapLengthMm = DEFAULT_DECOUPLING_MAX_STRAP_LENGTH_MM;
+    settings.decoupling.traceWidthScale = DEFAULT_DECOUPLING_TRACE_WIDTH_SCALE;
     settings.decoupling.includeReviewCandidates = false;
 
     // Optimizer defaults

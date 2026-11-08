@@ -33,6 +33,13 @@ public class DecouplingSettings implements Serializable, Cloneable {
   @SerializedName("max_strap_length_mm")
   public Double maxStrapLengthMm;
 
+  /**
+   * Multiplier applied to net-class trace width for low-inductance surface straps. Clamped to >=
+   * max(netClassWidth, neckWidthUm).
+   */
+  @SerializedName("trace_width_scale")
+  public Double traceWidthScale;
+
   /** Whether to route review-grade candidates in addition to confident decoupling candidates. */
   @SerializedName("include_review_candidates")
   public Boolean includeReviewCandidates;

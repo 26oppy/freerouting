@@ -374,7 +374,9 @@ public class AutorouteEngine {
   /** Removes an incomplete room from the database. */
   public void removeIncompleteExpansionRoom(IncompleteFreeSpaceExpansionRoom room) {
     this.removeAllDoors(room);
-    incompleteExpansionRooms.remove(room);
+    if (this.incompleteExpansionRooms != null) {
+      this.incompleteExpansionRooms.remove(room);
+    }
   }
 
   /**
@@ -683,6 +685,26 @@ public class AutorouteEngine {
       }
     }
     this.drillPageArray.reset();
+  }
+
+  /**
+   * Checks whether a legal via can be placed within the given expansion room shape without DRC
+   * violations.
+   */
+  public boolean isLegalViaPlacementPossible(app.freerouting.geometry.planar.TileShape shape) {
+    if (this.drillPageArray == null || shape == null) {
+      return false;
+    }
+    Collection<app.freerouting.autoroute.drill.DrillPage> pages =
+        this.drillPageArray.overlappingPages(shape);
+    for (app.freerouting.autoroute.drill.DrillPage page : pages) {
+      for (app.freerouting.autoroute.drill.ExpansionDrill drill : page.getDrills(this, true)) {
+        if (shape.contains(drill.location) && drill.calculateExpansionRooms(this)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /** Returns the next expansion room identifier. */
