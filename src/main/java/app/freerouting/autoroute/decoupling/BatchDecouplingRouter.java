@@ -72,7 +72,7 @@ public final class BatchDecouplingRouter {
     DecouplingLockMode lockMode =
         settings.decoupling != null && settings.decoupling.lockMode != null
             ? settings.decoupling.lockMode
-            : DecouplingLockMode.HARD;
+            : DecouplingLockMode.SOFT;
     double maxStrapLengthMm =
         settings.decoupling != null && settings.decoupling.maxStrapLengthMm != null
             ? settings.decoupling.maxStrapLengthMm

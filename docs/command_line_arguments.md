@@ -59,8 +59,20 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 - **`--router.decoupling.max_owner_radius_mm=[radius in mm]`**
   Maximum Euclidean search radius (in millimeters) around each decoupling capacitor used to identify candidate owning ICs. Default is `8.0`.
 
-- **`--router.decoupling.lock_mode=[HARD|NONE]`**
-  Lock mode applied to successfully routed decoupling traces and vias (`HARD` for `SYSTEM_FIXED` protection, or `NONE`). Default is `HARD`.
+- **`--router.decoupling.trace_width_scale=[multiplier]`**
+  Width scale multiplier for low-inductance surface straps relative to the net-class trace width. Default is `1.5`.
+
+- **`--router.decoupling.lock_mode=[soft|hard|none]`**
+  Lock mode applied to successfully routed decoupling traces and vias (`soft`, `hard`, or `none`). Default is `soft`.
+  - `soft`: Decoupling items are protected during fanout, normalized and converted to unfixed items with a 5x rip-up multiplier in autoroute passes, and elevated back to fixed during optimization so dedicated decoupling vias are never merged.
+  - `hard`: Retains `SYSTEM_FIXED` protection across all routing and optimization stages.
+  - `none`: Inserts decoupling items with standard unfixed status.
+
+- **`--router.decoupling.ripup_cost_multiplier=[multiplier]`**
+  Multiplier applied to base rip-up costs for soft-locked decoupling items during main autorouter passes. Default is `5.0`.
+
+- **`--router.decoupling.max_door_expansions=[limit]`**
+  Maximum maze door expansions per decoupling route attempt. Default is `250`.
 
 - **`--router.decoupling.include_review_candidates=[true|false]`**
   Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.

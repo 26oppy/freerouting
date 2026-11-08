@@ -323,9 +323,12 @@ Found-connection reconstruction and insertion, including path connection value o
 
 ### `app.freerouting.autoroute.decoupling`
 
-Read-only, deterministic identification of IC supply decoupling capacitors on a `RoutingBoard`.
-Computes confidence scores, explainable bitmask reason codes, and candidate IC supply owners
-without modifying board items, routing traces, or locking copper.
+Deterministic identification and pre-routing engine for IC supply decoupling capacitors on a `RoutingBoard`.
+- **Identification & Scoring:** Evaluates two-pin SMD passives against multi-factor topological metrics (ground scores, pin count, IC proximity, pad symmetry) to produce explainable `CapacitorCandidate` verdicts.
+- **Bipartite Assignment Planning:** Resolves optimal $M \times N$ capacitor-to-IC pin assignments using deterministic min-cost bipartite matching and parallel capacitor bank hierarchies (`PARALLEL_SIBLING`).
+- **Low-Inductance Pre-Routing:** Pre-routes direct surface straps and local ground vias before dense fanout escapes.
+- **Anti-Trapping Courtyard Escape Probing:** Validates that adjacent signal pins can escape the component courtyard before committing straps, with split-safe local checkpoints (`DecouplingRouteCheckpoint`).
+- **Hybrid Lock Lifecycle:** Integrates with `AutorouteBatchLoop`, `BatchFanout`, and `BatchOptimizer` using soft-lock lifecycle management (`SYSTEM_FIXED` protection in fanout and optimizer, 5x rip-up multiplier in autorouter).
 
 ### `app.freerouting.autoroute`
 

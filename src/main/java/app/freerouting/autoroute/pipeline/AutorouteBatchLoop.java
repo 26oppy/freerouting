@@ -100,7 +100,27 @@ final class AutorouteBatchLoop {
 
     if (router.settings.isDecouplingEnabled()) {
       job.logInfo("Decoupling capacitor pre-routing pass started.");
-      BatchDecouplingRouter.run(router.board, router.settings, router.thread);
+      Instant decapStart = Instant.now();
+      float decapCpuStart = AutorouteRuntimeMetrics.currentThreadCpuSeconds();
+      app.freerouting.autoroute.decoupling.DecouplingRoutingSummary summary =
+          BatchDecouplingRouter.run(router.board, router.settings, router.thread);
+      if (job.resultPhaseMetrics != null && summary != null) {
+        app.freerouting.core.results.RoutingResultManifest.DecouplingPhaseDetail phase =
+            new app.freerouting.core.results.RoutingResultManifest.DecouplingPhaseDetail();
+        phase.durationSeconds =
+            (float) (java.time.Duration.between(decapStart, Instant.now()).toMillis() / 1000.0);
+        float decapCpuEnd = AutorouteRuntimeMetrics.currentThreadCpuSeconds();
+        if (decapCpuStart >= 0f && decapCpuEnd >= decapCpuStart) {
+          phase.cpuSeconds = decapCpuEnd - decapCpuStart;
+        }
+        phase.candidatesTotal = summary.candidatesTotal();
+        phase.strapsRouted = summary.strapsRouted();
+        phase.alreadyConnected = summary.alreadyConnected();
+        phase.viasPlaced = summary.viasPlaced();
+        phase.failed = summary.failed();
+        phase.totalStrapLengthMm = summary.totalStrapLengthMm();
+        job.resultPhaseMetrics.decoupling = phase;
+      }
     }
 
     job.logDebug(

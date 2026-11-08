@@ -252,12 +252,18 @@ Configures the optional route-optimization stage that runs after autorouting.
 
 ##### **`decoupling` Sub-section**
 
-Configures the optional decoupling capacitor pre-routing pass that runs immediately before the fanout stage.
+Configures the decoupling capacitor low-inductance pre-routing pass that runs immediately before the fanout stage.
 
 - **`enabled`**: Whether to run the decoupling pre-pass. Default is `false`. When enabled, identifies decoupling capacitors placed adjacent to IC supply pins and pre-routes short, low-inductance surface straps and local ground vias before dense escape fanout begins.
 - **`max_strap_length_mm`**: Maximum allowable distance in millimeters between a capacitor power pad and the targeted IC power pad. Default is `4.0`.
 - **`max_owner_radius_mm`**: Maximum Euclidean search radius in millimeters around the capacitor to locate candidate owning IC components. Default is `8.0`.
-- **`lock_mode`**: Locking mode applied to successfully routed decoupling traces and vias (`HARD` for `SYSTEM_FIXED` protection, or `NONE`). Default is `HARD`.
+- **`trace_width_scale`**: Scale multiplier applied to the net-class trace half-width for low-inductance surface straps (clamped to pad entry rules and minimum clearance constraints). Default is `1.5`.
+- **`lock_mode`**: Locking mode applied to successfully routed decoupling traces and vias (`"soft"`, `"hard"`, or `"none"`). Default is `"soft"`.
+  - `"soft"`: Decoupling items are locked as `SYSTEM_FIXED` during `BatchFanout`, normalized and converted to `UNFIXED` with a 5x rip-up cost multiplier during autoroute passes, and re-elevated to `SYSTEM_FIXED` during `BatchOptimizer` so dedicated decoupling vias are never merged.
+  - `"hard"`: Decoupling items remain `SYSTEM_FIXED` across all stages.
+  - `"none"`: Decoupling items are treated as standard unfixed traces without protection.
+- **`ripup_cost_multiplier`**: Multiplier applied to `start_ripup_costs` for soft-locked decoupling items during main autorouter passes. Default is `5.0`.
+- **`max_door_expansions`**: Hard limit on maze expansion doors per decoupling route attempt to guarantee deterministic $O(1)$ runtime bounds. Default is `250`.
 - **`include_review_candidates`**: Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.
 
 ##### **`fanout` Sub-section**

@@ -378,6 +378,35 @@
       ]
     },
     {
+      "type": "app.freerouting.core.results.RoutingResultManifest$DecouplingPhaseDetail",
+      "fields": [
+        {
+          "name": "alreadyConnected"
+        },
+        {
+          "name": "candidatesTotal"
+        },
+        {
+          "name": "cpuSeconds"
+        },
+        {
+          "name": "durationSeconds"
+        },
+        {
+          "name": "failed"
+        },
+        {
+          "name": "strapsRouted"
+        },
+        {
+          "name": "totalStrapLengthMm"
+        },
+        {
+          "name": "viasPlaced"
+        }
+      ]
+    },
+    {
       "type": "app.freerouting.core.results.RoutingResultManifest$PhaseDetail",
       "fields": [
         {
@@ -408,6 +437,9 @@
       "fields": [
         {
           "name": "autorouter"
+        },
+        {
+          "name": "decoupling"
         },
         {
           "name": "fallback"
