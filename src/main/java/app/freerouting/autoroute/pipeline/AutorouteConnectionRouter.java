@@ -41,6 +41,7 @@ final class AutorouteConnectionRouter {
           new AutorouteControl(
               router.board, routeNetNo, router.settings, currentViaCosts, router.getTraceCosts());
       autorouteControl.ripupAllowed = true;
+      autorouteControl.ripupPassNo = ripupPassNo;
       autorouteControl.ripupCosts = router.getStartRipupCosts() * ripupPassNo;
       autorouteControl.netsNotToRip = router.ripupMemory.netsNotToRip(routeNetNo);
       autorouteControl.removeUnconnectedVias = router.isRemoveUnconnectedVias();
@@ -231,6 +232,7 @@ final class AutorouteConnectionRouter {
         new AutorouteControl(
             router.board, routeNetNo, router.settings, viaCosts, router.getTraceCosts());
     neckControl.ripupAllowed = true;
+    neckControl.ripupPassNo = ripupPassNo;
     neckControl.ripupCosts = router.getStartRipupCosts() * ripupPassNo;
     neckControl.netsNotToRip = originalControl.netsNotToRip;
     neckControl.removeUnconnectedVias = router.isRemoveUnconnectedVias();

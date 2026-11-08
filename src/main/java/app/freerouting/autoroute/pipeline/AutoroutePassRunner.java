@@ -66,6 +66,7 @@ final class AutoroutePassRunner {
 
       if (passNo > 1) {
         reorderSingleThreadItems(autorouteItemList, passNo);
+        relaxFilteredIslandDeadlocks(autorouteItemList);
       }
 
       // freerouting.net: the balls of ball grid parts first in the first pass, ring by ring
@@ -737,5 +738,27 @@ final class AutoroutePassRunner {
         "Incompletes " + (before ? "before" : "after") + " remove_tails=" + incompleteCount,
         "Autorouter pass #" + passNo,
         new Point[0]);
+  }
+
+  private void relaxFilteredIslandDeadlocks(List<Item> autorouteItemList) {
+    if (router.settings == null || !router.settings.isDecouplingEnabled()) {
+      return;
+    }
+    Set<Integer> unroutedNets = new HashSet<>();
+    for (Item item : autorouteItemList) {
+      for (int i = 0; i < item.netCount(); i++) {
+        unroutedNets.add(item.getNetNumber(i));
+      }
+    }
+    for (Item item : router.board.getItems()) {
+      if (item.isFilteredIslandNonFeeder()) {
+        for (int i = 0; i < item.netCount(); i++) {
+          if (unroutedNets.contains(item.getNetNumber(i))) {
+            item.clearFilteredIslandNonFeeder();
+            break;
+          }
+        }
+      }
+    }
   }
 }

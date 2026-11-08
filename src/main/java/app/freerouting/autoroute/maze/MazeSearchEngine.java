@@ -71,6 +71,7 @@ public class MazeSearchEngine {
   private ExpandableObject destinationDoor;
 
   private int sectionNoOfDestinationDoor;
+  private int doorExpansionCount = 0;
 
   /** Creates a new instance of MazeSearchEngine. */
   MazeSearchEngine(AutorouteEngine autorouteEngine, AutorouteControl ctrl) {
@@ -316,6 +317,9 @@ public class MazeSearchEngine {
     if (this.destinationDoor != null) {
       return false; // destination already reached
     }
+    if (this.ctrl != null && this.doorExpansionCount >= this.ctrl.maxDoorExpansions) {
+      return false;
+    }
     MazeListElement listElement = null;
     MazeSearchElement currentDoorSection = null;
     // Search the next element, which is not yet expanded.
@@ -345,6 +349,7 @@ public class MazeSearchEngine {
     currentDoorSection.roomRipped = listElement.roomRipped;
     currentDoorSection.ripupCost = listElement.ripupCost;
     currentDoorSection.adjustment = listElement.adjustment;
+    this.doorExpansionCount++;
 
     if (listElement.door instanceof DrillPage) {
       expansionEngine.expandToDrillsOfPage(listElement);
@@ -654,6 +659,9 @@ public class MazeSearchEngine {
     }
     boolean result = false;
     for (TargetItemExpansionDoor toDoor : listElement.nextRoom.getTargetDoors()) {
+      if (toDoor.item != null && toDoor.item.isFilteredIslandNonFeeder() && ctrl.ripupPassNo <= 1) {
+        continue;
+      }
       if (toDoor.room != null && !ctrl.layerActive[toDoor.room.getLayer()]) {
         continue;
       }

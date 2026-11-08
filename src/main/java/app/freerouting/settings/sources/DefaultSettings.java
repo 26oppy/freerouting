@@ -132,6 +132,14 @@ public class DefaultSettings implements SettingsSource {
   /** Default trace width scaling multiplier for low-inductance decoupling surface straps. */
   public static final double DEFAULT_DECOUPLING_TRACE_WIDTH_SCALE = 1.5;
 
+  /**
+   * Default ripup cost multiplier for soft-locked decoupling items during main autoroute passes.
+   */
+  public static final double DEFAULT_DECOUPLING_RIPUP_COST_MULTIPLIER = 5.0;
+
+  /** Default maximum maze door expansions per decoupling connection attempt. */
+  public static final int DEFAULT_DECOUPLING_MAX_DOOR_EXPANSIONS = 250;
+
   /** Current default router score formula. */
   public static final RouterScoringVersion DEFAULT_ROUTER_SCORING_VERSION =
       RouterScoringVersion.V2_CONTINUOUS;
@@ -261,10 +269,12 @@ public class DefaultSettings implements SettingsSource {
     // Decoupling pre-pass defaults (disabled by default for non-regression)
     settings.decoupling = new DecouplingSettings();
     settings.decoupling.enabled = false;
-    settings.decoupling.lockMode = DecouplingLockMode.HARD;
+    settings.decoupling.lockMode = DecouplingLockMode.SOFT;
     settings.decoupling.maxOwnerRadiusMm = DEFAULT_DECOUPLING_MAX_OWNER_RADIUS_MM;
     settings.decoupling.maxStrapLengthMm = DEFAULT_DECOUPLING_MAX_STRAP_LENGTH_MM;
     settings.decoupling.traceWidthScale = DEFAULT_DECOUPLING_TRACE_WIDTH_SCALE;
+    settings.decoupling.ripupCostMultiplier = DEFAULT_DECOUPLING_RIPUP_COST_MULTIPLIER;
+    settings.decoupling.maxDoorExpansions = DEFAULT_DECOUPLING_MAX_DOOR_EXPANSIONS;
     settings.decoupling.includeReviewCandidates = false;
 
     // Optimizer defaults

@@ -132,6 +132,16 @@ final class MazeRipupResolver {
       }
     }
 
+    if (obstacleItem.isDecouplingProtected()) {
+      double multiplier =
+          (ctrl.settings != null
+                  && ctrl.settings.decoupling != null
+                  && ctrl.settings.decoupling.ripupCostMultiplier != null)
+              ? ctrl.settings.decoupling.ripupCostMultiplier
+              : 5.0;
+      costFactor *= Math.max(1.0, multiplier);
+    }
+
     double ripupCost = ctrl.ripupCosts * costFactor;
     double detour = 1;
     double traceLength = 0;

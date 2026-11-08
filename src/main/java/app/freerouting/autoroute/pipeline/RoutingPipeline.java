@@ -2,8 +2,13 @@ package app.freerouting.autoroute.pipeline;
 
 import app.freerouting.autoroute.events.BoardUpdatedEventListener;
 import app.freerouting.autoroute.events.TaskStateChangedEventListener;
+import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Trace;
+import app.freerouting.board.model.items.Via;
+import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingStage;
+import app.freerouting.settings.DecouplingLockMode;
 import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
 import java.util.List;
@@ -192,7 +197,42 @@ public final class RoutingPipeline {
     for (StageListener listener : this.stageListeners) {
       listener.beforeOptimization(this.optimizer);
     }
-    this.optimizer.runBatchLoop();
+
+    DecouplingLockMode decouplingLockMode =
+        (this.job.routerSettings != null
+                && this.job.routerSettings.decoupling != null
+                && this.job.routerSettings.decoupling.lockMode != null)
+            ? this.job.routerSettings.decoupling.lockMode
+            : DecouplingLockMode.SOFT;
+    boolean isDecouplingSoftLocked =
+        this.job.routerSettings != null
+            && this.job.routerSettings.isDecouplingEnabled()
+            && decouplingLockMode == DecouplingLockMode.SOFT;
+
+    if (isDecouplingSoftLocked && this.job.board != null) {
+      for (Item it : this.job.board.getItems()) {
+        if ((it instanceof Trace || it instanceof Via)
+            && it.isDecouplingProtected()
+            && it.getFixedState() == FixedState.UNFIXED) {
+          it.setFixedState(FixedState.SYSTEM_FIXED);
+        }
+      }
+    }
+
+    try {
+      this.optimizer.runBatchLoop();
+    } finally {
+      if (isDecouplingSoftLocked && this.job.board != null) {
+        for (Item it : this.job.board.getItems()) {
+          if ((it instanceof Trace || it instanceof Via)
+              && it.isDecouplingProtected()
+              && it.getFixedState() == FixedState.SYSTEM_FIXED) {
+            it.setFixedState(FixedState.UNFIXED);
+          }
+        }
+      }
+    }
+
     for (StageListener listener : this.stageListeners) {
       listener.afterOptimization(this.optimizer);
     }

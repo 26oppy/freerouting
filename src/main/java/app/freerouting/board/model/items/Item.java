@@ -52,6 +52,12 @@ public abstract class Item
   /** Bitmask flag: item was routed or protected by the decoupling capacitor pre-routing engine. */
   public static final byte FLAG_DECOUPLING_PROTECTED = 1 << 0;
 
+  /**
+   * Bitmask flag: item is an IC pin/strap on a filtered island that should not be targeted directly
+   * by upstream feeders in Pass 1.
+   */
+  public static final byte FLAG_FILTERED_ISLAND_NON_FEEDER = 1 << 1;
+
   private byte decouplingFlags = 0;
 
   /** Not 0, if this item belongs to a component. */
@@ -1074,6 +1080,25 @@ public abstract class Item
     } else {
       this.decouplingFlags &= ~FLAG_DECOUPLING_PROTECTED;
     }
+  }
+
+  /** Returns whether this item is flagged as a non-feeder target on a filtered island. */
+  public boolean isFilteredIslandNonFeeder() {
+    return (this.decouplingFlags & FLAG_FILTERED_ISLAND_NON_FEEDER) != 0;
+  }
+
+  /** Sets whether this item is flagged as a non-feeder target on a filtered island. */
+  public void setFilteredIslandNonFeeder(boolean nonFeeder) {
+    if (nonFeeder) {
+      this.decouplingFlags |= FLAG_FILTERED_ISLAND_NON_FEEDER;
+    } else {
+      this.decouplingFlags &= ~FLAG_FILTERED_ISLAND_NON_FEEDER;
+    }
+  }
+
+  /** Clears the filtered island non-feeder flag. */
+  public void clearFilteredIslandNonFeeder() {
+    this.decouplingFlags &= ~FLAG_FILTERED_ISLAND_NON_FEEDER;
   }
 
   /** Returns false, if this item is an obstacle for vias with the input net number. */

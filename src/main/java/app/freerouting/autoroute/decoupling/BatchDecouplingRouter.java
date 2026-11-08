@@ -195,6 +195,9 @@ public final class BatchDecouplingRouter {
               control.viasAllowed = false;
               control.ripupAllowed = false;
               control.removeUnconnectedVias = false;
+              if (settings.decoupling != null && settings.decoupling.maxDoorExpansions != null) {
+                control.maxDoorExpansions = settings.decoupling.maxDoorExpansions;
+              }
               for (int i = 0; i < control.layerCount; i++) {
                 control.layerActive[i] = control.layerActive[i] && (i == layer);
               }
@@ -212,6 +215,9 @@ public final class BatchDecouplingRouter {
                   strapStatus = "ALREADY_CONNECTED";
                   tagDecouplingProtected(supplyPin, lockMode);
                   tagDecouplingProtected(ownerPin, lockMode);
+                  if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
+                    ownerPin.setFilteredIslandNonFeeder(true);
+                  }
                 } else {
                   Set<Item> ownerConnected = ownerPin.getConnectedSet(railNetNo);
 
@@ -261,6 +267,12 @@ public final class BatchDecouplingRouter {
                     for (Item newItem : outcome.newItems()) {
                       tagDecouplingProtected(newItem, lockMode);
                     }
+                    if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
+                      ownerPin.setFilteredIslandNonFeeder(true);
+                      for (Item newItem : outcome.newItems()) {
+                        newItem.setFilteredIslandNonFeeder(true);
+                      }
+                    }
                   } else {
                     // Secondary overflow cap: fallback flanking attempt to primary cap pad
                     boolean flanked = false;
@@ -277,6 +289,9 @@ public final class BatchDecouplingRouter {
                           strapStatus = "ALREADY_CONNECTED";
                           tagDecouplingProtected(supplyPin, lockMode);
                           tagDecouplingProtected(primaryCapPin, lockMode);
+                          if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
+                            primaryCapPin.setFilteredIslandNonFeeder(true);
+                          }
                           flanked = true;
                         } else {
                           double flankDistUnits =
@@ -325,6 +340,12 @@ public final class BatchDecouplingRouter {
                               tagDecouplingProtected(primaryCapPin, lockMode);
                               for (Item newItem : flankOutcome.newItems()) {
                                 tagDecouplingProtected(newItem, lockMode);
+                              }
+                              if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
+                                primaryCapPin.setFilteredIslandNonFeeder(true);
+                                for (Item newItem : flankOutcome.newItems()) {
+                                  newItem.setFilteredIslandNonFeeder(true);
+                                }
                               }
                             }
                           }
@@ -626,7 +647,9 @@ public final class BatchDecouplingRouter {
 
   private static void tagDecouplingProtected(Item item, DecouplingLockMode lockMode) {
     item.setDecouplingProtected(true);
-    if (lockMode == DecouplingLockMode.HARD && !item.getFixedState().isPreservedRoute()) {
+    if ((item instanceof Trace || item instanceof Via)
+        && lockMode != DecouplingLockMode.NONE
+        && !item.getFixedState().isPreservedRoute()) {
       item.setFixedState(FixedState.SYSTEM_FIXED);
     }
   }

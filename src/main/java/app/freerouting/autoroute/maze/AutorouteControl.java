@@ -85,6 +85,12 @@ public class AutorouteControl {
   public int ripupPassNo;
 
   /**
+   * Maximum door expansions allowed in a single connection search, or Integer.MAX_VALUE for
+   * unlimited.
+   */
+  public int maxDoorExpansions = Integer.MAX_VALUE;
+
+  /**
    * Nets whose traces and vias this search may not rip: the routed net was moved aside for them in
    * an earlier pass (see the batch autorouter's rip-up memory). Empty by default.
    */

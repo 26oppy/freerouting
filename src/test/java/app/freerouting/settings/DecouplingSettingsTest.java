@@ -39,9 +39,12 @@ class DecouplingSettingsTest {
     assertFalse(
         defaults.decoupling.enabled, "Decoupling must be disabled by default for non-regression");
     assertFalse(defaults.isDecouplingEnabled());
-    assertEquals(DecouplingLockMode.HARD, defaults.decoupling.lockMode);
+    assertEquals(DecouplingLockMode.SOFT, defaults.decoupling.lockMode);
     assertEquals(8.0, defaults.decoupling.maxOwnerRadiusMm);
     assertEquals(4.0, defaults.decoupling.maxStrapLengthMm);
+    assertEquals(1.5, defaults.decoupling.traceWidthScale);
+    assertEquals(5.0, defaults.decoupling.ripupCostMultiplier);
+    assertEquals(250, defaults.decoupling.maxDoorExpansions);
     assertFalse(defaults.decoupling.includeReviewCandidates);
   }
 
@@ -52,6 +55,8 @@ class DecouplingSettingsTest {
       "--router.decoupling.lock_mode=NONE",
       "--router.decoupling.max_strap_length_mm=2.5",
       "--router.decoupling.max_owner_radius_mm=5.0",
+      "--router.decoupling.ripup_cost_multiplier=8.0",
+      "--router.decoupling.max_door_expansions=300",
       "--router.decoupling.include_review_candidates=true"
     };
 
@@ -63,6 +68,8 @@ class DecouplingSettingsTest {
     assertEquals(DecouplingLockMode.NONE, cliSettings.decoupling.lockMode);
     assertEquals(2.5, cliSettings.decoupling.maxStrapLengthMm);
     assertEquals(5.0, cliSettings.decoupling.maxOwnerRadiusMm);
+    assertEquals(8.0, cliSettings.decoupling.ripupCostMultiplier);
+    assertEquals(300, cliSettings.decoupling.maxDoorExpansions);
     assertTrue(cliSettings.decoupling.includeReviewCandidates);
   }
 
@@ -82,7 +89,7 @@ class DecouplingSettingsTest {
     assertTrue(base.isDecouplingEnabled());
     assertEquals(3.2, base.decoupling.maxStrapLengthMm);
     // Unset fields in override remain defaults
-    assertEquals(DecouplingLockMode.HARD, base.decoupling.lockMode);
+    assertEquals(DecouplingLockMode.SOFT, base.decoupling.lockMode);
     assertEquals(8.0, base.decoupling.maxOwnerRadiusMm);
   }
 

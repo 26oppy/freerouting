@@ -40,6 +40,17 @@ public class DecouplingSettings implements Serializable, Cloneable {
   @SerializedName("trace_width_scale")
   public Double traceWidthScale;
 
+  /**
+   * Multiplier applied to the ripup cost of decoupling traces and vias during main autoroute passes
+   * when soft-locked.
+   */
+  @SerializedName("ripup_cost_multiplier")
+  public Double ripupCostMultiplier;
+
+  /** Maximum number of maze door expansions allowed per decoupling strap connection attempt. */
+  @SerializedName("max_door_expansions")
+  public Integer maxDoorExpansions;
+
   /** Whether to route review-grade candidates in addition to confident decoupling candidates. */
   @SerializedName("include_review_candidates")
   public Boolean includeReviewCandidates;

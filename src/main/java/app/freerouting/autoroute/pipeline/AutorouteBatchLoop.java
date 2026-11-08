@@ -16,6 +16,9 @@ import app.freerouting.autoroute.decoupling.BatchDecouplingRouter;
 import app.freerouting.autoroute.events.TaskStateChangedEvent;
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Trace;
+import app.freerouting.board.model.items.Via;
+import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.core.RouterCounters;
 import app.freerouting.core.RoutingJob;
 import app.freerouting.core.RoutingJobState;
@@ -25,6 +28,7 @@ import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.drc.DesignRulesChecker;
 import app.freerouting.geometry.planar.Point;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.settings.DecouplingLockMode;
 import app.freerouting.settings.RouterSettings;
 import java.time.Duration;
 import java.time.Instant;
@@ -298,6 +302,33 @@ final class AutorouteBatchLoop {
     }
     boolean continueAutorouting = isRouterEnabled;
     if (isRouterEnabled) {
+      if (router.settings.isDecouplingEnabled()) {
+        java.util.Set<Integer> decouplingNets = new java.util.HashSet<>();
+        for (Item it : router.board.getItems()) {
+          if (it.isDecouplingProtected()) {
+            for (int n = 0; n < it.netCount(); n++) {
+              decouplingNets.add(it.getNetNumber(n));
+            }
+          }
+        }
+        for (int netNo : decouplingNets) {
+          router.board.normalizeTraces(netNo);
+        }
+        DecouplingLockMode lockMode =
+            (router.settings.decoupling != null && router.settings.decoupling.lockMode != null)
+                ? router.settings.decoupling.lockMode
+                : DecouplingLockMode.SOFT;
+        if (lockMode == DecouplingLockMode.SOFT) {
+          for (Item it : router.board.getItems()) {
+            if ((it instanceof Trace || it instanceof Via)
+                && it.isDecouplingProtected()
+                && it.getFixedState() == FixedState.SYSTEM_FIXED) {
+              it.setFixedState(FixedState.UNFIXED);
+            }
+          }
+        }
+      }
+
       router.passLoopStartHash = router.board.getHash();
       if (router.repeatsEarlierPassLoop(router.passLoopStartHash)) {
         router.lastStopReason = BatchAutorouter.StopReason.REPEATED;
