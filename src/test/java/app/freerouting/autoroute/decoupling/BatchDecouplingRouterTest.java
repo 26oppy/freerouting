@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Trace;
+import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.drc.DesignRulesChecker;
 import app.freerouting.io.specctra.DsnTestFixtures;
@@ -61,7 +63,7 @@ class BatchDecouplingRouterTest {
 
     // Verify protection flags on items
     for (Item item : board.getItems()) {
-      if (item.isDecouplingProtected()) {
+      if ((item instanceof Trace || item instanceof Via) && item.isDecouplingProtected()) {
         if (!item.getFixedState().isPreservedRoute()) {
           assertEquals(FixedState.SYSTEM_FIXED, item.getFixedState());
         }
@@ -453,6 +455,61 @@ class BatchDecouplingRouterTest {
               || "NO_GROUND_PLANE".equals(m.status()),
           "Expected plane-only status (PLANE_ONLY_ROUTED, PLANE_VIA_FAILED, or NO_GROUND_PLANE), got: "
               + m.status());
+    }
+  }
+
+  @Test
+  void testSupplyPlaneViaDropAndProtection() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.lockMode = DecouplingLockMode.HARD;
+    settings.decoupling.maxStrapLengthMm = 4.0;
+    settings.decoupling.maxOwnerRadiusMm = 8.0;
+
+    // Enable containsPlane on the VCC supply rail nets (e.g. Net #2 or all non-ground rail nets)
+    for (int i = 1; i <= board.rules.nets.maxNetNumber(); i++) {
+      app.freerouting.rules.Net net = board.rules.nets.get(i);
+      if (net != null) {
+        net.setContainsPlane(true);
+      }
+    }
+
+    int baselineDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    assertTrue(summary.candidatesTotal() > 0);
+
+    // Gate: No DRC regressions introduced by supply plane vias
+    int postDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+    assertTrue(
+        postDrc <= baselineDrc,
+        "Supply plane via drop must not introduce clearance violations (baseline="
+            + baselineDrc
+            + ", post="
+            + postDrc
+            + ")");
+
+    // Verify all placed decoupling vias are protected and SYSTEM_FIXED in HARD mode
+    int protectedViaCount = 0;
+    for (Item item : board.getItems()) {
+      if (item instanceof Via via && via.isDecouplingProtected()) {
+        protectedViaCount++;
+        assertEquals(FixedState.SYSTEM_FIXED, via.getFixedState());
+      }
+    }
+
+    if (summary.viasPlaced() > 0) {
+      assertTrue(
+          protectedViaCount >= summary.viasPlaced(),
+          "Expected at least "
+              + summary.viasPlaced()
+              + " protected vias, found: "
+              + protectedViaCount);
     }
   }
 }

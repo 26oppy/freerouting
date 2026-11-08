@@ -436,7 +436,7 @@ public final class BatchDecouplingRouter {
               }
             } else {
               if (placedVia != null) {
-                viasPlacedForCap = 1;
+                viasPlacedForCap++;
                 viasPlaced++;
                 groundViaDistanceMm =
                     groundPin.getCenter().toFloat().distance(placedVia.getCenter().toFloat())
@@ -461,6 +461,69 @@ public final class BatchDecouplingRouter {
           if (task.isPlaneOnly()) {
             failed++;
             strapStatus = "NO_GROUND_PLANE";
+          }
+        }
+
+        // Dedicated power/plane via adjacent to the supply pad (pin-first supply routing)
+        Net railNet = board.rules.nets.get(railNetNo);
+        boolean supplyIsSmd = (supplyPin.firstLayer() == supplyPin.lastLayer());
+        boolean supplyAlreadyOnPlane = !supplyIsSmd;
+        if (!supplyAlreadyOnPlane) {
+          for (Item it : supplyPin.getNormalContacts()) {
+            if (it instanceof ConductionArea || it instanceof Via) {
+              supplyAlreadyOnPlane = true;
+              break;
+            }
+          }
+        }
+        if (!supplyAlreadyOnPlane && railNet != null && railNet.containsPlane()) {
+          for (Item it : supplyPin.getConnectedSet(railNetNo)) {
+            if (it instanceof ConductionArea || it instanceof Via) {
+              supplyAlreadyOnPlane = true;
+              break;
+            }
+          }
+        }
+
+        if (!supplyAlreadyOnPlane && railNet != null && railNet.containsPlane()) {
+          int maxIdBeforeSupplyVia = board.communication.idGenerator.maxGeneratedId();
+          AutorouteAttemptResult supplyViaAttempt =
+              board.fanout(supplyPin, settings, -1, thread, new TimeLimit(1000));
+          if (supplyViaAttempt.state == AutorouteAttemptState.ROUTED) {
+            List<Item> newSupplyViaItems = new ArrayList<>();
+            Via placedSupplyVia = null;
+            for (Item it : supplyPin.getConnectedSet(railNetNo)) {
+              if (it.getId() > maxIdBeforeSupplyVia) {
+                newSupplyViaItems.add(it);
+                if (it instanceof Via v) {
+                  placedSupplyVia = v;
+                }
+              }
+            }
+
+            boolean supplyViaViolation = false;
+            for (Item newItem : newSupplyViaItems) {
+              if (!newItem.clearanceViolations().isEmpty()) {
+                supplyViaViolation = true;
+                break;
+              }
+            }
+
+            if (supplyViaViolation) {
+              for (Item newItem : newSupplyViaItems) {
+                newItem.setFixedState(FixedState.UNFIXED);
+                board.removeItem(newItem);
+              }
+            } else {
+              if (placedSupplyVia != null) {
+                viasPlacedForCap++;
+                viasPlaced++;
+              }
+              tagDecouplingProtected(supplyPin, lockMode);
+              for (Item newItem : newSupplyViaItems) {
+                tagDecouplingProtected(newItem, lockMode);
+              }
+            }
           }
         }
 
@@ -495,8 +558,8 @@ public final class BatchDecouplingRouter {
     FRLogger.info(
         String.format(
             "Decoupling routing complete: %d eligible candidates, %d straps routed, %d already"
-                + " connected, %d ground vias placed, %d failed/skipped. Total strap length: %.2f"
-                + " mm.",
+                + " connected, %d decoupling vias placed, %d failed/skipped."
+                + " Total strap length: %.2f mm.",
             totalCandidates,
             routedStraps,
             alreadyConnected,
