@@ -179,7 +179,7 @@ public final class BatchDecouplingRouter {
           } else {
             int layer = supplyPin.firstLayer();
             AutorouteControl control = new AutorouteControl(board, railNetNo, settings);
-            if (!control.layerActive[layer]) {
+            if (layer < 0 || layer >= control.layerCount || !control.layerActive[layer]) {
               failed++;
               strapStatus = "LAYER_DISABLED";
             } else {
@@ -279,69 +279,90 @@ public final class BatchDecouplingRouter {
                       Item primaryCapItem = board.getItem(task.pairedPrimaryCapPinId());
                       if (primaryCapItem instanceof Pin primaryCapPin
                           && primaryCapPin.firstLayer() == supplyPin.firstLayer()
-                          && !primaryCapPin.equals(ownerPin)) {
+                          && !primaryCapPin.equals(ownerPin)
+                          && !primaryCapPin.hasIgnoredNets()) {
                         Set<Item> primaryCapConnected = primaryCapPin.getConnectedSet(railNetNo);
-                        int maxIdBeforeFlank = board.communication.idGenerator.maxGeneratedId();
-                        var flankEngine =
-                            board.initAutoroute(
-                                railNetNo,
-                                control.traceClearanceClassIndex,
-                                thread,
-                                new TimeLimit(1000),
-                                false);
-                        AutorouteAttemptResult flankAttempt =
-                            flankEngine.autorouteConnection(
-                                supplyConnected,
-                                primaryCapConnected,
-                                control,
-                                new TreeSet<>(),
-                                null);
+                        if (supplyConnected.contains(primaryCapPin)) {
+                          alreadyConnected++;
+                          strapSuccess = true;
+                          strapStatus = "ALREADY_CONNECTED";
+                          tagDecouplingProtected(supplyPin, lockMode);
+                          tagDecouplingProtected(primaryCapPin, lockMode);
+                          flanked = true;
+                        } else {
+                          double flankDistUnits =
+                              supplyPin
+                                  .getCenter()
+                                  .toFloat()
+                                  .distance(primaryCapPin.getCenter().toFloat());
+                          if (flankDistUnits <= maxStrapLengthUnits) {
+                            int maxIdBeforeFlank = board.communication.idGenerator.maxGeneratedId();
+                            var flankEngine =
+                                board.initAutoroute(
+                                    railNetNo,
+                                    control.traceClearanceClassIndex,
+                                    thread,
+                                    new TimeLimit(1000),
+                                    false);
+                            AutorouteAttemptResult flankAttempt =
+                                flankEngine.autorouteConnection(
+                                    supplyConnected,
+                                    primaryCapConnected,
+                                    control,
+                                    new TreeSet<>(),
+                                    null);
 
-                        if (flankAttempt.state == AutorouteAttemptState.ROUTED) {
-                          int accuracy =
-                              settings.tracePullTightAccuracy != null
-                                  ? settings.tracePullTightAccuracy
-                                  : 500;
-                          board.optChangedArea(
-                              new int[] {railNetNo}, null, accuracy, control.traceCosts, thread);
+                            if (flankAttempt.state == AutorouteAttemptState.ROUTED) {
+                              int accuracy =
+                                  settings.tracePullTightAccuracy != null
+                                      ? settings.tracePullTightAccuracy
+                                      : 500;
+                              board.optChangedArea(
+                                  new int[] {railNetNo},
+                                  null,
+                                  accuracy,
+                                  control.traceCosts,
+                                  thread);
 
-                          List<Item> flankItems = new ArrayList<>();
-                          for (Item it : supplyPin.getConnectedSet(railNetNo)) {
-                            if (it.getId() > maxIdBeforeFlank) {
-                              flankItems.add(it);
-                            }
-                          }
+                              List<Item> flankItems = new ArrayList<>();
+                              for (Item it : supplyPin.getConnectedSet(railNetNo)) {
+                                if (it.getId() > maxIdBeforeFlank) {
+                                  flankItems.add(it);
+                                }
+                              }
 
-                          double flankLengthMm = 0.0;
-                          for (Item newItem : flankItems) {
-                            if (newItem instanceof Trace trace) {
-                              flankLengthMm += trace.getLength() / mmResolution;
-                            }
-                          }
+                              double flankLengthMm = 0.0;
+                              for (Item newItem : flankItems) {
+                                if (newItem instanceof Trace trace) {
+                                  flankLengthMm += trace.getLength() / mmResolution;
+                                }
+                              }
 
-                          boolean flankViolation = false;
-                          for (Item newItem : flankItems) {
-                            if (!newItem.clearanceViolations().isEmpty()) {
-                              flankViolation = true;
-                              break;
-                            }
-                          }
+                              boolean flankViolation = false;
+                              for (Item newItem : flankItems) {
+                                if (!newItem.clearanceViolations().isEmpty()) {
+                                  flankViolation = true;
+                                  break;
+                                }
+                              }
 
-                          if (!flankViolation && flankLengthMm <= maxStrapLengthMm) {
-                            flanked = true;
-                            strapSuccess = true;
-                            strapStatus = "ROUTED_FLANKING";
-                            routedStraps++;
-                            totalStrapLengthMm += flankLengthMm;
-                            candidateStrapLengthMm = flankLengthMm;
-                            tagDecouplingProtected(supplyPin, lockMode);
-                            tagDecouplingProtected(primaryCapPin, lockMode);
-                            for (Item newItem : flankItems) {
-                              tagDecouplingProtected(newItem, lockMode);
-                            }
-                          } else {
-                            for (Item newItem : flankItems) {
-                              board.removeItem(newItem);
+                              if (!flankViolation && flankLengthMm <= maxStrapLengthMm) {
+                                flanked = true;
+                                strapSuccess = true;
+                                strapStatus = "ROUTED_FLANKING";
+                                routedStraps++;
+                                totalStrapLengthMm += flankLengthMm;
+                                candidateStrapLengthMm = flankLengthMm;
+                                tagDecouplingProtected(supplyPin, lockMode);
+                                tagDecouplingProtected(primaryCapPin, lockMode);
+                                for (Item newItem : flankItems) {
+                                  tagDecouplingProtected(newItem, lockMode);
+                                }
+                              } else {
+                                for (Item newItem : flankItems) {
+                                  board.removeItem(newItem);
+                                }
+                              }
                             }
                           }
                         }
@@ -358,7 +379,10 @@ public final class BatchDecouplingRouter {
             }
           }
         } else {
-          strapStatus = "NO_OWNER_IN_RADIUS";
+          strapStatus = task.isPlaneOnly() ? "PLANE_ONLY_PENDING" : "NO_OWNER_IN_RADIUS";
+          if (!task.isPlaneOnly()) {
+            failed++;
+          }
         }
 
         // Dedicated ground/plane via adjacent to the pad
@@ -387,7 +411,13 @@ public final class BatchDecouplingRouter {
           }
         }
 
-        if (!groundAlreadyOnPlane && groundNet != null && groundNet.containsPlane()) {
+        if (groundAlreadyOnPlane) {
+          tagDecouplingProtected(groundPin, lockMode);
+          if (task.isPlaneOnly()) {
+            strapSuccess = true;
+            strapStatus = "PLANE_ONLY_ROUTED";
+          }
+        } else if (groundNet != null && groundNet.containsPlane()) {
           int maxIdBeforeVia = board.communication.idGenerator.maxGeneratedId();
           AutorouteAttemptResult viaAttempt =
               board.fanout(groundPin, settings, -1, thread, new TimeLimit(1000));
@@ -415,6 +445,10 @@ public final class BatchDecouplingRouter {
               for (Item newItem : newViaItems) {
                 board.removeItem(newItem);
               }
+              if (task.isPlaneOnly()) {
+                failed++;
+                strapStatus = "PLANE_VIA_FAILED";
+              }
             } else {
               if (placedVia != null) {
                 viasPlacedForCap = 1;
@@ -432,6 +466,16 @@ public final class BatchDecouplingRouter {
                 strapStatus = "PLANE_ONLY_ROUTED";
               }
             }
+          } else {
+            if (task.isPlaneOnly()) {
+              failed++;
+              strapStatus = "PLANE_VIA_FAILED";
+            }
+          }
+        } else {
+          if (task.isPlaneOnly()) {
+            failed++;
+            strapStatus = "NO_GROUND_PLANE";
           }
         }
 
@@ -446,6 +490,8 @@ public final class BatchDecouplingRouter {
                 groundViaDistanceMm,
                 strapSuccess,
                 strapStatus));
+
+        board.clearTransientAutorouteState();
       }
     } finally {
       board.clearTransientAutorouteState();

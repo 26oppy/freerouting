@@ -185,18 +185,14 @@ public final class DecouplingAssignmentPlanner {
     for (int i = 0; i < primaryCount; i++) {
       CapacitorCandidate cap = primaryCaps.get(i);
       int capSupplyPinId = resolveSupplyPinId(board, cap);
-      Pin capSupplyPin = (Pin) board.getItem(capSupplyPinId);
-      Point capCenter = capSupplyPin.getCenter();
+      Pin capSupplyPin = getPin(board, capSupplyPinId);
+      Point capCenter = capSupplyPin != null ? capSupplyPin.getCenter() : null;
 
       for (int j = 0; j < n; j++) {
-        Pin icPin = (Pin) board.getItem(icPinList.get(j));
-        Point icCenter = icPin.getCenter();
+        Pin icPin = getPin(board, icPinList.get(j));
+        Point icCenter = icPin != null ? icPin.getCenter() : null;
         long distSq = computeDistanceSquared(capCenter, icCenter);
-        if (distSq > maxRadiusSq) {
-          costMatrix[i][j] = INF_COST;
-        } else {
-          costMatrix[i][j] = distSq;
-        }
+        costMatrix[i][j] = (distSq > maxRadiusSq) ? INF_COST : distSq;
       }
     }
 
@@ -239,12 +235,13 @@ public final class DecouplingAssignmentPlanner {
       DecouplingRouteTask nearestPrimary = null;
       long bestDistSq = Long.MAX_VALUE;
 
-      Pin overflowSupplyPin = (Pin) board.getItem(capSupplyPinId);
-      Point overflowCenter = overflowSupplyPin.getCenter();
+      Pin overflowSupplyPin = getPin(board, capSupplyPinId);
+      Point overflowCenter = overflowSupplyPin != null ? overflowSupplyPin.getCenter() : null;
 
       for (DecouplingRouteTask primaryTask : clusterPrimaryTasks) {
-        Pin primarySupplyPin = (Pin) board.getItem(primaryTask.supplyPinId());
-        long distSq = computeDistanceSquared(overflowCenter, primarySupplyPin.getCenter());
+        Pin primarySupplyPin = getPin(board, primaryTask.supplyPinId());
+        Point primaryCenter = primarySupplyPin != null ? primarySupplyPin.getCenter() : null;
+        long distSq = computeDistanceSquared(overflowCenter, primaryCenter);
         if (distSq < bestDistSq) {
           bestDistSq = distSq;
           nearestPrimary = primaryTask;
@@ -297,13 +294,14 @@ public final class DecouplingAssignmentPlanner {
     long[] v = new long[nCols + 1];
     int[] p = new int[nCols + 1];
     int[] way = new int[nCols + 1];
+    long[] minv = new long[nCols + 1];
+    boolean[] used = new boolean[nCols + 1];
 
     for (int i = 1; i <= nRows; i++) {
       p[0] = i;
       int j0 = 0;
-      long[] minv = new long[nCols + 1];
       Arrays.fill(minv, Long.MAX_VALUE);
-      boolean[] used = new boolean[nCols + 1];
+      Arrays.fill(used, false);
 
       do {
         used[j0] = true;
@@ -384,6 +382,14 @@ public final class DecouplingAssignmentPlanner {
       return 0;
     }
     return (supplyPinId == pinA.getId()) ? pinB.getId() : pinA.getId();
+  }
+
+  private static Pin getPin(BasicBoard board, int itemId) {
+    if (board == null || itemId <= 0) {
+      return null;
+    }
+    Item item = board.getItem(itemId);
+    return (item instanceof Pin pin) ? pin : null;
   }
 
   private record ClusterKey(int componentId, int railNetNumber) {}

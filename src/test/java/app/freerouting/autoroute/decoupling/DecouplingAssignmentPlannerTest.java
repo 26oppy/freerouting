@@ -207,4 +207,51 @@ class DecouplingAssignmentPlannerTest {
     assertTrue(tasks.get(0).isPlaneOnly());
     assertEquals(0, tasks.get(0).targetSupplyItemId());
   }
+
+  @Test
+  @DisplayName("Hungarian algorithm handles corner cases and INF_COST arithmetic")
+  void testHungarianEdgeCasesAndOverflowSafety() {
+    // 0 rows or 0 cols
+    assertEquals(0, DecouplingAssignmentPlanner.solveMinCostMatching(new long[0][0], 0, 0).length);
+    int[] matchMgtN = DecouplingAssignmentPlanner.solveMinCostMatching(new long[3][2], 3, 2);
+    assertEquals(3, matchMgtN.length);
+    assertEquals(-1, matchMgtN[0]);
+    assertEquals(-1, matchMgtN[1]);
+    assertEquals(-1, matchMgtN[2]);
+
+    // INF_COST with 3x3 matrix where one edge is INF_COST
+    long inf = 1_000_000_000_000_000L;
+    long[][] cost = {
+      {10, inf, 30},
+      {inf, 20, inf},
+      {40, 50, 10}
+    };
+    int[] match = DecouplingAssignmentPlanner.solveMinCostMatching(cost, 3, 3);
+    assertEquals(0, match[0]); // Row 0 -> Col 0 (10)
+    assertEquals(1, match[1]); // Row 1 -> Col 1 (20)
+    assertEquals(2, match[2]); // Row 2 -> Col 2 (10)
+  }
+
+  @Test
+  @DisplayName("Candidate with owners beyond maxOwnerRadiusMm falls back to PLANE_ONLY_FALLBACK")
+  void testCandidateBeyondMaxRadiusFallback() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    IdentifierConfig config = IdentifierConfig.defaultConfig();
+    IdentificationResult idResult = DecouplingIdentifier.identify(board, config);
+
+    CapacitorCandidate base =
+        idResult.candidates().stream()
+            .filter(c -> c.verdict() == Verdict.DECOUPLING && !c.owners().isEmpty())
+            .findFirst()
+            .orElseThrow();
+
+    // Plan with an extremely small search radius (0.001 mm) so all pins are unreachable
+    List<DecouplingRouteTask> tasks =
+        DecouplingAssignmentPlanner.plan(board, List.of(base), 0.001, false);
+
+    assertEquals(1, tasks.size());
+    assertTrue(
+        tasks.get(0).isPlaneOnly(), "Candidate beyond max radius must be PLANE_ONLY_FALLBACK");
+    assertEquals(0, tasks.get(0).targetSupplyItemId());
+  }
 }

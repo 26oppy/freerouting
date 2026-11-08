@@ -428,4 +428,31 @@ class BatchDecouplingRouterTest {
         layerDisabledSummary.metrics().stream().anyMatch(m -> "LAYER_DISABLED".equals(m.status())),
         "Expected LAYER_DISABLED status when surface layer is inactive");
   }
+
+  @Test
+  void testPlaneOnlyFallbackMetricsReporting() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    // Set tiny owner radius so all candidates fall back to plane-only routing
+    settings.decoupling.maxOwnerRadiusMm = 0.0001;
+
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    assertFalse(summary.metrics().isEmpty());
+
+    // In PR2, plane-only tasks must never be left as unattempted NO_OWNER_IN_RADIUS
+    for (DecouplingMetrics m : summary.metrics()) {
+      assertFalse(
+          "NO_OWNER_IN_RADIUS".equals(m.status()),
+          "Plane-only task should be evaluated for plane routing, not left as NO_OWNER_IN_RADIUS");
+      assertTrue(
+          "PLANE_ONLY_ROUTED".equals(m.status())
+              || "PLANE_VIA_FAILED".equals(m.status())
+              || "NO_GROUND_PLANE".equals(m.status()),
+          "Expected plane-only status (PLANE_ONLY_ROUTED, PLANE_VIA_FAILED, or NO_GROUND_PLANE), got: "
+              + m.status());
+    }
+  }
 }
