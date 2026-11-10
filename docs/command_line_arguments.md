@@ -83,6 +83,9 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 - **`--router.decoupling.mutual_inductance_bias_weight=[factor]`**
   Dimensionless weighting slope applied to Euclidean distance from the flank target during A* maze expansion. Default is `0.2`.
 
+- **`--router.decoupling.opposite_side_routing=[true|false]`**
+  Whether to route opposite-side SMD decoupling capacitors where the capacitor is mounted on the opposite layer from the owner IC pin (e.g., bottom-side capacitor under a top-side IC pad). When enabled, allows at most 1 feed-through via transition or targets an existing fanout via on the capacitor's layer. Default is `true`.
+
 - **`--router.autorouter.max_passes=[number of passes]`**
   Sets the upper limit for the number of autorouter passes to perform. More passes may result in better optimization but will take longer.
 

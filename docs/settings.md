@@ -267,6 +267,7 @@ Configures the decoupling capacitor low-inductance pre-routing pass that runs im
 - **`include_review_candidates`**: Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.
 - **`mutual_inductance_bias`**: Whether to directionally bias decoupling via placement toward the coupled pad/via to maximize mutual-inductance coupling and minimize parasitic loop area. Default is `true`.
 - **`mutual_inductance_bias_weight`**: Dimensionless weighting slope applied to Euclidean distance from the flank target during A* maze expansion. Default is `0.2`.
+- **`opposite_side_routing`**: Whether to route opposite-side SMD decoupling capacitors where the capacitor is mounted on the opposite layer from the owner IC pin (e.g., bottom-side capacitor under a top-side IC pad). When enabled, allows at most 1 feed-through via transition or targets an existing fanout via on the capacitor's layer. Default is `true`.
 
 ##### **`fanout` Sub-section**
 

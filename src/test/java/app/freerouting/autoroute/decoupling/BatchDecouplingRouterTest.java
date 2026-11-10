@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.freerouting.board.facade.RoutingBoard;
 import app.freerouting.board.model.items.Item;
+import app.freerouting.board.model.items.Pin;
 import app.freerouting.board.model.items.Trace;
 import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.structure.FixedState;
@@ -618,5 +619,299 @@ class BatchDecouplingRouterTest {
         postDrc <= baselineDrc,
         "Custom bias weight and dual-flank probe must not introduce clearance violations");
     assertTrue(summary.viasPlaced() > 0);
+  }
+
+  @Test
+  void testOppositeSideDisabledSetting() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue269-caniot-tiny-arm.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.oppositeSideRouting = false;
+    settings.decoupling.includeReviewCandidates = true;
+    settings.decoupling.maxStrapLengthMm = 10.0;
+    settings.decoupling.maxOwnerRadiusMm = 10.0;
+
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    assertTrue(
+        summary.metrics().stream().anyMatch(m -> "OPPOSITE_SIDE_DISABLED".equals(m.status())),
+        "Expected opposite-side candidates to report OPPOSITE_SIDE_DISABLED");
+    assertFalse(
+        summary.metrics().stream().anyMatch(m -> m.status().startsWith("ROUTED_OPPOSITE")),
+        "Feedthrough or opposite-side fanout routing must not run when oppositeSideRouting is false");
+  }
+
+  @Test
+  void testLayerParityThroughHolePinHandling() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.oppositeSideRouting = true;
+
+    Pin thtPin = null;
+    Pin smdPin = null;
+    int sharedNet = -1;
+    for (Item item : board.getItems()) {
+      if (item instanceof Pin pin && pin.firstLayer() != pin.lastLayer()) {
+        for (int netNo : pin.netNumbers) {
+          for (Item other : board.getItems()) {
+            if (other instanceof Pin otherPin
+                && otherPin.firstLayer() == otherPin.lastLayer()
+                && otherPin.containsNet(netNo)
+                && !otherPin.equals(pin)) {
+              thtPin = pin;
+              smdPin = otherPin;
+              sharedNet = netNo;
+              break;
+            }
+          }
+          if (thtPin != null) {
+            break;
+          }
+        }
+      }
+      if (thtPin != null) {
+        break;
+      }
+    }
+
+    assertNotNull(thtPin, "Expected a through-hole pin on the board");
+    assertNotNull(smdPin, "Expected an SMD pin sharing a net with the through-hole pin");
+    assertTrue(thtPin.isOnLayer(smdPin.firstLayer()));
+    assertTrue(thtPin.isOnLayer(thtPin.firstLayer()));
+    assertTrue(thtPin.isOnLayer(thtPin.lastLayer()));
+
+    app.freerouting.autoroute.maze.AutorouteControl control =
+        new app.freerouting.autoroute.maze.AutorouteControl(board, sharedNet, settings);
+    control.viasAllowed = false;
+    control.ripupAllowed = false;
+    for (int i = 0; i < control.layerCount; i++) {
+      control.layerActive[i] = (i == smdPin.firstLayer());
+    }
+
+    double mmResolution =
+        board.communication.getResolution(app.freerouting.board.model.structure.Unit.MM);
+
+    BatchDecouplingRouter.StrapAttemptOutcome outcome =
+        BatchDecouplingRouter.tryRouteStrap(
+            board,
+            settings,
+            null,
+            control,
+            smdPin,
+            thtPin,
+            smdPin.getConnectedSet(sharedNet),
+            thtPin.getConnectedSet(sharedNet),
+            smdPin.firstLayer(),
+            smdPin.firstLayer(),
+            sharedNet,
+            0,
+            thtPin.getComponentId(),
+            smdPin.getComponentId(),
+            1.0,
+            100.0,
+            mmResolution);
+
+    assertNotNull(outcome);
+    assertTrue(
+        outcome.success(),
+        "Route between SMD pin and THT pin on capLayer must succeed: " + outcome.status());
+    for (Item it : outcome.newItems()) {
+      assertFalse(it instanceof Via, "No via may be placed when connecting to THT on capLayer");
+    }
+  }
+
+  @Test
+  void testStrictOneViaInvariantInTryRouteStrap() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+
+    app.freerouting.board.model.items.Pin pin1 = null;
+    app.freerouting.board.model.items.Pin pin2 = null;
+    for (Item item : board.getItems()) {
+      if (item instanceof app.freerouting.board.model.items.Pin pin && pin.containsNet(1)) {
+        if (pin1 == null) {
+          pin1 = pin;
+        } else if (pin2 == null && !pin.equals(pin1)) {
+          pin2 = pin;
+          break;
+        }
+      }
+    }
+
+    assertNotNull(pin1);
+    assertNotNull(pin2);
+
+    app.freerouting.autoroute.maze.AutorouteControl control =
+        new app.freerouting.autoroute.maze.AutorouteControl(board, 1, settings);
+    control.viasAllowed = false;
+    control.ripupAllowed = false;
+
+    double mmResolution =
+        board.communication.getResolution(app.freerouting.board.model.structure.Unit.MM);
+
+    BatchDecouplingRouter.StrapAttemptOutcome outcome =
+        BatchDecouplingRouter.tryRouteStrap(
+            board,
+            settings,
+            null,
+            control,
+            pin1,
+            pin2,
+            pin1.getConnectedSet(1),
+            pin2.getConnectedSet(1),
+            pin1.firstLayer(),
+            pin2.firstLayer(),
+            1,
+            2,
+            pin2.getComponentId(),
+            pin1.getComponentId(),
+            1.0,
+            10.0,
+            mmResolution);
+
+    assertNotNull(outcome);
+    assertTrue(
+        outcome.success(), "Strap route between pin1 and pin2 must succeed: " + outcome.status());
+    for (Item it : outcome.newItems()) {
+      assertFalse(it instanceof Via, "No via may be placed when viasAllowed = false");
+    }
+  }
+
+  @Test
+  void testCrossLayerStrapPlacesAtMostOneVia() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue269-caniot-tiny-arm.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+
+    Pin topPin = null;
+    Pin botPin = null;
+    int targetNet = -1;
+    for (Item item : board.getItems()) {
+      if (item instanceof Pin pin && pin.firstLayer() == 0 && pin.lastLayer() == 0) {
+        for (int netNo : pin.netNumbers) {
+          for (Item other : board.getItems()) {
+            if (other instanceof Pin otherPin
+                && otherPin.firstLayer() == 1
+                && otherPin.lastLayer() == 1
+                && otherPin.containsNet(netNo)
+                && !otherPin.equals(pin)) {
+              double dist = pin.getCenter().toFloat().distance(otherPin.getCenter().toFloat());
+              if (dist < 50000) {
+                topPin = pin;
+                botPin = otherPin;
+                targetNet = netNo;
+                break;
+              }
+            }
+          }
+          if (topPin != null) {
+            break;
+          }
+        }
+      }
+      if (topPin != null) {
+        break;
+      }
+    }
+
+    if (topPin != null && botPin != null) {
+      app.freerouting.autoroute.maze.AutorouteControl control =
+          new app.freerouting.autoroute.maze.AutorouteControl(board, targetNet, settings);
+      control.viasAllowed = true;
+      control.ripupAllowed = false;
+      control.layerActive[0] = true;
+      control.layerActive[1] = true;
+
+      double mmResolution =
+          board.communication.getResolution(app.freerouting.board.model.structure.Unit.MM);
+
+      BatchDecouplingRouter.StrapAttemptOutcome outcome =
+          BatchDecouplingRouter.tryRouteStrap(
+              board,
+              settings,
+              null,
+              control,
+              topPin,
+              botPin,
+              topPin.getConnectedSet(targetNet),
+              botPin.getConnectedSet(targetNet),
+              0,
+              1,
+              targetNet,
+              0,
+              botPin.getComponentId(),
+              topPin.getComponentId(),
+              1.0,
+              10.0,
+              mmResolution);
+
+      assertNotNull(outcome);
+      if (outcome.success()) {
+        int vias = 0;
+        for (Item it : outcome.newItems()) {
+          if (it instanceof Via) {
+            vias++;
+          }
+        }
+        assertEquals(1, vias, "Cross-layer feed-through strap must place exactly 1 via");
+      }
+    }
+  }
+
+  @Test
+  void testOppositeSideFeedThroughViaRoutingOnMultiLayerBoard() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue269-caniot-tiny-arm.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.oppositeSideRouting = true;
+    settings.decoupling.includeReviewCandidates = true;
+    settings.decoupling.maxStrapLengthMm = 10.0;
+    settings.decoupling.maxOwnerRadiusMm = 10.0;
+
+    int baselineDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    int postDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+    assertTrue(
+        postDrc <= baselineDrc,
+        "Opposite side decoupling must not introduce new clearance violations (baseline="
+            + baselineDrc
+            + ", post="
+            + postDrc
+            + ")");
+
+    assertTrue(
+        summary.metrics().stream().anyMatch(m -> m.status().startsWith("ROUTED_OPPOSITE")),
+        "Expected at least one candidate with ROUTED_OPPOSITE status");
+    assertTrue(
+        summary.viasPlaced() > 0, "Expected at least one via placed in opposite-side routing");
+
+    boolean hasLayer0 = false;
+    boolean hasLayer1 = false;
+    for (Item it : board.getItems()) {
+      if (it.isDecouplingProtected() && it instanceof Trace trace) {
+        if (trace.getLayer() == 0) {
+          hasLayer0 = true;
+        } else if (trace.getLayer() == 1) {
+          hasLayer1 = true;
+        }
+      }
+    }
+
+    assertTrue(hasLayer0 && hasLayer1, "Expected decoupling traces on both Layer 0 and Layer 1");
   }
 }

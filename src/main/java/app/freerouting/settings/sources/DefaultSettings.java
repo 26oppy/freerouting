@@ -146,6 +146,9 @@ public class DefaultSettings implements SettingsSource {
   /** Default dimensionless weight factor applied to Euclidean distance from flank via target. */
   public static final double DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS_WEIGHT = 0.2;
 
+  /** Default opposite-side SMD decoupling routing enabled state. */
+  public static final boolean DEFAULT_DECOUPLING_OPPOSITE_SIDE_ROUTING = true;
+
   /** Current default router score formula. */
   public static final RouterScoringVersion DEFAULT_ROUTER_SCORING_VERSION =
       RouterScoringVersion.V2_CONTINUOUS;
@@ -285,6 +288,7 @@ public class DefaultSettings implements SettingsSource {
     settings.decoupling.mutualInductanceBias = DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS;
     settings.decoupling.mutualInductanceBiasWeight =
         DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS_WEIGHT;
+    settings.decoupling.oppositeSideRouting = DEFAULT_DECOUPLING_OPPOSITE_SIDE_ROUTING;
 
     // Optimizer defaults
     settings.optimizer.enabled = true;

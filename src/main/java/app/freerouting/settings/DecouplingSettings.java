@@ -69,6 +69,14 @@ public class DecouplingSettings implements Serializable, Cloneable {
   @SerializedName("mutual_inductance_bias_weight")
   public Double mutualInductanceBiasWeight;
 
+  /**
+   * Whether to route opposite-side SMD decoupling capacitors where the capacitor sits on the
+   * opposite layer from the owner IC pin (e.g. bottom-side capacitor under a top-side IC pad). When
+   * enabled, allows at most 1 feed-through via transition or targets an existing fanout via.
+   */
+  @SerializedName("opposite_side_routing")
+  public Boolean oppositeSideRouting;
+
   /** No-arg constructor required for deserialisation and {@link #clone()}. */
   public DecouplingSettings() {}
 

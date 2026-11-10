@@ -41,7 +41,7 @@ public final class BatchDecouplingRouter {
   private BatchDecouplingRouter() {}
 
   /** Result record for a single strap routing attempt. */
-  private record StrapAttemptOutcome(
+  record StrapAttemptOutcome(
       boolean success, String status, double lengthMm, List<Item> newItems) {}
 
   /**
@@ -163,6 +163,7 @@ public final class BatchDecouplingRouter {
         String strapStatus = "NOT_ATTEMPTED";
         int targetPinId = task.targetSupplyItemId();
         String ownerName = "NONE";
+        int viasPlacedForCap = 0;
 
         Pin ownerPin = null;
         if (task.hasTargetSupply()) {
@@ -185,32 +186,36 @@ public final class BatchDecouplingRouter {
                   + "-"
                   + ownerPin.name();
 
-          if (supplyPin.firstLayer() != ownerPin.firstLayer()) {
-            failed++;
-            strapStatus = "LAYER_MISMATCH";
-          } else {
-            int layer = supplyPin.firstLayer();
+          int capLayer = supplyPin.firstLayer();
+          boolean isSameLayer = (capLayer == ownerPin.firstLayer());
+          boolean isOwnerTht =
+              (ownerPin.firstLayer() != ownerPin.lastLayer()) && ownerPin.isOnLayer(capLayer);
+
+          if (isSameLayer || isOwnerTht) {
+            int targetLayer = capLayer;
             AutorouteControl control = new AutorouteControl(board, railNetNo, settings);
-            if (layer < 0 || layer >= control.layerCount || !control.layerActive[layer]) {
+            if (targetLayer < 0
+                || targetLayer >= control.layerCount
+                || !control.layerActive[targetLayer]) {
               failed++;
               strapStatus = "LAYER_DISABLED";
             } else {
-              control.viasAllowed = false;
-              control.ripupAllowed = false;
-              control.removeUnconnectedVias = false;
-              if (settings.decoupling != null && settings.decoupling.maxDoorExpansions != null) {
-                control.maxDoorExpansions = settings.decoupling.maxDoorExpansions;
-              }
-              for (int i = 0; i < control.layerCount; i++) {
-                control.layerActive[i] = control.layerActive[i] && (i == layer);
-              }
-
               double centerDistUnits =
                   supplyPin.getCenter().toFloat().distance(ownerPin.getCenter().toFloat());
               if (centerDistUnits > maxStrapLengthUnits) {
                 failed++;
                 strapStatus = "DISTANCE_EXCEEDED";
               } else {
+                control.viasAllowed = false;
+                control.ripupAllowed = false;
+                control.removeUnconnectedVias = false;
+                if (settings.decoupling != null && settings.decoupling.maxDoorExpansions != null) {
+                  control.maxDoorExpansions = settings.decoupling.maxDoorExpansions;
+                }
+                for (int i = 0; i < control.layerCount; i++) {
+                  control.layerActive[i] = control.layerActive[i] && (i == targetLayer);
+                }
+
                 Set<Item> supplyConnected = supplyPin.getConnectedSet(railNetNo);
                 if (supplyConnected.contains(ownerPin)) {
                   alreadyConnected++;
@@ -245,7 +250,8 @@ public final class BatchDecouplingRouter {
                             ownerPin,
                             currentSupplyConnected,
                             currentOwnerConnected,
-                            layer,
+                            capLayer,
+                            targetLayer,
                             railNetNo,
                             candidate.groundNetNumber(),
                             ownerPin.getComponentId(),
@@ -268,6 +274,10 @@ public final class BatchDecouplingRouter {
                     tagDecouplingProtected(supplyPin, lockMode);
                     tagDecouplingProtected(ownerPin, lockMode);
                     for (Item newItem : outcome.newItems()) {
+                      if (newItem instanceof Via) {
+                        viasPlacedForCap++;
+                        viasPlaced++;
+                      }
                       tagDecouplingProtected(newItem, lockMode);
                     }
                     if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
@@ -319,7 +329,8 @@ public final class BatchDecouplingRouter {
                                       primaryCapPin,
                                       currentSupplyConnected,
                                       currentPrimaryConnected,
-                                      layer,
+                                      capLayer,
+                                      capLayer,
                                       railNetNo,
                                       candidate.groundNetNumber(),
                                       primaryCapPin.getComponentId(),
@@ -342,6 +353,10 @@ public final class BatchDecouplingRouter {
                               tagDecouplingProtected(supplyPin, lockMode);
                               tagDecouplingProtected(primaryCapPin, lockMode);
                               for (Item newItem : flankOutcome.newItems()) {
+                                if (newItem instanceof Via) {
+                                  viasPlacedForCap++;
+                                  viasPlaced++;
+                                }
                                 tagDecouplingProtected(newItem, lockMode);
                               }
                               if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
@@ -364,6 +379,151 @@ public final class BatchDecouplingRouter {
                 }
               }
             }
+          } else {
+            // Opposite-layer SMD mounting (e.g. bottom-side cap under top-side IC pad)
+            boolean oppositeSideEnabled =
+                settings.decoupling == null
+                    || settings.decoupling.oppositeSideRouting == null
+                    || Boolean.TRUE.equals(settings.decoupling.oppositeSideRouting);
+
+            if (!oppositeSideEnabled) {
+              failed++;
+              strapStatus = "OPPOSITE_SIDE_DISABLED";
+            } else {
+              int ownerLayer = ownerPin.firstLayer();
+              AutorouteControl control = new AutorouteControl(board, railNetNo, settings);
+              if (capLayer < 0
+                  || capLayer >= control.layerCount
+                  || ownerLayer < 0
+                  || ownerLayer >= control.layerCount
+                  || !control.layerActive[capLayer]
+                  || !control.layerActive[ownerLayer]) {
+                failed++;
+                strapStatus = "LAYER_DISABLED";
+              } else {
+                double lateralDistUnits =
+                    supplyPin.getCenter().toFloat().distance(ownerPin.getCenter().toFloat());
+                if (lateralDistUnits > maxStrapLengthUnits) {
+                  failed++;
+                  strapStatus = "DISTANCE_EXCEEDED";
+                } else {
+                  Set<Item> supplyConnected = supplyPin.getConnectedSet(railNetNo);
+                  if (supplyConnected.contains(ownerPin)) {
+                    alreadyConnected++;
+                    strapSuccess = true;
+                    strapStatus = "ALREADY_CONNECTED";
+                    tagDecouplingProtected(supplyPin, lockMode);
+                    tagDecouplingProtected(ownerPin, lockMode);
+                    if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
+                      ownerPin.setFilteredIslandNonFeeder(true);
+                    }
+                  } else {
+                    Set<Item> ownerConnected = ownerPin.getConnectedSet(railNetNo);
+
+                    // Sub-case 3A: Does ownerPin already reach capLayer?
+                    boolean hasConnectionOnCapLayer = false;
+                    for (Item it : ownerConnected) {
+                      if (it.isOnLayer(capLayer)) {
+                        hasConnectionOnCapLayer = true;
+                        break;
+                      }
+                    }
+
+                    int effectiveTargetLayer;
+                    if (hasConnectionOnCapLayer) {
+                      // Sub-case 3A: Target existing fanout via/trace directly on capLayer (0 vias)
+                      effectiveTargetLayer = capLayer;
+                      control.viasAllowed = false;
+                      control.ripupAllowed = false;
+                      control.removeUnconnectedVias = false;
+                      if (settings.decoupling != null
+                          && settings.decoupling.maxDoorExpansions != null) {
+                        control.maxDoorExpansions = settings.decoupling.maxDoorExpansions;
+                      }
+                      for (int i = 0; i < control.layerCount; i++) {
+                        control.layerActive[i] = control.layerActive[i] && (i == capLayer);
+                      }
+                    } else {
+                      // Sub-case 3B: Fresh feed-through via between capLayer and ownerLayer
+                      effectiveTargetLayer = ownerLayer;
+                      control.viasAllowed = true;
+                      control.ripupAllowed = false;
+                      control.removeUnconnectedVias = false;
+                      if (settings.decoupling != null
+                          && settings.decoupling.maxDoorExpansions != null) {
+                        control.maxDoorExpansions = settings.decoupling.maxDoorExpansions;
+                      }
+                      for (int i = 0; i < control.layerCount; i++) {
+                        control.layerActive[i] = (i == capLayer || i == ownerLayer);
+                      }
+                    }
+
+                    double[] scalesToTry =
+                        (traceWidthScale > 1.0)
+                            ? new double[] {traceWidthScale, 1.0}
+                            : new double[] {1.0};
+
+                    StrapAttemptOutcome outcome = null;
+                    for (double scale : scalesToTry) {
+                      Set<Item> currentSupplyConnected = supplyPin.getConnectedSet(railNetNo);
+                      Set<Item> currentOwnerConnected = ownerPin.getConnectedSet(railNetNo);
+                      outcome =
+                          tryRouteStrap(
+                              board,
+                              settings,
+                              thread,
+                              control,
+                              supplyPin,
+                              ownerPin,
+                              currentSupplyConnected,
+                              currentOwnerConnected,
+                              capLayer,
+                              effectiveTargetLayer,
+                              railNetNo,
+                              candidate.groundNetNumber(),
+                              ownerPin.getComponentId(),
+                              candidate.componentId(),
+                              scale,
+                              maxStrapLengthMm,
+                              mmResolution);
+
+                      if (outcome.success()) {
+                        break;
+                      }
+                    }
+
+                    if (outcome != null && outcome.success()) {
+                      strapSuccess = true;
+                      strapStatus =
+                          hasConnectionOnCapLayer
+                              ? "ROUTED_OPPOSITE_FANOUT"
+                              : "ROUTED_OPPOSITE_FEEDTHROUGH_VIA";
+                      routedStraps++;
+                      candidateStrapLengthMm = outcome.lengthMm();
+                      totalStrapLengthMm += candidateStrapLengthMm;
+                      tagDecouplingProtected(supplyPin, lockMode);
+                      tagDecouplingProtected(ownerPin, lockMode);
+                      for (Item newItem : outcome.newItems()) {
+                        if (newItem instanceof Via) {
+                          viasPlacedForCap++;
+                          viasPlaced++;
+                        }
+                        tagDecouplingProtected(newItem, lockMode);
+                      }
+                      if (ReasonCode.FILTERED_ISLAND.isSet(candidate.reasonMask())) {
+                        ownerPin.setFilteredIslandNonFeeder(true);
+                        for (Item newItem : outcome.newItems()) {
+                          newItem.setFilteredIslandNonFeeder(true);
+                        }
+                      }
+                    } else {
+                      failed++;
+                      strapStatus = outcome != null ? outcome.status() : "NO_ROUTE_FOUND";
+                    }
+                  }
+                }
+              }
+            }
           }
         } else {
           strapStatus = task.isPlaneOnly() ? "PLANE_ONLY_PENDING" : "NO_OWNER_IN_RADIUS";
@@ -374,12 +534,9 @@ public final class BatchDecouplingRouter {
 
         // Dedicated ground/plane via adjacent to the pad
         int groundNetNo = candidate.groundNetNumber();
-        int viasPlacedForCap = 0;
-        double groundViaDistanceMm = 0.0;
         Net groundNet = board.rules.nets.get(groundNetNo);
 
         // Through-hole pins span all layers and connect directly to internal planes
-        Via placedVia = null;
         boolean groundIsSmd = (groundPin.firstLayer() == groundPin.lastLayer());
         boolean groundAlreadyOnPlane = !groundIsSmd;
         if (!groundAlreadyOnPlane) {
@@ -409,7 +566,7 @@ public final class BatchDecouplingRouter {
         double dx = p2.x - p1.x;
         double dy = p2.y - p1.y;
         double padDist = Math.sqrt(dx * dx + dy * dy);
-        double dEscape = 0.5 * mmResolution;
+        double escapeDistance = 0.5 * mmResolution;
 
         FloatPoint primaryGroundTarget = null;
         FloatPoint secondaryGroundTarget = null;
@@ -425,10 +582,13 @@ public final class BatchDecouplingRouter {
           nx = -uy;
           ny = ux;
           hasNormalVector = true;
-          primaryGroundTarget = new FloatPoint(p1.x + dEscape * nx, p1.y + dEscape * ny);
-          secondaryGroundTarget = new FloatPoint(p1.x - dEscape * nx, p1.y - dEscape * ny);
+          primaryGroundTarget =
+              new FloatPoint(p1.x + escapeDistance * nx, p1.y + escapeDistance * ny);
+          secondaryGroundTarget =
+              new FloatPoint(p1.x - escapeDistance * nx, p1.y - escapeDistance * ny);
         }
 
+        Via placedVia = null;
         if (groundAlreadyOnPlane) {
           tagDecouplingProtected(groundPin, lockMode);
           if (task.isPlaneOnly()) {
@@ -450,9 +610,6 @@ public final class BatchDecouplingRouter {
             if (placedVia != null) {
               viasPlacedForCap++;
               viasPlaced++;
-              groundViaDistanceMm =
-                  groundPin.getCenter().toFloat().distance(placedVia.getCenter().toFloat())
-                      / mmResolution;
             }
             tagDecouplingProtected(groundPin, lockMode);
             for (Item newItem : groundViaResult.newItems()) {
@@ -504,29 +661,34 @@ public final class BatchDecouplingRouter {
             if (placedVia != null) {
               // Placed ground via offset: v_offset = V1 - P1
               FloatPoint v1 = placedVia.getCenter().toFloat();
-              double vOffX = v1.x - p1.x;
-              double vOffY = v1.y - p1.y;
+              double offsetX = v1.x - p1.x;
+              double offsetY = v1.y - p1.y;
               // Project offset onto the normal flank vector to prevent end-fire fallback
               // from pointing inward along the longitudinal axis between pads:
-              double compN = vOffX * nx + vOffY * ny;
-              if (Math.abs(compN) >= 0.2 * dEscape) {
+              double compN = offsetX * nx + offsetY * ny;
+              if (Math.abs(compN) >= 0.2 * escapeDistance) {
                 double sign = Math.signum(compN);
                 if (sign == 0.0) {
                   sign = 1.0;
                 }
                 primarySupplyTarget = new FloatPoint(p2.x + compN * nx, p2.y + compN * ny);
                 secondarySupplyTarget =
-                    new FloatPoint(p2.x - sign * dEscape * nx, p2.y - sign * dEscape * ny);
+                    new FloatPoint(
+                        p2.x - sign * escapeDistance * nx, p2.y - sign * escapeDistance * ny);
               } else {
                 // V1 was placed end-fire along ±u with negligible normal component;
                 // fall back to the lateral flank target to ensure we stay out of the courtyard
-                primarySupplyTarget = new FloatPoint(p2.x + dEscape * nx, p2.y + dEscape * ny);
-                secondarySupplyTarget = new FloatPoint(p2.x - dEscape * nx, p2.y - dEscape * ny);
+                primarySupplyTarget =
+                    new FloatPoint(p2.x + escapeDistance * nx, p2.y + escapeDistance * ny);
+                secondarySupplyTarget =
+                    new FloatPoint(p2.x - escapeDistance * nx, p2.y - escapeDistance * ny);
               }
             } else {
               // Ground was already on plane; target default lateral flank
-              primarySupplyTarget = new FloatPoint(p2.x + dEscape * nx, p2.y + dEscape * ny);
-              secondarySupplyTarget = new FloatPoint(p2.x - dEscape * nx, p2.y - dEscape * ny);
+              primarySupplyTarget =
+                  new FloatPoint(p2.x + escapeDistance * nx, p2.y + escapeDistance * ny);
+              secondarySupplyTarget =
+                  new FloatPoint(p2.x - escapeDistance * nx, p2.y - escapeDistance * ny);
             }
           }
 
@@ -563,6 +725,12 @@ public final class BatchDecouplingRouter {
             fallbackViaPairs++;
           }
         }
+
+        double groundViaDistanceMm =
+            (placedVia != null)
+                ? groundPin.getCenter().toFloat().distance(placedVia.getCenter().toFloat())
+                    / mmResolution
+                : 0.0;
 
         metricsList.add(
             new DecouplingMetrics(
@@ -615,7 +783,7 @@ public final class BatchDecouplingRouter {
    * Attempts to route a surface strap between supply and target pins at the specified trace width
    * scale. Validates DRC and verifies that adjacent unrouted SMD signal pins are not trapped.
    */
-  private static StrapAttemptOutcome tryRouteStrap(
+  static StrapAttemptOutcome tryRouteStrap(
       RoutingBoard board,
       RouterSettings settings,
       StoppableThread thread,
@@ -624,7 +792,8 @@ public final class BatchDecouplingRouter {
       Pin targetPin,
       Set<Item> supplyConnected,
       Set<Item> targetConnected,
-      int layer,
+      int capLayer,
+      int targetLayer,
       int railNetNo,
       int groundNetNo,
       int ownerCompId,
@@ -633,16 +802,34 @@ public final class BatchDecouplingRouter {
       double maxStrapLengthMm,
       double mmResolution) {
     IntBox padUnion = supplyPin.boundingBox().union(targetPin.boundingBox());
-    int maxClearance = board.rules.clearanceMatrix.maxValue(layer);
+    for (Item it : targetConnected) {
+      if (it.isOnLayer(capLayer) || it.isOnLayer(targetLayer)) {
+        padUnion = padUnion.union(it.boundingBox());
+      }
+    }
+    int maxClearanceCap =
+        (capLayer >= 0 && capLayer < board.getLayerCount())
+            ? board.rules.clearanceMatrix.maxValue(capLayer)
+            : 0;
+    int maxClearanceTarget =
+        (targetLayer >= 0 && targetLayer < board.getLayerCount())
+            ? board.rules.clearanceMatrix.maxValue(targetLayer)
+            : 0;
+    int maxClearance = Math.max(maxClearanceCap, maxClearanceTarget);
     int searchRadius = (int) Math.ceil(maxStrapLengthMm * mmResolution) + maxClearance;
     IntBox searchBox = padUnion.offset(searchRadius);
 
-    // Capture scoped local checkpoint before route attempt
+    // Capture local checkpoint; if cross-layer, snapshot all layers (-1)
+    int checkpointLayer = (capLayer == targetLayer) ? capLayer : -1;
     DecouplingRouteCheckpoint checkpoint =
-        DecouplingRouteCheckpoint.capture(board, searchBox, layer, railNetNo);
+        DecouplingRouteCheckpoint.capture(board, searchBox, checkpointLayer, railNetNo);
 
-    // Apply scaled trace width clamped to >= max(netClassHalfWidth, neckWidthUm)
-    applyScaledTraceWidth(control, layer, railNetNo, widthScale, board, settings, mmResolution);
+    // Apply scaled trace width safely to both layers
+    applyScaledTraceWidth(control, capLayer, railNetNo, widthScale, board, settings, mmResolution);
+    if (capLayer != targetLayer) {
+      applyScaledTraceWidth(
+          control, targetLayer, railNetNo, widthScale, board, settings, mmResolution);
+    }
 
     var engine =
         board.initAutoroute(
@@ -671,6 +858,24 @@ public final class BatchDecouplingRouter {
       }
     }
 
+    // Strict 1-via invariant verification
+    int viasPlacedInStrap = 0;
+    for (Item newItem : newItems) {
+      if (newItem instanceof Via) {
+        viasPlacedInStrap++;
+      }
+    }
+
+    if (!control.viasAllowed && viasPlacedInStrap > 0) {
+      checkpoint.rollback(board);
+      return new StrapAttemptOutcome(false, "UNEXPECTED_VIA_IN_SURFACE_STRAP", 0.0, List.of());
+    }
+
+    if (control.viasAllowed && viasPlacedInStrap > 1) {
+      checkpoint.rollback(board);
+      return new StrapAttemptOutcome(false, "EXCESS_VIAS_ROLLBACK", 0.0, List.of());
+    }
+
     double lengthMm = 0.0;
     for (Item newItem : newItems) {
       if (newItem instanceof Trace trace) {
@@ -697,7 +902,7 @@ public final class BatchDecouplingRouter {
       return new StrapAttemptOutcome(false, "DISTANCE_EXCEEDED", 0.0, List.of());
     }
 
-    // Run CourtyardEscapeProbe on neighbor pins
+    // Run CourtyardEscapeProbe on neighbor pins across both involved layers
     IntBox strapBox = padUnion;
     for (Item newItem : newItems) {
       strapBox = strapBox.union(newItem.boundingBox());
@@ -706,7 +911,12 @@ public final class BatchDecouplingRouter {
 
     boolean escapeSafe =
         CourtyardEscapeProbe.isEscapePossible(
-            board, ownerCompId, capCompId, probeBox, layer, railNetNo, groundNetNo, thread);
+            board, ownerCompId, capCompId, probeBox, capLayer, railNetNo, groundNetNo, thread);
+    if (escapeSafe && capLayer != targetLayer) {
+      escapeSafe =
+          CourtyardEscapeProbe.isEscapePossible(
+              board, ownerCompId, capCompId, probeBox, targetLayer, railNetNo, groundNetNo, thread);
+    }
 
     if (!escapeSafe) {
       checkpoint.rollback(board);
@@ -725,6 +935,9 @@ public final class BatchDecouplingRouter {
       RoutingBoard board,
       RouterSettings settings,
       double mmResolution) {
+    if (layer < 0 || layer >= control.layerCount) {
+      return;
+    }
     int baseHalfWidth = board.rules.getTraceHalfWidth(railNetNo, layer);
     double neckWidthUm = settings.getNeckWidthUm();
     double neckHalfWidthUnits =
