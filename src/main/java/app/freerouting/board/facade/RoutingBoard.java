@@ -1117,7 +1117,13 @@ public class RoutingBoard extends BasicBoard implements Serializable {
     ctrlSettings.fanoutStartPinLayer = pin.firstLayer();
     if (directionalBiasTarget != null) {
       ctrlSettings.directionalViaBiasTarget = directionalBiasTarget;
-      ctrlSettings.directionalViaBiasWeight = 50.0;
+      double biasWeight =
+          (routerSettings != null
+                  && routerSettings.decoupling != null
+                  && routerSettings.decoupling.mutualInductanceBiasWeight != null)
+              ? routerSettings.decoupling.mutualInductanceBiasWeight
+              : 0.2;
+      ctrlSettings.directionalViaBiasWeight = biasWeight;
     }
     ctrlSettings.removeUnconnectedVias = false;
     if (ripupCosts >= 0) {

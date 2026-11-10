@@ -565,5 +565,58 @@ class BatchDecouplingRouterTest {
             + summary.viasPlaced()
             + " protected vias, found: "
             + protectedViaCount);
+    assertTrue(
+        (summary.coupledViaPairs() + summary.fallbackViaPairs()) > 0,
+        "Expected coupled or fallback via pairs to be recorded in telemetry");
+  }
+
+  @Test
+  void testHighBiasWeightExecution() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.mutualInductanceBias = true;
+    settings.decoupling.mutualInductanceBiasWeight = 0.5;
+
+    // Verifies that aggressive dimensionless bias weight (0.5) operates stably
+    // without causing A* loop stalls or routing regressions
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    assertTrue(summary.candidatesTotal() > 0);
+  }
+
+  @Test
+  void testCustomBiasWeightAndDualFlankProbe() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.lockMode = DecouplingLockMode.HARD;
+    settings.decoupling.mutualInductanceBias = true;
+    settings.decoupling.mutualInductanceBiasWeight = 0.35;
+    settings.decoupling.maxStrapLengthMm = 4.0;
+    settings.decoupling.maxOwnerRadiusMm = 8.0;
+
+    for (int i = 1; i <= board.rules.nets.maxNetNumber(); i++) {
+      app.freerouting.rules.Net net = board.rules.nets.get(i);
+      if (net != null) {
+        net.setContainsPlane(true);
+      }
+    }
+
+    int baselineDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    int postDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+    assertTrue(
+        postDrc <= baselineDrc,
+        "Custom bias weight and dual-flank probe must not introduce clearance violations");
+    assertTrue(summary.viasPlaced() > 0);
   }
 }

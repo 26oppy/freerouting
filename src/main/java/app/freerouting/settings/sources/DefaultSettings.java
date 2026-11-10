@@ -143,6 +143,9 @@ public class DefaultSettings implements SettingsSource {
   /** Default mutual-inductance via bias enabled state for decoupling via placement. */
   public static final boolean DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS = true;
 
+  /** Default dimensionless weight factor applied to Euclidean distance from flank via target. */
+  public static final double DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS_WEIGHT = 0.2;
+
   /** Current default router score formula. */
   public static final RouterScoringVersion DEFAULT_ROUTER_SCORING_VERSION =
       RouterScoringVersion.V2_CONTINUOUS;
@@ -280,6 +283,8 @@ public class DefaultSettings implements SettingsSource {
     settings.decoupling.maxDoorExpansions = DEFAULT_DECOUPLING_MAX_DOOR_EXPANSIONS;
     settings.decoupling.includeReviewCandidates = false;
     settings.decoupling.mutualInductanceBias = DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS;
+    settings.decoupling.mutualInductanceBiasWeight =
+        DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS_WEIGHT;
 
     // Optimizer defaults
     settings.optimizer.enabled = true;

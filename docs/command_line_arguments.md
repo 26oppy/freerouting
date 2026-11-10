@@ -80,6 +80,9 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 - **`--router.decoupling.mutual_inductance_bias=[true|false]`**
   Whether to directionally bias decoupling via placement toward the coupled pad/via to maximize mutual-inductance coupling and minimize loop area. Default is `true`.
 
+- **`--router.decoupling.mutual_inductance_bias_weight=[factor]`**
+  Dimensionless weighting slope applied to Euclidean distance from the flank target during A* maze expansion. Default is `0.2`.
+
 - **`--router.autorouter.max_passes=[number of passes]`**
   Sets the upper limit for the number of autorouter passes to perform. More passes may result in better optimization but will take longer.
 

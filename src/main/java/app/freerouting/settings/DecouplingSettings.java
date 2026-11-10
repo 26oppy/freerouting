@@ -62,6 +62,13 @@ public class DecouplingSettings implements Serializable, Cloneable {
   @SerializedName("mutual_inductance_bias")
   public Boolean mutualInductanceBias;
 
+  /**
+   * Dimensionless weight factor applied to the Euclidean distance from the flank target when
+   * scoring via candidates in A* maze expansion.
+   */
+  @SerializedName("mutual_inductance_bias_weight")
+  public Double mutualInductanceBiasWeight;
+
   /** No-arg constructor required for deserialisation and {@link #clone()}. */
   public DecouplingSettings() {}
 

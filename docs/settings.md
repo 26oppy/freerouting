@@ -266,6 +266,7 @@ Configures the decoupling capacitor low-inductance pre-routing pass that runs im
 - **`max_door_expansions`**: Hard limit on maze expansion doors per decoupling route attempt to guarantee deterministic $O(1)$ runtime bounds. Default is `250`.
 - **`include_review_candidates`**: Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.
 - **`mutual_inductance_bias`**: Whether to directionally bias decoupling via placement toward the coupled pad/via to maximize mutual-inductance coupling and minimize parasitic loop area. Default is `true`.
+- **`mutual_inductance_bias_weight`**: Dimensionless weighting slope applied to Euclidean distance from the flank target during A* maze expansion. Default is `0.2`.
 
 ##### **`fanout` Sub-section**
 

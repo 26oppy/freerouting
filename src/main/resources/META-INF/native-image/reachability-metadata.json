@@ -1241,6 +1241,9 @@
         },
         {
           "name": "mutualInductanceBias"
+        },
+        {
+          "name": "mutualInductanceBiasWeight"
         }
       ],
       "methods": [

@@ -92,8 +92,7 @@ final class MazeExpansionEngine {
       double dx = nearestPoint.x - ctrl.directionalViaBiasTarget.x;
       double dy = nearestPoint.y - ctrl.directionalViaBiasTarget.y;
       double biasDist = Math.sqrt(dx * dx + dy * dy);
-      double effectiveViaRadius = viaRadius > 0.0 ? viaRadius : 500.0;
-      sortingValue += (biasDist / effectiveViaRadius) * ctrl.directionalViaBiasWeight;
+      sortingValue += biasDist * ctrl.directionalViaBiasWeight;
     }
     MazeListElement newElement =
         new MazeListElement(

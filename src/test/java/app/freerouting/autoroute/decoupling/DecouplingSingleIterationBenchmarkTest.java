@@ -120,12 +120,14 @@ class DecouplingSingleIterationBenchmarkTest {
       System.out.println(
           "--- BOARD: " + boardName + " (Plane Via Drops with Mutual Inductance Bias) ---");
       System.out.printf(
-          "   Duration=%d ms, Candidates=%d, Routed=%d, Connected=%d, ViasPlaced=%d, Failed=%d, Length=%.2f mm, DRC=%d->%d (delta=%d)%n",
+          "   Duration=%d ms, Candidates=%d, Routed=%d, Connected=%d, ViasPlaced=%d (Coupled=%d, Fallback=%d), Failed=%d, Length=%.2f mm, DRC=%d->%d (delta=%d)%n",
           durationMsPlane,
           summaryPlane.candidatesTotal(),
           summaryPlane.strapsRouted(),
           summaryPlane.alreadyConnected(),
           summaryPlane.viasPlaced(),
+          summaryPlane.coupledViaPairs(),
+          summaryPlane.fallbackViaPairs(),
           summaryPlane.failed(),
           summaryPlane.totalStrapLengthMm(),
           drcBaselinePlane,
