@@ -1017,6 +1017,32 @@ public class RoutingBoard extends BasicBoard implements Serializable {
       int ripupCosts,
       Stoppable stoppableThread,
       TimeLimit timeLimit) {
+    return fanout(pin, routerSettings, ripupCosts, stoppableThread, timeLimit, (FloatPoint) null);
+  }
+
+  public AutorouteAttemptResult fanout(
+      Pin pin,
+      RouterSettings routerSettings,
+      int ripupCosts,
+      Stoppable stoppableThread,
+      TimeLimit timeLimit,
+      Point directionalBiasTarget) {
+    return fanout(
+        pin,
+        routerSettings,
+        ripupCosts,
+        stoppableThread,
+        timeLimit,
+        directionalBiasTarget != null ? directionalBiasTarget.toFloat() : null);
+  }
+
+  public AutorouteAttemptResult fanout(
+      Pin pin,
+      RouterSettings routerSettings,
+      int ripupCosts,
+      Stoppable stoppableThread,
+      TimeLimit timeLimit,
+      FloatPoint directionalBiasTarget) {
     if (pin.firstLayer() != pin.lastLayer() || pin.netCount() != 1) {
       return new AutorouteAttemptResult(
           AutorouteAttemptState.ALREADY_CONNECTED, "The pin '" + pin + "' is already connected.");
@@ -1089,6 +1115,10 @@ public class RoutingBoard extends BasicBoard implements Serializable {
     }
     ctrlSettings.fanoutStartPinCenter = pin.getCenter();
     ctrlSettings.fanoutStartPinLayer = pin.firstLayer();
+    if (directionalBiasTarget != null) {
+      ctrlSettings.directionalViaBiasTarget = directionalBiasTarget;
+      ctrlSettings.directionalViaBiasWeight = 50.0;
+    }
     ctrlSettings.removeUnconnectedVias = false;
     if (ripupCosts >= 0) {
       ctrlSettings.ripupAllowed = true;

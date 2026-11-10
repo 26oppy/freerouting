@@ -503,13 +503,67 @@ class BatchDecouplingRouterTest {
       }
     }
 
-    if (summary.viasPlaced() > 0) {
-      assertTrue(
-          protectedViaCount >= summary.viasPlaced(),
-          "Expected at least "
-              + summary.viasPlaced()
-              + " protected vias, found: "
-              + protectedViaCount);
+    assertTrue(summary.viasPlaced() > 0, "Expected at least 1 plane decoupling via to be placed");
+    assertTrue(
+        protectedViaCount >= summary.viasPlaced(),
+        "Expected at least "
+            + summary.viasPlaced()
+            + " protected vias, found: "
+            + protectedViaCount);
+  }
+
+  @Test
+  void testMutualInductanceFlankCoordinatedViaCoupling() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.setLayerCount(board.getLayerCount());
+    settings.applyBoardSpecificOptimizations(board);
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.lockMode = DecouplingLockMode.HARD;
+    settings.decoupling.mutualInductanceBias = true;
+    settings.decoupling.maxStrapLengthMm = 4.0;
+    settings.decoupling.maxOwnerRadiusMm = 8.0;
+
+    for (int i = 1; i <= board.rules.nets.maxNetNumber(); i++) {
+      app.freerouting.rules.Net net = board.rules.nets.get(i);
+      if (net != null) {
+        net.setContainsPlane(true);
+      }
     }
+
+    int baselineDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    assertTrue(summary.candidatesTotal() > 0);
+
+    // Gate: No DRC regressions introduced by biased flank via placement
+    int postDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+    assertTrue(
+        postDrc <= baselineDrc,
+        "Flank-coordinated via placement must not introduce clearance violations (baseline="
+            + baselineDrc
+            + ", post="
+            + postDrc
+            + ")");
+
+    // Verify all placed decoupling vias are protected and SYSTEM_FIXED in HARD mode
+    int protectedViaCount = 0;
+    for (Item item : board.getItems()) {
+      if (item instanceof Via via && via.isDecouplingProtected()) {
+        protectedViaCount++;
+        assertEquals(FixedState.SYSTEM_FIXED, via.getFixedState());
+      }
+    }
+    assertTrue(
+        summary.viasPlaced() > 0,
+        "Expected at least 1 decoupling via to be placed with mutual inductance bias");
+    assertTrue(
+        protectedViaCount >= summary.viasPlaced(),
+        "Expected at least "
+            + summary.viasPlaced()
+            + " protected vias, found: "
+            + protectedViaCount);
   }
 }

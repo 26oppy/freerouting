@@ -55,6 +55,13 @@ public class DecouplingSettings implements Serializable, Cloneable {
   @SerializedName("include_review_candidates")
   public Boolean includeReviewCandidates;
 
+  /**
+   * Whether to directionally bias decoupling via placement toward the coupled pin/via to maximize
+   * mutual-inductance coupling and minimize loop area.
+   */
+  @SerializedName("mutual_inductance_bias")
+  public Boolean mutualInductanceBias;
+
   /** No-arg constructor required for deserialisation and {@link #clone()}. */
   public DecouplingSettings() {}
 

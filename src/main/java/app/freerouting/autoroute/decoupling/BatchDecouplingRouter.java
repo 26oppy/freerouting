@@ -15,6 +15,7 @@ import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.board.model.structure.Unit;
 import app.freerouting.core.StoppableThread;
 import app.freerouting.datastructures.TimeLimit;
+import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.Net;
@@ -376,6 +377,7 @@ public final class BatchDecouplingRouter {
         Net groundNet = board.rules.nets.get(groundNetNo);
 
         // Through-hole pins span all layers and connect directly to internal planes
+        Via placedVia = null;
         boolean groundIsSmd = (groundPin.firstLayer() == groundPin.lastLayer());
         boolean groundAlreadyOnPlane = !groundIsSmd;
         if (!groundAlreadyOnPlane) {
@@ -395,6 +397,28 @@ public final class BatchDecouplingRouter {
           }
         }
 
+        boolean applyBias =
+            settings.decoupling == null
+                || settings.decoupling.mutualInductanceBias == null
+                || Boolean.TRUE.equals(settings.decoupling.mutualInductanceBias);
+
+        FloatPoint p1 = groundPin.getCenter().toFloat();
+        FloatPoint p2 = supplyPin.getCenter().toFloat();
+        double dx = p2.x - p1.x;
+        double dy = p2.y - p1.y;
+        double padDist = Math.sqrt(dx * dx + dy * dy);
+        double dEscape = 0.5 * mmResolution;
+
+        FloatPoint groundViaBiasTarget = null;
+        if (applyBias && padDist > 1.0) {
+          // Unit vector along inter-pad axis and normal vector out to the lateral flank
+          double ux = dx / padDist;
+          double uy = dy / padDist;
+          double nx = -uy;
+          double ny = ux;
+          groundViaBiasTarget = new FloatPoint(p1.x + dEscape * nx, p1.y + dEscape * ny);
+        }
+
         if (groundAlreadyOnPlane) {
           tagDecouplingProtected(groundPin, lockMode);
           if (task.isPlaneOnly()) {
@@ -404,10 +428,10 @@ public final class BatchDecouplingRouter {
         } else if (groundNet != null && groundNet.containsPlane()) {
           int maxIdBeforeVia = board.communication.idGenerator.maxGeneratedId();
           AutorouteAttemptResult viaAttempt =
-              board.fanout(groundPin, settings, -1, thread, new TimeLimit(1000));
+              board.fanout(
+                  groundPin, settings, -1, thread, new TimeLimit(1000), groundViaBiasTarget);
           if (viaAttempt.state == AutorouteAttemptState.ROUTED) {
             List<Item> newViaItems = new ArrayList<>();
-            Via placedVia = null;
             for (Item it : groundPin.getConnectedSet(groundNetNo)) {
               if (it.getId() > maxIdBeforeVia) {
                 newViaItems.add(it);
@@ -426,6 +450,7 @@ public final class BatchDecouplingRouter {
             }
 
             if (viaViolation) {
+              placedVia = null;
               for (Item newItem : newViaItems) {
                 newItem.setFixedState(FixedState.UNFIXED);
                 board.removeItem(newItem);
@@ -486,9 +511,29 @@ public final class BatchDecouplingRouter {
         }
 
         if (!supplyAlreadyOnPlane && railNet != null && railNet.containsPlane()) {
+          FloatPoint supplyViaBiasTarget = null;
+          if (applyBias && padDist > 1.0) {
+            if (placedVia != null) {
+              // Exact flank-coordinated coupled offset: v_offset = V1 - P1
+              FloatPoint v1 = placedVia.getCenter().toFloat();
+              double vOffX = v1.x - p1.x;
+              double vOffY = v1.y - p1.y;
+              // Target matching flank on supply pin's side: T2 = P2 + v_offset
+              supplyViaBiasTarget = new FloatPoint(p2.x + vOffX, p2.y + vOffY);
+            } else {
+              // If ground was already on plane, use the same flank normal vector
+              double ux = dx / padDist;
+              double uy = dy / padDist;
+              double nx = -uy;
+              double ny = ux;
+              supplyViaBiasTarget = new FloatPoint(p2.x + dEscape * nx, p2.y + dEscape * ny);
+            }
+          }
+
           int maxIdBeforeSupplyVia = board.communication.idGenerator.maxGeneratedId();
           AutorouteAttemptResult supplyViaAttempt =
-              board.fanout(supplyPin, settings, -1, thread, new TimeLimit(1000));
+              board.fanout(
+                  supplyPin, settings, -1, thread, new TimeLimit(1000), supplyViaBiasTarget);
           if (supplyViaAttempt.state == AutorouteAttemptState.ROUTED) {
             List<Item> newSupplyViaItems = new ArrayList<>();
             Via placedSupplyVia = null;

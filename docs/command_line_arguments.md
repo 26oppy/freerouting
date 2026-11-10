@@ -77,6 +77,9 @@ Below is a comprehensive list of command-line options available in Freerouting, 
 - **`--router.decoupling.include_review_candidates=[true|false]`**
   Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.
 
+- **`--router.decoupling.mutual_inductance_bias=[true|false]`**
+  Whether to directionally bias decoupling via placement toward the coupled pad/via to maximize mutual-inductance coupling and minimize loop area. Default is `true`.
+
 - **`--router.autorouter.max_passes=[number of passes]`**
   Sets the upper limit for the number of autorouter passes to perform. More passes may result in better optimization but will take longer.
 

@@ -46,6 +46,7 @@ class DecouplingSettingsTest {
     assertEquals(5.0, defaults.decoupling.ripupCostMultiplier);
     assertEquals(250, defaults.decoupling.maxDoorExpansions);
     assertFalse(defaults.decoupling.includeReviewCandidates);
+    assertTrue(defaults.decoupling.mutualInductanceBias);
   }
 
   @Test
@@ -57,7 +58,8 @@ class DecouplingSettingsTest {
       "--router.decoupling.max_owner_radius_mm=5.0",
       "--router.decoupling.ripup_cost_multiplier=8.0",
       "--router.decoupling.max_door_expansions=300",
-      "--router.decoupling.include_review_candidates=true"
+      "--router.decoupling.include_review_candidates=true",
+      "--router.decoupling.mutual_inductance_bias=false"
     };
 
     CliSettings cli = new CliSettings(args);
@@ -71,6 +73,7 @@ class DecouplingSettingsTest {
     assertEquals(8.0, cliSettings.decoupling.ripupCostMultiplier);
     assertEquals(300, cliSettings.decoupling.maxDoorExpansions);
     assertTrue(cliSettings.decoupling.includeReviewCandidates);
+    assertFalse(cliSettings.decoupling.mutualInductanceBias);
   }
 
   @Test

@@ -140,6 +140,9 @@ public class DefaultSettings implements SettingsSource {
   /** Default maximum maze door expansions per decoupling connection attempt. */
   public static final int DEFAULT_DECOUPLING_MAX_DOOR_EXPANSIONS = 250;
 
+  /** Default mutual-inductance via bias enabled state for decoupling via placement. */
+  public static final boolean DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS = true;
+
   /** Current default router score formula. */
   public static final RouterScoringVersion DEFAULT_ROUTER_SCORING_VERSION =
       RouterScoringVersion.V2_CONTINUOUS;
@@ -276,6 +279,7 @@ public class DefaultSettings implements SettingsSource {
     settings.decoupling.ripupCostMultiplier = DEFAULT_DECOUPLING_RIPUP_COST_MULTIPLIER;
     settings.decoupling.maxDoorExpansions = DEFAULT_DECOUPLING_MAX_DOOR_EXPANSIONS;
     settings.decoupling.includeReviewCandidates = false;
+    settings.decoupling.mutualInductanceBias = DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS;
 
     // Optimizer defaults
     settings.optimizer.enabled = true;

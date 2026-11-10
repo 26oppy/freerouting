@@ -265,6 +265,7 @@ Configures the decoupling capacitor low-inductance pre-routing pass that runs im
 - **`ripup_cost_multiplier`**: Multiplier applied to `start_ripup_costs` for soft-locked decoupling items during main autorouter passes. Default is `5.0`.
 - **`max_door_expansions`**: Hard limit on maze expansion doors per decoupling route attempt to guarantee deterministic $O(1)$ runtime bounds. Default is `250`.
 - **`include_review_candidates`**: Whether to route review-grade candidates in addition to confident decoupling candidates. Default is `false`.
+- **`mutual_inductance_bias`**: Whether to directionally bias decoupling via placement toward the coupled pad/via to maximize mutual-inductance coupling and minimize parasitic loop area. Default is `true`.
 
 ##### **`fanout` Sub-section**
 
