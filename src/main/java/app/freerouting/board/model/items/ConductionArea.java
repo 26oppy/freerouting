@@ -254,31 +254,79 @@ public class ConductionArea extends ObstacleArea implements Connectable {
         board);
   }
 
+  /**
+   * Whether this area is dead copper: a piece of a fill smaller than 1 mm\u00b2 (the threshold of
+   * {@code DesignRulesChecker.getZoneIslandViolations}), on a layer without traces, that touches
+   * nothing of its net. A zone with no connection yet keeps all its islands when it is filled, so
+   * an unrouted board can carry such pieces between the vias of another net: no via fits there, and
+   * they are no incomplete connection.
+   */
+  public boolean isDeadCopper() {
+    if (board == null || board.layerStructure.layers[getLayer()].isSignal) {
+      return false;
+    }
+    double mm = board.communication.getResolution(Unit.MM);
+    IntBox box = getArea().boundingBox();
+    if ((double) box.width() * box.height() >= mm * mm) {
+      return false;
+    }
+    return getNormalContacts().isEmpty();
+  }
+
   @Override
   public Set<Item> getNormalContacts() {
+    ShapeSearchTree defaultTree = board.searchTreeManager.getDefaultTree();
+    // A plane spans most of its layer, often in thousands of tiles: rather than one tree query per
+    // tile, look up the tiles that contain the ends of the items of the net.
+    Set<SearchTreeObject> overlaps =
+        defaultTree.overlappingObjectsWithPointIn(this, getLayer(), this::contactPoints);
     Set<Item> result = new TreeSet<>();
-    for (int i = 0; i < tileShapeCount(); i++) {
-      TileShape currentShape = getTileShape(i);
-      Set<SearchTreeObject> overlaps = board.overlappingObjects(currentShape, getLayer());
-      for (SearchTreeObject currentObject : overlaps) {
-        if (!(currentObject instanceof Item currentItem)) {
-          continue;
-        }
-        if (currentItem != this && currentItem.sharesNet(this) && currentItem.sharesLayer(this)) {
-          if (currentItem instanceof Trace currentTrace) {
-            if (currentShape.contains(currentTrace.firstCorner())
-                || currentShape.contains(currentTrace.lastCorner())) {
-              result.add(currentItem);
-            }
-          } else if (currentItem instanceof DrillItem currentDrillItem) {
-            if (currentShape.contains(currentDrillItem.getCenter())) {
-              result.add(currentItem);
-            }
+    if (overlaps == null) {
+      // Not in the tree: query tile by tile.
+      for (int i = 0; i < tileShapeCount(); i++) {
+        TileShape tile = getTileShape(i);
+        for (SearchTreeObject currentObject : board.overlappingObjects(tile, getLayer())) {
+          if (isContactInTile(currentObject, tile)) {
+            result.add((Item) currentObject);
           }
         }
       }
+      return result;
+    }
+    for (SearchTreeObject currentObject : overlaps) {
+      result.add((Item) currentObject);
     }
     return result;
+  }
+
+  /**
+   * The points of object of which one must lie in a tile of this area for a contact, or null if
+   * object cannot be a contact.
+   */
+  private Point[] contactPoints(SearchTreeObject object) {
+    if (!(object instanceof Item item)
+        || item == this
+        || !item.sharesNet(this)
+        || !item.sharesLayer(this)) {
+      return null;
+    }
+    if (item instanceof Trace trace) {
+      return new Point[] {trace.firstCorner(), trace.lastCorner()};
+    }
+    return item instanceof DrillItem drillItem ? new Point[] {drillItem.getCenter()} : null;
+  }
+
+  private boolean isContactInTile(SearchTreeObject object, TileShape tile) {
+    if (!(object instanceof Item item)
+        || item == this
+        || !item.sharesNet(this)
+        || !item.sharesLayer(this)) {
+      return false;
+    }
+    if (item instanceof Trace trace) {
+      return tile.contains(trace.firstCorner()) || tile.contains(trace.lastCorner());
+    }
+    return item instanceof DrillItem drillItem && tile.contains(drillItem.getCenter());
   }
 
   @Override
