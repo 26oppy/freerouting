@@ -27,7 +27,14 @@ public final class PanamaOpenClBindings {
   public static final int CL_DEVICE_HOST_UNIFIED_MEMORY = 0x1035;
 
   public static final long CL_MEM_READ_WRITE = (1L << 0);
+  public static final long CL_MEM_WRITE_ONLY = (1L << 1);
+  public static final long CL_MEM_READ_ONLY = (1L << 2);
+  public static final long CL_MEM_USE_HOST_PTR = (1L << 3);
   public static final long CL_MEM_ALLOC_HOST_PTR = (1L << 4);
+  public static final long CL_MEM_COPY_HOST_PTR = (1L << 5);
+
+  public static final int CL_TRUE = 1;
+  public static final int CL_FALSE = 0;
 
   public static final int CL_COMPLETE = 0x0;
   public static final int CL_EVENT_COMMAND_EXECUTION_STATUS = 0x11D3;
@@ -43,6 +50,8 @@ public final class PanamaOpenClBindings {
   private final MethodHandle clCreateKernelHandle;
   private final MethodHandle clSetKernelArgHandle;
   private final MethodHandle clCreateBufferHandle;
+  private final MethodHandle clEnqueueWriteBufferHandle;
+  private final MethodHandle clEnqueueReadBufferHandle;
   private final MethodHandle clEnqueueNDRangeKernelHandle;
   private final MethodHandle clWaitForEventsHandle;
   private final MethodHandle clGetEventInfoHandle;
@@ -85,6 +94,8 @@ public final class PanamaOpenClBindings {
       this.clCreateKernelHandle = null;
       this.clSetKernelArgHandle = null;
       this.clCreateBufferHandle = null;
+      this.clEnqueueWriteBufferHandle = null;
+      this.clEnqueueReadBufferHandle = null;
       this.clEnqueueNDRangeKernelHandle = null;
       this.clWaitForEventsHandle = null;
       this.clGetEventInfoHandle = null;
@@ -224,6 +235,38 @@ public final class PanamaOpenClBindings {
                 ValueLayout.ADDRESS,
                 ValueLayout.JAVA_LONG,
                 ValueLayout.JAVA_LONG,
+                ValueLayout.ADDRESS,
+                ValueLayout.ADDRESS));
+    this.clEnqueueWriteBufferHandle =
+        findHandle(
+            linker,
+            lookup,
+            "clEnqueueWriteBuffer",
+            FunctionDescriptor.of(
+                ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
+                ValueLayout.JAVA_LONG,
+                ValueLayout.JAVA_LONG,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS,
+                ValueLayout.ADDRESS));
+    this.clEnqueueReadBufferHandle =
+        findHandle(
+            linker,
+            lookup,
+            "clEnqueueReadBuffer",
+            FunctionDescriptor.of(
+                ValueLayout.JAVA_INT,
+                ValueLayout.ADDRESS,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
+                ValueLayout.JAVA_LONG,
+                ValueLayout.JAVA_LONG,
+                ValueLayout.ADDRESS,
+                ValueLayout.JAVA_INT,
                 ValueLayout.ADDRESS,
                 ValueLayout.ADDRESS));
     this.clEnqueueNDRangeKernelHandle =
@@ -391,6 +434,54 @@ public final class PanamaOpenClBindings {
       throws Throwable {
     return (MemorySegment)
         clCreateBufferHandle.invokeExact(context, flags, size, hostPtr, errcodeRet);
+  }
+
+  public int clEnqueueWriteBuffer(
+      MemorySegment commandQueue,
+      MemorySegment buffer,
+      int blockingWrite,
+      long offset,
+      long cb,
+      MemorySegment ptr,
+      int numEventsInWaitList,
+      MemorySegment eventWaitList,
+      MemorySegment event)
+      throws Throwable {
+    return (int)
+        clEnqueueWriteBufferHandle.invokeExact(
+            commandQueue,
+            buffer,
+            blockingWrite,
+            offset,
+            cb,
+            ptr,
+            numEventsInWaitList,
+            eventWaitList,
+            event);
+  }
+
+  public int clEnqueueReadBuffer(
+      MemorySegment commandQueue,
+      MemorySegment buffer,
+      int blockingRead,
+      long offset,
+      long cb,
+      MemorySegment ptr,
+      int numEventsInWaitList,
+      MemorySegment eventWaitList,
+      MemorySegment event)
+      throws Throwable {
+    return (int)
+        clEnqueueReadBufferHandle.invokeExact(
+            commandQueue,
+            buffer,
+            blockingRead,
+            offset,
+            cb,
+            ptr,
+            numEventsInWaitList,
+            eventWaitList,
+            event);
   }
 
   public int clEnqueueNDRangeKernel(
