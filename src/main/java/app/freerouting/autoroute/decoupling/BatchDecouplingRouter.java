@@ -602,7 +602,7 @@ public final class BatchDecouplingRouter {
           boolean planeUnderneath = isPlaneDirectlyUnderneath(board, groundPin, groundNetNo);
           Item targetGndItem =
               (task.targetGroundItemId() > 0) ? board.getItem(task.targetGroundItemId()) : null;
-          Pin targetGndPin = (targetGndItem instanceof Pin p && p.isOnLayer(capLayer)) ? p : null;
+          Pin targetGndPin = (targetGndItem instanceof Pin p) ? p : null;
 
           Set<Item> currentGroundConnected = groundPin.getConnectedSet(groundNetNo);
           if (targetGndPin != null && currentGroundConnected.contains(targetGndPin)) {
@@ -865,6 +865,29 @@ public final class BatchDecouplingRouter {
                 strapSuccess,
                 strapStatus));
 
+        if (!strapSuccess) {
+          if ("DISTANCE_EXCEEDED".equals(strapStatus) || "NO_OWNER_IN_RADIUS".equals(strapStatus)) {
+            FRLogger.warn(
+                String.format(
+                    "Decoupling capacitor %s is outside maximum reach (%.2f mm) from owner %s (%s).",
+                    capName, maxStrapLengthMm, ownerName, strapStatus));
+          } else if ("NO_ROUTE_FOUND".equals(strapStatus)
+              || "DRC_ROLLBACK".equals(strapStatus)
+              || "GROUND_ROUTING_FAILED".equals(strapStatus)
+              || "PLANE_VIA_FAILED".equals(strapStatus)) {
+            FRLogger.warn(
+                String.format(
+                    "Decoupling route for %s (net %s) was blocked by clearance or obstacles (%s).",
+                    capName, railNet != null ? railNet.name : "unknown", strapStatus));
+          } else if ("NO_GROUND_PLANE".equals(strapStatus)) {
+            FRLogger.warn(
+                String.format(
+                    "Decoupling capacitor %s has no ground plane directly underneath and no IC"
+                        + " ground pin reachable; left for general autorouter escape.",
+                    capName));
+          }
+        }
+
         board.clearTransientAutorouteState();
       }
     } finally {
@@ -925,8 +948,10 @@ public final class BatchDecouplingRouter {
   }
 
   /**
-   * Routes a single-layer direct surface return strap from the capacitor ground pad to the paired
-   * IC ground pin on the same layer.
+   * Routes a direct surface return strap from the capacitor ground pad directly to the paired IC
+   * ground pin, restricting destination copper exclusively to the target IC to prevent shorting to
+   * arbitrary neighboring components, and supporting opposite-side mounting through feed-through
+   * vias.
    */
   private static StrapAttemptOutcome tryRouteGroundStrap(
       RoutingBoard board,
@@ -941,17 +966,63 @@ public final class BatchDecouplingRouter {
       double maxStrapLengthMm,
       double mmResolution) {
     AutorouteControl gndControl = new AutorouteControl(board, groundNetNo, settings);
-    gndControl.viasAllowed = false;
     gndControl.ripupAllowed = false;
     gndControl.removeUnconnectedVias = false;
     if (settings.decoupling != null && settings.decoupling.maxDoorExpansions != null) {
       gndControl.maxDoorExpansions = settings.decoupling.maxDoorExpansions;
     }
-    for (int i = 0; i < gndControl.layerCount; i++) {
-      gndControl.layerActive[i] = gndControl.layerActive[i] && (i == capLayer);
+
+    int ownerLayer = targetGndPin.firstLayer();
+    boolean isSameLayer = (capLayer == ownerLayer);
+    boolean oppositeSideEnabled =
+        settings.decoupling == null
+            || settings.decoupling.oppositeSideRouting == null
+            || Boolean.TRUE.equals(settings.decoupling.oppositeSideRouting);
+
+    if (!isSameLayer && !oppositeSideEnabled) {
+      return new StrapAttemptOutcome(false, "OPPOSITE_SIDE_DISABLED", 0.0, List.of());
     }
+
+    // Restrict destination set strictly to targetGndPin and IC-owned ground items
+    // (prevents short-circuiting to arbitrary neighboring capacitors or unrelated ground copper)
+    Set<Item> restrictedTargetGnd = new java.util.HashSet<>();
+    restrictedTargetGnd.add(targetGndPin);
+    for (Item it : targetGndPin.getConnectedSet(groundNetNo)) {
+      if (it instanceof Pin p && p.getComponentId() == targetGndPin.getComponentId()) {
+        restrictedTargetGnd.add(p);
+      } else if (it instanceof Via || it instanceof Trace) {
+        if (it.getNormalContacts().contains(targetGndPin)) {
+          restrictedTargetGnd.add(it);
+        }
+      }
+    }
+
+    boolean hasConnectionOnCapLayer = false;
+    if (!isSameLayer) {
+      for (Item it : restrictedTargetGnd) {
+        if (it.isOnLayer(capLayer)) {
+          hasConnectionOnCapLayer = true;
+          break;
+        }
+      }
+    }
+
+    int effectiveTargetLayer;
+    if (isSameLayer || hasConnectionOnCapLayer) {
+      effectiveTargetLayer = capLayer;
+      gndControl.viasAllowed = false;
+      for (int i = 0; i < gndControl.layerCount; i++) {
+        gndControl.layerActive[i] = gndControl.layerActive[i] && (i == capLayer);
+      }
+    } else {
+      effectiveTargetLayer = ownerLayer;
+      gndControl.viasAllowed = true;
+      for (int i = 0; i < gndControl.layerCount; i++) {
+        gndControl.layerActive[i] = (i == capLayer || i == ownerLayer);
+      }
+    }
+
     Set<Item> curGndConnected = groundPin.getConnectedSet(groundNetNo);
-    Set<Item> curTargetGndConnected = targetGndPin.getConnectedSet(groundNetNo);
     return tryRouteStrap(
         board,
         settings,
@@ -960,9 +1031,9 @@ public final class BatchDecouplingRouter {
         groundPin,
         targetGndPin,
         curGndConnected,
-        curTargetGndConnected,
+        restrictedTargetGnd,
         capLayer,
-        capLayer,
+        effectiveTargetLayer,
         groundNetNo,
         railNetNo,
         targetGndPin.getComponentId(),
