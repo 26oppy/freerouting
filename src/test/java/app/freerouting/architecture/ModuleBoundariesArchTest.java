@@ -321,4 +321,20 @@ class ModuleBoundariesArchTest {
                 + " for native image compilation")
         .check(classes);
   }
+
+  @Test
+  void acceleratorAndFanoutMustNotDependOnGuiOrApi() {
+    JavaClasses classes = importMainClasses();
+    noClasses()
+        .that()
+        .resideInAnyPackage(
+            "app.freerouting.autoroute.accelerator..", "app.freerouting.autoroute.fanout..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(
+            "app.freerouting.gui..", "app.freerouting.api..", "app.freerouting.management..")
+        .because(
+            "accelerator and fanout engines must remain decoupled from GUI and API orchestration layers")
+        .check(classes);
+  }
 }
