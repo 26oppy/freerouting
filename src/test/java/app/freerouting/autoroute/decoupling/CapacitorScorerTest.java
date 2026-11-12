@@ -96,6 +96,25 @@ class CapacitorScorerTest {
     states = CapacitorScorer.evaluatePassA(index, configWithExclusion, resolutionMm);
     assertFalse(states.get(0).gatePassed);
     assertTrue(ReasonCode.USER_EXCLUDED.isSet(states.get(0).reasonMask));
+
+    // Case 5: Explicit non-capacitor reference designators (e.g. SW1, S2, R1)
+    Pin p9 = createMockPin(9, 14, 0, true, 1, 0, 0, 100, 100);
+    Pin p10 = createMockPin(10, 14, 0, true, 2, 1000, 0, 100, 100);
+    when(index.getTwoPinComponentIds()).thenReturn(List.of(14));
+    when(index.getPinsOfComponent(14)).thenReturn(List.of(p9, p10));
+    when(index.getComponentName(14)).thenReturn("SW1");
+
+    states = CapacitorScorer.evaluatePassA(index, config, resolutionMm);
+    assertFalse(states.get(0).gatePassed);
+    assertTrue(ReasonCode.USER_EXCLUDED.isSet(states.get(0).reasonMask));
+
+    when(index.getComponentName(14)).thenReturn("S2");
+    states = CapacitorScorer.evaluatePassA(index, config, resolutionMm);
+    assertFalse(states.get(0).gatePassed);
+
+    when(index.getComponentName(14)).thenReturn("R5");
+    states = CapacitorScorer.evaluatePassA(index, config, resolutionMm);
+    assertFalse(states.get(0).gatePassed);
   }
 
   @Test

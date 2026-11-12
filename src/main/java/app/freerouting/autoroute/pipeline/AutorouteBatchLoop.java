@@ -104,6 +104,10 @@ final class AutorouteBatchLoop {
       float decapCpuStart = AutorouteRuntimeMetrics.currentThreadCpuSeconds();
       RouterCounters decapStartCounters = new RouterCounters();
       decapStartCounters.phase = "decoupling";
+      decapStartCounters.queuedToBeRoutedCount = 0;
+      decapStartCounters.routedCount = 0;
+      decapStartCounters.failedToBeRoutedCount = 0;
+      decapStartCounters.fanoutExtraViasCount = 0;
       router.fireBoardUpdatedEvent(
           new BoardStatistics(router.board), decapStartCounters, router.board);
 

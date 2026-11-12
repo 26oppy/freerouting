@@ -65,8 +65,9 @@ public final class DecouplingAssignmentPlanner {
 
     for (CapacitorCandidate candidate : candidates) {
       boolean eligible =
-          candidate.verdict() == Verdict.DECOUPLING
-              || (includeReview && candidate.verdict() == Verdict.REVIEW);
+          (candidate.verdict() == Verdict.DECOUPLING
+                  || (includeReview && candidate.verdict() == Verdict.REVIEW))
+              && candidate.audit() != AuditResult.CONFLICT;
       if (!eligible) {
         continue;
       }
