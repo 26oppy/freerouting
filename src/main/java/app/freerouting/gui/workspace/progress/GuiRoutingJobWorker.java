@@ -815,6 +815,21 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
             : stats.getRouterScore(
                 new app.freerouting.settings.sources.DefaultSettings().getSettings());
 
+    RoutingSummaryData.DecouplingSummaryItem decouplingItem = null;
+    if (routingJob.resultPhaseMetrics != null && routingJob.resultPhaseMetrics.decoupling != null) {
+      var d = routingJob.resultPhaseMetrics.decoupling;
+      decouplingItem =
+          new RoutingSummaryData.DecouplingSummaryItem(
+              d.candidatesTotal,
+              d.strapsRouted,
+              d.alreadyConnected,
+              d.viasPlaced,
+              d.coupledViaPairs,
+              d.fallbackViaPairs,
+              d.failed,
+              d.totalStrapLengthMm);
+    }
+
     return new RoutingSummaryData(
         stats.nets.totalCount,
         stats.connections.incompleteCount,
@@ -825,7 +840,8 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
         sessionPort.displayUnit(),
         duration,
         score,
-        this.isStopRequested());
+        this.isStopRequested(),
+        decouplingItem);
   }
 
   /**

@@ -178,6 +178,12 @@ public final class RoutingResultManifest {
     @SerializedName("vias_placed")
     public int viasPlaced;
 
+    @SerializedName("coupled_via_pairs")
+    public int coupledViaPairs;
+
+    @SerializedName("fallback_via_pairs")
+    public int fallbackViaPairs;
+
     @SerializedName("failed")
     public int failed;
 

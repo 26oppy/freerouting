@@ -117,6 +117,8 @@ final class AutorouteBatchLoop {
         phase.strapsRouted = summary.strapsRouted();
         phase.alreadyConnected = summary.alreadyConnected();
         phase.viasPlaced = summary.viasPlaced();
+        phase.coupledViaPairs = summary.coupledViaPairs();
+        phase.fallbackViaPairs = summary.fallbackViaPairs();
         phase.failed = summary.failed();
         phase.totalStrapLengthMm = summary.totalStrapLengthMm();
         job.resultPhaseMetrics.decoupling = phase;
