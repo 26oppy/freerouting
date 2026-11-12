@@ -246,6 +246,11 @@ public class DefaultSettings implements SettingsSource {
     settings.fanout.retryWithoutEscapeWindow = false;
     settings.fanout.strategy = "eager";
     settings.fanout.twoLayerBga = "no_fanout";
+    settings.fanout.gpuAccelerationEnabled = true;
+    settings.fanout.gpuDevicePreference = "auto";
+    settings.fanout.gpuMinBgaPins = 64;
+    settings.fanout.gpuMaxVramMb = 256;
+    settings.fanout.gpuKernelTimeoutMs = 2000;
 
     // Optimizer defaults
     settings.optimizer.enabled = true;

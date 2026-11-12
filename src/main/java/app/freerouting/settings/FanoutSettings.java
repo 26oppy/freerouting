@@ -126,6 +126,34 @@ public class FanoutSettings implements Serializable, Cloneable {
   @SerializedName("timeout")
   public String timeoutString;
 
+  /** Whether to enable the hybrid GPU/iGPU BGA escape routing pre-pass. */
+  @SerializedName("gpu_acceleration_enabled")
+  public Boolean gpuAccelerationEnabled;
+
+  /**
+   * GPU compute device selection preference: "auto", "dgpu", "igpu", "cpu", or
+   * "opencl_experimental".
+   */
+  @SerializedName("gpu_device_preference")
+  public String gpuDevicePreference;
+
+  /**
+   * Minimum SMD pin count required on an area-array component to offload BGA escape routing to GPU.
+   */
+  @SerializedName("gpu_min_bga_pins")
+  public Integer gpuMinBgaPins;
+
+  /** Maximum VRAM and host staging buffer budget in megabytes for BGA escape routing. */
+  @SerializedName("gpu_max_vram_mb")
+  public Integer gpuMaxVramMb;
+
+  /**
+   * Watchdog timeout in milliseconds for GPU kernel execution. Values &lt;= 0 indicate infinite
+   * wait (for deterministic CI/testing).
+   */
+  @SerializedName("gpu_kernel_timeout_ms")
+  public Integer gpuKernelTimeoutMs;
+
   /** No-arg constructor required for deserialisation and {@link #clone()}. */
   public FanoutSettings() {}
 
