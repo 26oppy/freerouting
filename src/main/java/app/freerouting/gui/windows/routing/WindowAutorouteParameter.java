@@ -43,6 +43,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
   private final List<JComboBox<String>> settingsAutorouterComboBoxArr;
   private final JCheckBox settingsAutorouterViasAllowed;
   private final JCheckBox settingsAutorouterFanoutButton;
+  private final JCheckBox settingsGpuAccelerationButton;
   private final JCheckBox settingsAutorouterAutoroutePassButton;
   private final JCheckBox settingsAutorouterOptimizationButton;
   private final String horizontal;
@@ -200,6 +201,8 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
 
     this.settingsAutorouterFanoutButton = new JCheckBox();
     tm.setText(this.settingsAutorouterFanoutButton, "fanout");
+    this.settingsGpuAccelerationButton = new JCheckBox();
+    tm.setText(this.settingsGpuAccelerationButton, "gpu_acceleration");
     this.settingsAutorouterAutoroutePassButton = new JCheckBox();
     tm.setText(this.settingsAutorouterAutoroutePassButton, "autoroute");
     this.settingsAutorouterOptimizationButton = new JCheckBox();
@@ -210,6 +213,11 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
         _ ->
             FRAnalytics.buttonClicked(
                 "settingsAutorouterFanoutButton", settingsAutorouterFanoutButton.getText()));
+    settingsGpuAccelerationButton.addActionListener(new GpuAccelerationListener());
+    settingsGpuAccelerationButton.addActionListener(
+        _ ->
+            FRAnalytics.buttonClicked(
+                "settingsGpuAccelerationButton", settingsGpuAccelerationButton.getText()));
     settingsAutorouterAutoroutePassButton.addActionListener(new AutorouteListener());
     settingsAutorouterAutoroutePassButton.addActionListener(
         _ ->
@@ -224,6 +232,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
                 settingsAutorouterOptimizationButton.getText()));
 
     settingsAutorouterFanoutButton.setSelected(true);
+    settingsGpuAccelerationButton.setSelected(true);
     settingsAutorouterAutoroutePassButton.setSelected(true);
     settingsAutorouterOptimizationButton.setSelected(false);
 
@@ -232,6 +241,8 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
 
     gridbag.setConstraints(settingsAutorouterFanoutButton, gridbagConstraints);
     mainPanel.add(settingsAutorouterFanoutButton, gridbagConstraints);
+    gridbag.setConstraints(settingsGpuAccelerationButton, gridbagConstraints);
+    mainPanel.add(settingsGpuAccelerationButton, gridbagConstraints);
     gridbag.setConstraints(settingsAutorouterAutoroutePassButton, gridbagConstraints);
     mainPanel.add(settingsAutorouterAutoroutePassButton, gridbagConstraints);
     gridbag.setConstraints(settingsAutorouterOptimizationButton, gridbagConstraints);
@@ -621,6 +632,11 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
 
     this.settingsAutorouterViasAllowed.setSelected(settings.getViasAllowed());
     this.settingsAutorouterFanoutButton.setSelected(settings.getRunFanout());
+    boolean gpuEnabled =
+        (settings.fanout != null && settings.fanout.gpuAccelerationEnabled != null)
+            ? settings.fanout.gpuAccelerationEnabled
+            : true;
+    this.settingsGpuAccelerationButton.setSelected(gpuEnabled);
     this.settingsAutorouterAutoroutePassButton.setSelected(settings.getRunRouter());
     this.settingsAutorouterOptimizationButton.setSelected(settings.getRunOptimizer());
 
@@ -904,6 +920,25 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
       isUpdatingFromSettings = true;
       try {
         applyFanoutEnabledSelection(autorouteSettings, settingsAutorouterFanoutButton.isSelected());
+        syncSettingsToWorkspace();
+      } finally {
+        isUpdatingFromSettings = false;
+      }
+    }
+  }
+
+  private class GpuAccelerationListener implements ActionListener {
+
+    @Override
+    public void actionPerformed(ActionEvent evt) {
+      RouterSettings autorouteSettings = boardHandling.getCurrentRoutingJob().routerSettings;
+      isUpdatingFromSettings = true;
+      try {
+        if (autorouteSettings.fanout == null) {
+          autorouteSettings.fanout = new app.freerouting.settings.FanoutSettings();
+        }
+        autorouteSettings.fanout.gpuAccelerationEnabled =
+            settingsGpuAccelerationButton.isSelected();
         syncSettingsToWorkspace();
       } finally {
         isUpdatingFromSettings = false;

@@ -223,6 +223,40 @@
     "related_keys": [],
     "ui_role": "label"
   },
+  "gpu_acceleration": {
+    "bundle_desc": "GUI (graphical user interface)",
+    "code_references": [
+      "app.freerouting.gui.windows.routing.WindowAutorouteParameter"
+    ],
+    "english_hash": "664ae38154c8422572317e04ee6bf91cf9ebe187dbfe251d23d2e7e5fc72d62e",
+    "grammatical_role": "noun_phrase",
+    "has_placeholders": false,
+    "is_html": false,
+    "java_class": "app.freerouting.gui.windows.routing.WindowAutorouteParameter",
+    "max_length_hint": null,
+    "needs_retranslation": false,
+    "placeholders": [],
+    "related_keys": [
+      "gpu_acceleration_tooltip"
+    ],
+    "ui_role": "label"
+  },
+  "gpu_acceleration_tooltip": {
+    "bundle_desc": "GUI (graphical user interface)",
+    "code_references": [],
+    "english_hash": "0c6d76257a44822b445cc0030c44df803002a159b35ffb4fdc6d3df216787cde",
+    "grammatical_role": "full_sentence",
+    "has_placeholders": false,
+    "is_html": false,
+    "java_class": "app.freerouting.gui.windows.routing.WindowAutorouteParameter",
+    "max_length_hint": null,
+    "needs_retranslation": false,
+    "placeholders": [],
+    "related_keys": [
+      "gpu_acceleration"
+    ],
+    "ui_role": "tooltip"
+  },
   "horizontal": {
     "bundle_desc": "GUI (graphical user interface)",
     "code_references": [

@@ -61,6 +61,8 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
   public static final String PROP_TRACE_PULL_TIGHT_ACCURACY = "tracePullTightAccuracy";
   public static final String PROP_AUTOMATIC_NECKDOWN = "automaticNeckdown";
   public static final String PROP_MANUAL_TRACE_HALF_WIDTH = "manual_trace_half_width";
+  public static final String PROP_GPU_ACCELERATION_ENABLED = "gpuAccelerationEnabled";
+  public static final String PROP_GPU_DEVICE_PREFERENCE = "gpuDevicePreference";
 
   /** The single GUI-session instance; {@code null} when running headless. */
   private static volatile WorkspaceSettings instance;
@@ -698,6 +700,45 @@ public class WorkspaceSettings extends GuiSettingsSource implements Serializable
     }
     itemSelectionFilter.setSelected(itemType, value);
     pcs.firePropertyChange(PROP_ITEM_SELECTION_FILTER, null, itemSelectionFilter);
+  }
+
+  /** Returns whether GPU-accelerated BGA escape routing is enabled. */
+  public Boolean getGpuAccelerationEnabled() {
+    return (this.settings.fanout != null) ? this.settings.fanout.gpuAccelerationEnabled : null;
+  }
+
+  /**
+   * Updates whether GPU-accelerated BGA escape routing is enabled. Fires {@link
+   * #PROP_GPU_ACCELERATION_ENABLED}.
+   */
+  public void setGpuAccelerationEnabled(Boolean enabled) {
+    if (readOnly) {
+      return;
+    }
+    Boolean old = getGpuAccelerationEnabled();
+    if (this.settings.fanout == null) {
+      this.settings.fanout = new app.freerouting.settings.FanoutSettings();
+    }
+    this.settings.fanout.gpuAccelerationEnabled = enabled;
+    pcs.firePropertyChange(PROP_GPU_ACCELERATION_ENABLED, old, enabled);
+  }
+
+  /** Returns the GPU compute device preference ("auto", "dgpu", "igpu", "cpu"). */
+  public String getGpuDevicePreference() {
+    return (this.settings.fanout != null) ? this.settings.fanout.gpuDevicePreference : null;
+  }
+
+  /** Updates the GPU compute device preference. Fires {@link #PROP_GPU_DEVICE_PREFERENCE}. */
+  public void setGpuDevicePreference(String preference) {
+    if (readOnly) {
+      return;
+    }
+    String old = getGpuDevicePreference();
+    if (this.settings.fanout == null) {
+      this.settings.fanout = new app.freerouting.settings.FanoutSettings();
+    }
+    this.settings.fanout.gpuDevicePreference = preference;
+    pcs.firePropertyChange(PROP_GPU_DEVICE_PREFERENCE, old, preference);
   }
 
   /** Defines, if the setting attributes are allowed to be changed interactively or not. */
