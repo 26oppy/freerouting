@@ -14,6 +14,7 @@ import app.freerouting.board.model.items.Via;
 import app.freerouting.board.model.structure.FixedState;
 import app.freerouting.drc.DesignRulesChecker;
 import app.freerouting.io.specctra.DsnTestFixtures;
+import app.freerouting.rules.Net;
 import app.freerouting.settings.DecouplingLockMode;
 import app.freerouting.settings.DecouplingSettings;
 import app.freerouting.settings.RouterSettings;
@@ -913,5 +914,73 @@ class BatchDecouplingRouterTest {
     }
 
     assertTrue(hasLayer0 && hasLayer1, "Expected decoupling traces on both Layer 0 and Layer 1");
+  }
+
+  @Test
+  void testIsPlaneDirectlyUnderneathDetection() throws IOException {
+    RoutingBoard boardPlaneLess = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    // Invalid net safety
+    assertFalse(BatchDecouplingRouter.isPlaneDirectlyUnderneath(boardPlaneLess, null, -1));
+    assertFalse(BatchDecouplingRouter.isPlaneDirectlyUnderneath(boardPlaneLess, null, 0));
+
+    // DAC2020_bm01 is a 2-layer board without planes; verify plane underneath is correctly reported
+    // as false
+    IdentifierConfig config = IdentifierConfig.defaultConfig();
+    IdentificationResult idResult = DecouplingIdentifier.identify(boardPlaneLess, config);
+    CapacitorCandidate capPlaneLess =
+        idResult.candidates().stream()
+            .filter(c -> c.verdict() == Verdict.DECOUPLING)
+            .findFirst()
+            .orElseThrow();
+
+    int gndPinIdPlaneLess =
+        (capPlaneLess.netNumberA() == capPlaneLess.groundNetNumber())
+            ? capPlaneLess.pinIdA()
+            : capPlaneLess.pinIdB();
+    Pin gndPinPlaneLess = (Pin) boardPlaneLess.getItem(gndPinIdPlaneLess);
+    assertNotNull(gndPinPlaneLess);
+    assertFalse(
+        BatchDecouplingRouter.isPlaneDirectlyUnderneath(
+            boardPlaneLess, gndPinPlaneLess, capPlaneLess.groundNetNumber()),
+        "2-layer board without planes must report isPlaneDirectlyUnderneath as false");
+
+    // Issue015-StackOverflow.dsn has a bottom-layer B.Cu plane on GND; verify it detects true
+    RoutingBoard boardWithPlane = DsnTestFixtures.loadBoard("Issue015-StackOverflow.dsn");
+    Net gndNet = boardWithPlane.rules.nets.get("GND").iterator().next();
+    assertNotNull(gndNet);
+    boolean detectedOnPlaneBoard = false;
+    for (Item it : boardWithPlane.getItems()) {
+      if (it instanceof Pin p && p.containsNet(gndNet.netNumber) && p.firstLayer() == 0) {
+        if (BatchDecouplingRouter.isPlaneDirectlyUnderneath(boardWithPlane, p, gndNet.netNumber)) {
+          detectedOnPlaneBoard = true;
+          break;
+        }
+      }
+    }
+    assertTrue(
+        detectedOnPlaneBoard,
+        "Board with bottom GND plane must detect isPlaneDirectlyUnderneath as true for top SMD pins");
+  }
+
+  @Test
+  void testDecouplingPreRoutingWithGroundLoopProtection() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    int baselineDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+
+    RouterSettings settings = new DefaultSettings().getSettings();
+    settings.decoupling = new DecouplingSettings();
+    settings.decoupling.enabled = true;
+    settings.decoupling.lockMode = DecouplingLockMode.HARD;
+    settings.decoupling.maxStrapLengthMm = 4.0;
+    settings.decoupling.maxOwnerRadiusMm = 8.0;
+
+    DecouplingRoutingSummary summary = BatchDecouplingRouter.run(board, settings, null);
+    assertNotNull(summary);
+    assertTrue(summary.candidatesTotal() > 0);
+    assertTrue(summary.strapsRouted() > 0, "Expected surface straps routed on DAC2020_bm01");
+
+    // Zero DRC regression
+    int postDrc = new DesignRulesChecker(board, null).getAllClearanceViolations().size();
+    assertTrue(postDrc <= baselineDrc);
   }
 }

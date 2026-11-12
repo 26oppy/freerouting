@@ -17,6 +17,7 @@ import app.freerouting.core.StoppableThread;
 import app.freerouting.datastructures.TimeLimit;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.geometry.planar.IntBox;
+import app.freerouting.geometry.planar.Point;
 import app.freerouting.logger.FRLogger;
 import app.freerouting.rules.Net;
 import app.freerouting.settings.DecouplingLockMode;
@@ -158,6 +159,7 @@ public final class BatchDecouplingRouter {
           continue;
         }
 
+        int capLayer = supplyPin.firstLayer();
         boolean strapSuccess = false;
         double candidateStrapLengthMm = 0.0;
         String strapStatus = "NOT_ATTEMPTED";
@@ -186,7 +188,7 @@ public final class BatchDecouplingRouter {
                   + "-"
                   + ownerPin.name();
 
-          int capLayer = supplyPin.firstLayer();
+          capLayer = supplyPin.firstLayer();
           boolean isSameLayer = (capLayer == ownerPin.firstLayer());
           boolean isOwnerTht =
               (ownerPin.firstLayer() != ownerPin.lastLayer()) && ownerPin.isOnLayer(capLayer);
@@ -595,40 +597,159 @@ public final class BatchDecouplingRouter {
             strapSuccess = true;
             strapStatus = "PLANE_ONLY_ROUTED";
           }
-        } else if (groundNet != null && groundNet.containsPlane()) {
-          ViaDropResult groundViaResult =
-              tryViaFanoutWithDualFlankProbe(
-                  board,
-                  groundPin,
-                  groundNetNo,
-                  settings,
-                  thread,
-                  primaryGroundTarget,
-                  secondaryGroundTarget);
-          if (groundViaResult != null) {
-            placedVia = groundViaResult.placedVia();
-            if (placedVia != null) {
-              viasPlacedForCap++;
-              viasPlaced++;
-            }
+        } else {
+          boolean groundNetHasPlane = groundNet != null && groundNet.containsPlane();
+          boolean planeUnderneath = isPlaneDirectlyUnderneath(board, groundPin, groundNetNo);
+          Item targetGndItem =
+              (task.targetGroundItemId() > 0) ? board.getItem(task.targetGroundItemId()) : null;
+          Pin targetGndPin = (targetGndItem instanceof Pin p && p.isOnLayer(capLayer)) ? p : null;
+
+          Set<Item> currentGroundConnected = groundPin.getConnectedSet(groundNetNo);
+          if (targetGndPin != null && currentGroundConnected.contains(targetGndPin)) {
             tagDecouplingProtected(groundPin, lockMode);
-            for (Item newItem : groundViaResult.newItems()) {
-              tagDecouplingProtected(newItem, lockMode);
-            }
+            tagDecouplingProtected(targetGndPin, lockMode);
             if (task.isPlaneOnly()) {
               strapSuccess = true;
-              strapStatus = "PLANE_ONLY_ROUTED";
+              strapStatus = "ALREADY_CONNECTED";
             }
           } else {
-            if (task.isPlaneOnly()) {
-              failed++;
-              strapStatus = "PLANE_VIA_FAILED";
+            double distToIcGndUnits =
+                (targetGndPin != null)
+                    ? groundPin.getCenter().toFloat().distance(targetGndPin.getCenter().toFloat())
+                    : Double.MAX_VALUE;
+            double proximityThresholdUnits = 1.5 * mmResolution;
+
+            boolean preferSurfaceStrap =
+                (!planeUnderneath || distToIcGndUnits <= proximityThresholdUnits)
+                    && (targetGndPin != null && distToIcGndUnits <= maxStrapLengthUnits);
+
+            boolean groundRouted = false;
+
+            if (preferSurfaceStrap) {
+              // 1. Primary: Direct Surface Return Strap to IC ground pin
+              StrapAttemptOutcome gndOutcome =
+                  tryRouteGroundStrap(
+                      board,
+                      settings,
+                      thread,
+                      groundPin,
+                      targetGndPin,
+                      capLayer,
+                      groundNetNo,
+                      railNetNo,
+                      candidate,
+                      maxStrapLengthMm,
+                      mmResolution);
+              if (gndOutcome != null && gndOutcome.success()) {
+                groundRouted = true;
+                tagDecouplingProtected(groundPin, lockMode);
+                tagDecouplingProtected(targetGndPin, lockMode);
+                for (Item newItem : gndOutcome.newItems()) {
+                  tagDecouplingProtected(newItem, lockMode);
+                }
+                if (task.isPlaneOnly()) {
+                  strapSuccess = true;
+                  strapStatus = "ROUTED_GROUND_STRAP";
+                }
+              }
+
+              // 2. Fallback: Lateral flank via drop (if strap failed and plane exists)
+              if (!groundRouted && (planeUnderneath || groundNetHasPlane)) {
+                ViaDropResult groundViaResult =
+                    tryViaFanoutWithDualFlankProbe(
+                        board,
+                        groundPin,
+                        groundNetNo,
+                        settings,
+                        thread,
+                        primaryGroundTarget,
+                        secondaryGroundTarget);
+                if (groundViaResult != null) {
+                  groundRouted = true;
+                  placedVia = groundViaResult.placedVia();
+                  if (placedVia != null) {
+                    viasPlacedForCap++;
+                    viasPlaced++;
+                  }
+                  tagDecouplingProtected(groundPin, lockMode);
+                  for (Item newItem : groundViaResult.newItems()) {
+                    tagDecouplingProtected(newItem, lockMode);
+                  }
+                  if (task.isPlaneOnly()) {
+                    strapSuccess = true;
+                    strapStatus = "PLANE_ONLY_ROUTED";
+                  }
+                }
+              }
+            } else {
+              // 1. Primary: Lateral flank via drop to solid plane
+              if (planeUnderneath || groundNetHasPlane) {
+                ViaDropResult groundViaResult =
+                    tryViaFanoutWithDualFlankProbe(
+                        board,
+                        groundPin,
+                        groundNetNo,
+                        settings,
+                        thread,
+                        primaryGroundTarget,
+                        secondaryGroundTarget);
+                if (groundViaResult != null) {
+                  groundRouted = true;
+                  placedVia = groundViaResult.placedVia();
+                  if (placedVia != null) {
+                    viasPlacedForCap++;
+                    viasPlaced++;
+                  }
+                  tagDecouplingProtected(groundPin, lockMode);
+                  for (Item newItem : groundViaResult.newItems()) {
+                    tagDecouplingProtected(newItem, lockMode);
+                  }
+                  if (task.isPlaneOnly()) {
+                    strapSuccess = true;
+                    strapStatus = "PLANE_ONLY_ROUTED";
+                  }
+                }
+              }
+
+              // 2. Fallback: Direct surface return strap to IC ground pin
+              if (!groundRouted
+                  && targetGndPin != null
+                  && distToIcGndUnits <= maxStrapLengthUnits) {
+                StrapAttemptOutcome gndOutcome =
+                    tryRouteGroundStrap(
+                        board,
+                        settings,
+                        thread,
+                        groundPin,
+                        targetGndPin,
+                        capLayer,
+                        groundNetNo,
+                        railNetNo,
+                        candidate,
+                        maxStrapLengthMm,
+                        mmResolution);
+                if (gndOutcome != null && gndOutcome.success()) {
+                  groundRouted = true;
+                  tagDecouplingProtected(groundPin, lockMode);
+                  tagDecouplingProtected(targetGndPin, lockMode);
+                  for (Item newItem : gndOutcome.newItems()) {
+                    tagDecouplingProtected(newItem, lockMode);
+                  }
+                  if (task.isPlaneOnly()) {
+                    strapSuccess = true;
+                    strapStatus = "ROUTED_GROUND_STRAP";
+                  }
+                }
+              }
             }
-          }
-        } else {
-          if (task.isPlaneOnly()) {
-            failed++;
-            strapStatus = "NO_GROUND_PLANE";
+
+            if (!groundRouted && task.isPlaneOnly()) {
+              failed++;
+              strapStatus =
+                  (!planeUnderneath && !groundNetHasPlane)
+                      ? "NO_GROUND_PLANE"
+                      : "GROUND_ROUTING_FAILED";
+            }
           }
         }
 
@@ -777,6 +898,78 @@ public final class BatchDecouplingRouter {
             totalStrapLengthMm));
 
     return summary;
+  }
+
+  /**
+   * Checks whether a ground plane or conduction area on the given net exists directly underneath or
+   * above the capacitor ground pin on another layer.
+   */
+  static boolean isPlaneDirectlyUnderneath(RoutingBoard board, Pin groundPin, int groundNetNo) {
+    if (groundNetNo <= 0 || board == null || board.rules == null || board.rules.nets == null) {
+      return false;
+    }
+    Net groundNet = board.rules.nets.get(groundNetNo);
+    if (groundNet == null) {
+      return false;
+    }
+    Point center = groundPin.getCenter();
+    int pinLayer = groundPin.firstLayer();
+    for (ConductionArea ca : board.getConductionAreas()) {
+      if (ca.containsNet(groundNetNo) && ca.getLayer() != pinLayer) {
+        if (ca.getArea() != null && ca.getArea().contains(center)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Routes a single-layer direct surface return strap from the capacitor ground pad to the paired
+   * IC ground pin on the same layer.
+   */
+  private static StrapAttemptOutcome tryRouteGroundStrap(
+      RoutingBoard board,
+      RouterSettings settings,
+      StoppableThread thread,
+      Pin groundPin,
+      Pin targetGndPin,
+      int capLayer,
+      int groundNetNo,
+      int railNetNo,
+      CapacitorCandidate candidate,
+      double maxStrapLengthMm,
+      double mmResolution) {
+    AutorouteControl gndControl = new AutorouteControl(board, groundNetNo, settings);
+    gndControl.viasAllowed = false;
+    gndControl.ripupAllowed = false;
+    gndControl.removeUnconnectedVias = false;
+    if (settings.decoupling != null && settings.decoupling.maxDoorExpansions != null) {
+      gndControl.maxDoorExpansions = settings.decoupling.maxDoorExpansions;
+    }
+    for (int i = 0; i < gndControl.layerCount; i++) {
+      gndControl.layerActive[i] = gndControl.layerActive[i] && (i == capLayer);
+    }
+    Set<Item> curGndConnected = groundPin.getConnectedSet(groundNetNo);
+    Set<Item> curTargetGndConnected = targetGndPin.getConnectedSet(groundNetNo);
+    return tryRouteStrap(
+        board,
+        settings,
+        thread,
+        gndControl,
+        groundPin,
+        targetGndPin,
+        curGndConnected,
+        curTargetGndConnected,
+        capLayer,
+        capLayer,
+        groundNetNo,
+        railNetNo,
+        targetGndPin.getComponentId(),
+        candidate.componentId(),
+        1.0,
+        maxStrapLengthMm,
+        mmResolution);
   }
 
   /**

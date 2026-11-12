@@ -162,13 +162,27 @@ public final class DecouplingAssignmentPlanner {
       }
     }
 
+    int groundNetNo = clusterCaps.getFirst().groundNetNumber();
+    List<Pin> icGroundPins = new ArrayList<>();
+    if (groundNetNo > 0 && key.componentId() > 0) {
+      java.util.Collection<Pin> compPins = board.getComponentPins(key.componentId());
+      if (compPins != null) {
+        for (Pin p : compPins) {
+          if (p.containsNet(groundNetNo)) {
+            icGroundPins.add(p);
+          }
+        }
+      }
+    }
+
     if (availableIcPinIds.isEmpty()) {
       for (CapacitorCandidate c : clusterCaps) {
         int supplyPinId = resolveSupplyPinId(board, c);
         int groundPinId = resolveGroundPinId(board, c, supplyPinId);
+        int targetGndId = resolveNearestGroundPinId(board, icGroundPins, groundPinId);
         fallbackTasks.add(
             new DecouplingRouteTask(
-                c, supplyPinId, groundPinId, 0, 0, TaskRole.PLANE_ONLY_FALLBACK, 0));
+                c, supplyPinId, groundPinId, 0, targetGndId, TaskRole.PLANE_ONLY_FALLBACK, 0));
       }
       return;
     }
@@ -206,6 +220,7 @@ public final class DecouplingAssignmentPlanner {
       int capSupplyPinId = resolveSupplyPinId(board, cap);
       int capGroundPinId = resolveGroundPinId(board, cap, capSupplyPinId);
       int matchedCol = matching[i];
+      int targetGroundPinId = resolveNearestGroundPinId(board, icGroundPins, capGroundPinId);
 
       if (matchedCol >= 0 && costMatrix[i][matchedCol] < INF_COST) {
         int matchedIcPinId = icPinList.get(matchedCol);
@@ -215,7 +230,7 @@ public final class DecouplingAssignmentPlanner {
                 capSupplyPinId,
                 capGroundPinId,
                 matchedIcPinId,
-                0,
+                targetGroundPinId,
                 TaskRole.PRIMARY_IC_STRAP,
                 0);
         clusterPrimaryTasks.add(task);
@@ -223,7 +238,13 @@ public final class DecouplingAssignmentPlanner {
       } else {
         fallbackTasks.add(
             new DecouplingRouteTask(
-                cap, capSupplyPinId, capGroundPinId, 0, 0, TaskRole.PLANE_ONLY_FALLBACK, 0));
+                cap,
+                capSupplyPinId,
+                capGroundPinId,
+                0,
+                targetGroundPinId,
+                TaskRole.PLANE_ONLY_FALLBACK,
+                0));
       }
     }
 
@@ -249,6 +270,11 @@ public final class DecouplingAssignmentPlanner {
         }
       }
 
+      int targetGroundPinId =
+          nearestPrimary != null
+              ? nearestPrimary.targetGroundItemId()
+              : resolveNearestGroundPinId(board, icGroundPins, capGroundPinId);
+
       if (nearestPrimary != null) {
         // Target owner IC pin for preferred V-star; paired with primary cap supply pin for flanking
         secondaryTasks.add(
@@ -257,7 +283,7 @@ public final class DecouplingAssignmentPlanner {
                 capSupplyPinId,
                 capGroundPinId,
                 nearestPrimary.targetSupplyItemId(),
-                0,
+                targetGroundPinId,
                 TaskRole.SECONDARY_PARALLEL_SIBLING,
                 nearestPrimary.supplyPinId()));
       } else {
@@ -267,11 +293,33 @@ public final class DecouplingAssignmentPlanner {
                 capSupplyPinId,
                 capGroundPinId,
                 0,
-                0,
+                targetGroundPinId,
                 TaskRole.PLANE_ONLY_FALLBACK,
                 0));
       }
     }
+  }
+
+  private static int resolveNearestGroundPinId(
+      BasicBoard board, List<Pin> icGroundPins, int capGroundPinId) {
+    if (icGroundPins == null || icGroundPins.isEmpty()) {
+      return 0;
+    }
+    Pin capGndPin = getPin(board, capGroundPinId);
+    Point capGndCenter = capGndPin != null ? capGndPin.getCenter() : null;
+    if (capGndCenter == null) {
+      return 0;
+    }
+    int bestPinId = 0;
+    long minGndDistSq = Long.MAX_VALUE;
+    for (Pin gPin : icGroundPins) {
+      long dSq = computeDistanceSquared(capGndCenter, gPin.getCenter());
+      if (dSq < minGndDistSq) {
+        minGndDistSq = dSq;
+        bestPinId = gPin.getId();
+      }
+    }
+    return bestPinId;
   }
 
   /**

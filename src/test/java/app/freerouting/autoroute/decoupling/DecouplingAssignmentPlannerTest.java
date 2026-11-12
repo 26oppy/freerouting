@@ -254,4 +254,26 @@ class DecouplingAssignmentPlannerTest {
         tasks.get(0).isPlaneOnly(), "Candidate beyond max radius must be PLANE_ONLY_FALLBACK");
     assertEquals(0, tasks.get(0).targetSupplyItemId());
   }
+
+  @Test
+  @DisplayName("Planner resolves and populates targetGroundItemId when owner IC ground pins exist")
+  void testPlannerPopulatesTargetGroundItemId() throws IOException {
+    RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
+    IdentifierConfig config = IdentifierConfig.defaultConfig();
+    IdentificationResult idResult = DecouplingIdentifier.identify(board, config);
+
+    List<CapacitorCandidate> caps =
+        idResult.candidates().stream()
+            .filter(c -> c.verdict() == Verdict.DECOUPLING && !c.owners().isEmpty())
+            .toList();
+    assertFalse(caps.isEmpty());
+
+    List<DecouplingRouteTask> tasks = DecouplingAssignmentPlanner.plan(board, caps, 8.0, false);
+    assertFalse(tasks.isEmpty());
+
+    // Verify at least one task has targetGroundItemId populated (> 0)
+    boolean hasGroundTarget = tasks.stream().anyMatch(t -> t.targetGroundItemId() > 0);
+    assertTrue(
+        hasGroundTarget, "Expected targetGroundItemId to be populated for ICs with ground pins");
+  }
 }
