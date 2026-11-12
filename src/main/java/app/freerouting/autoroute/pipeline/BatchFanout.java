@@ -158,6 +158,32 @@ public final class BatchFanout {
     if (settings.usesDirectPinRouting()) {
       return DirectPinRouting.run(board, settings, thread);
     }
+
+    // Pre-pass: GPU/iGPU accelerated BGA escape routing
+    boolean gpuEnabled =
+        (settings.fanout == null || settings.fanout.gpuAccelerationEnabled == null)
+            || Boolean.TRUE.equals(settings.fanout.gpuAccelerationEnabled);
+
+    if (gpuEnabled && board != null && board.components != null && board.components.count() > 0) {
+      try {
+        java.util.List<app.freerouting.autoroute.fanout.BgaEscapeDescriptor> bgas =
+            app.freerouting.autoroute.fanout.BgaFootprintDetector.detect(board, settings);
+        for (app.freerouting.autoroute.fanout.BgaEscapeDescriptor bga : bgas) {
+          if (thread != null && thread.isInterrupted()) {
+            break;
+          }
+          java.util.List<app.freerouting.autoroute.fanout.GpuBgaEscapeSolver.PinEscapeProposal>
+              proposals =
+                  app.freerouting.autoroute.fanout.GpuBgaEscapeSolver.solve(board, bga, settings);
+          if (!proposals.isEmpty()) {
+            app.freerouting.autoroute.fanout.BgaEscapeCommitter.commit(board, bga, proposals);
+          }
+        }
+      } catch (Throwable t) {
+        FRLogger.warn("GPU BGA fanout pre-pass skipped due to error: " + t.getMessage());
+      }
+    }
+
     BatchFanout fanoutInstance = new BatchFanout(board, settings, thread);
     long fanoutStart = System.currentTimeMillis();
     if (settings.fanout != null && settings.fanout.timeoutString != null) {
