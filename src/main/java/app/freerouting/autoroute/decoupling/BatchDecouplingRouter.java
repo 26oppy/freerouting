@@ -298,7 +298,14 @@ public final class BatchDecouplingRouter {
                           && !primaryCapPin.equals(ownerPin)
                           && !primaryCapPin.hasIgnoredNets()) {
                         Set<Item> primaryCapConnected = primaryCapPin.getConnectedSet(railNetNo);
-                        if (supplyConnected.contains(primaryCapPin)) {
+                        // Only flank to the primary cap if the primary cap is verified connected to
+                        // the
+                        // owner IC. If the primary cap failed to reach the IC, flanking would
+                        // create an
+                        // isolated, floating daisy-chain between two ungrounded/unpowered
+                        // capacitors.
+                        if (primaryCapConnected.contains(ownerPin)
+                            && supplyConnected.contains(primaryCapPin)) {
                           alreadyConnected++;
                           strapSuccess = true;
                           strapStatus = "ALREADY_CONNECTED";
@@ -308,7 +315,7 @@ public final class BatchDecouplingRouter {
                             primaryCapPin.setFilteredIslandNonFeeder(true);
                           }
                           flanked = true;
-                        } else {
+                        } else if (primaryCapConnected.contains(ownerPin)) {
                           double flankDistUnits =
                               supplyPin
                                   .getCenter()
