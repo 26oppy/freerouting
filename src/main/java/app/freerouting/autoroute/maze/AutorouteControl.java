@@ -88,6 +88,12 @@ public class AutorouteControl {
   public int ripupPassNo;
 
   /**
+   * If true, suppresses expansion to non-feeder target doors on items tagged as filtered islands
+   * during initial connection routing.
+   */
+  public boolean filterNonFeederIslandTargets;
+
+  /**
    * Maximum door expansions allowed in a single connection search, or Integer.MAX_VALUE for
    * unlimited.
    */
@@ -255,6 +261,7 @@ public class AutorouteControl {
     ripupAllowed = false;
     ripupCosts = 1000;
     ripupPassNo = 1;
+    filterNonFeederIslandTargets = false;
   }
 
   /**

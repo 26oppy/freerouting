@@ -16,16 +16,19 @@ OUTPUT_DIR = REPO_ROOT / "build" / "benchmark_outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 FIXTURES = [
-    REPO_ROOT / "fixtures" / "Issue508-DAC2020_bm01.dsn",
-    REPO_ROOT / "fixtures" / "Issue269-caniot-tiny-arm.dsn",
+    # Top capacitor-rich large boards from PCBench and fixtures
+    REPO_ROOT / "scripts" / "benchmark" / "fixtures" / "PCBench" / "DAC-ADAU1966_DAC-ADAU1966" / "unrouted.dsn",
+    REPO_ROOT / "scripts" / "benchmark" / "fixtures" / "PCBench" / "DSP-ADAU1452_DSP-ADAU1452" / "unrouted.dsn",
+    REPO_ROOT / "scripts" / "benchmark" / "fixtures" / "PCBench" / "CoreOne-xCORE200-Original_CoreOne" / "unrouted.dsn",
+    REPO_ROOT / "scripts" / "benchmark" / "fixtures" / "PCBench" / "kitspace_OtterCastAudioV2" / "unrouted.dsn",
+    REPO_ROOT / "fixtures" / "Issue145-smoothieboard.dsn",
     REPO_ROOT / "fixtures" / "Plane-via-adc-decoupling-4layer.dsn",
-    REPO_ROOT / "fixtures" / "Issue957-smoke-ldo-led.dsn",
 ]
 
 
-def run_board(board_path: Path, decoupling_enabled: bool, max_passes: int = 3) -> dict:
+def run_board(board_path: Path, decoupling_enabled: bool, max_passes: int = 2) -> dict:
     mode_name = "WITH_DECOUPLING" if decoupling_enabled else "WITHOUT_DECOUPLING"
-    board_name = board_path.stem
+    board_name = board_path.stem if board_path.stem != "unrouted" else board_path.parent.name
     out_ses = OUTPUT_DIR / f"{board_name}_{mode_name}.ses"
     
     cmd = [
@@ -37,6 +40,7 @@ def run_board(board_path: Path, decoupling_enabled: bool, max_passes: int = 3) -
         "-do",
         str(out_ses),
         f"--router.autorouter.max_passes={max_passes}",
+        "--router.optimizer.max_passes=1",
         f"--router.decoupling.enabled={'true' if decoupling_enabled else 'false'}",
         "--router.decoupling.include_review_candidates=true",
     ]

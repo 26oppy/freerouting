@@ -324,13 +324,14 @@ Found-connection reconstruction and insertion, including path connection value o
 ### `app.freerouting.autoroute.decoupling`
 
 Deterministic identification and pre-routing engine for IC supply decoupling capacitors on a `RoutingBoard`.
-- **Identification & Scoring:** Evaluates two-pin SMD passives against multi-factor topological metrics (ground scores, pin count, IC proximity, pad symmetry) to produce explainable `CapacitorCandidate` verdicts.
+- **Identification & Scoring:** Evaluates two-pin SMD passives against multi-factor topological metrics (ground scores, pin count, IC proximity, pad symmetry, expanded EDA power/ground rail heuristics covering KiCad/Altium voltage representations like `+3.3V`, `+5V`, `-12V`, `+5C`, `PWR_*`, `V-+`, `V--`) to produce explainable `CapacitorCandidate` verdicts.
 - **Bipartite Assignment Planning:** Resolves optimal $M \times N$ capacitor-to-IC pin assignments using deterministic min-cost bipartite matching and parallel capacitor bank hierarchies (`PARALLEL_SIBLING`).
 - **Low-Inductance Pre-Routing:** Pre-routes direct surface straps, local ground vias, and dedicated supply plane vias before dense fanout escapes.
 - **Mutual-Inductance Flank Coupling Bias:** Projects via placement targets along the component normal vector to form tightly coupled, antiparallel side-by-side via pairs with minimal parasitic loop inductance.
 - **Global Opposite-Side & Layer-Parity Routing:** Routes reverse-side decoupling capacitors across all package types (BGA, QFP, QFN, SOIC, TSSOP, LGA, modules) via direct through-hole annular ring entry, existing fanout via connections, or fresh feed-through vias strictly bounded by a 1-via invariant.
+- **Filtered-Island Feeder Isolation:** Guards isolated downstream sub-domains (e.g. passive filter outputs `L1`/`FB1`) so external nets are routed only through legitimate feeder components during pass 1, with explicit control flags to prevent target-door skipping during fanout or optimization.
 - **Anti-Trapping Courtyard Escape Probing:** Validates that adjacent signal pins can escape the component courtyard before committing straps, with split-safe local checkpoints (`DecouplingRouteCheckpoint`).
-- **Hybrid Lock Lifecycle:** Integrates with `AutorouteBatchLoop`, `BatchFanout`, and `BatchOptimizer` using soft-lock lifecycle management (`SYSTEM_FIXED` protection in fanout and optimizer, 5x rip-up multiplier in autorouter).
+- **Hybrid Lock Lifecycle & Non-Regression Invariants:** Integrates with `AutorouteBatchLoop`, `BatchFanout`, and `BatchOptimizer` using soft-lock lifecycle management (`SYSTEM_FIXED` protection in fanout and optimizer, 5x rip-up multiplier in autorouter). Pins pass numbers and maze resolver randomization when decoupling is inactive to preserve exact baseline routing fidelity.
 
 ### `app.freerouting.autoroute`
 

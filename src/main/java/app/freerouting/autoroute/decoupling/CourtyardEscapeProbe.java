@@ -220,7 +220,7 @@ public final class CourtyardEscapeProbe {
           app.freerouting.rules.Net net = pinNetNo > 0 ? board.rules.nets.get(pinNetNo) : null;
           boolean hasViaRule =
               net != null && net.getNetClass() != null && net.getNetClass().getViaRule() != null;
-          if (hasViaRule && autorouteEngine.isLegalViaPlacementPossible(currentRoom.getShape())) {
+          if (hasViaRule && autorouteEngine.probeLegalViaPlacement(currentRoom.getShape())) {
             return true;
           }
 

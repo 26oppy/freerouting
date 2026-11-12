@@ -692,7 +692,9 @@ public class MazeSearchEngine {
     }
     boolean result = false;
     for (TargetItemExpansionDoor toDoor : listElement.nextRoom.getTargetDoors()) {
-      if (toDoor.item != null && toDoor.item.isFilteredIslandNonFeeder() && ctrl.ripupPassNo <= 1) {
+      if (toDoor.item != null
+          && toDoor.item.isFilteredIslandNonFeeder()
+          && ctrl.filterNonFeederIslandTargets) {
         continue;
       }
       // A target on an inactive signal layer is out of reach; an inactive power layer is a plane

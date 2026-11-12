@@ -12,6 +12,7 @@ import app.freerouting.settings.DecouplingLockMode;
 import app.freerouting.settings.RouterSettings;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 
 /** Sequences the shared fanout, autoroute, and optimization stages for a routing job. */
@@ -209,12 +210,14 @@ public final class RoutingPipeline {
             && this.job.routerSettings.isDecouplingEnabled()
             && decouplingLockMode == DecouplingLockMode.SOFT;
 
+    Set<Item> elevatedSoftLockedItems = new java.util.HashSet<>();
     if (isDecouplingSoftLocked && this.job.board != null) {
       for (Item it : this.job.board.getItems()) {
         if ((it instanceof Trace || it instanceof Via)
             && it.isDecouplingProtected()
             && it.getFixedState() == FixedState.UNFIXED) {
           it.setFixedState(FixedState.SYSTEM_FIXED);
+          elevatedSoftLockedItems.add(it);
         }
       }
     }
@@ -223,10 +226,8 @@ public final class RoutingPipeline {
       this.optimizer.runBatchLoop();
     } finally {
       if (isDecouplingSoftLocked && this.job.board != null) {
-        for (Item it : this.job.board.getItems()) {
-          if ((it instanceof Trace || it instanceof Via)
-              && it.isDecouplingProtected()
-              && it.getFixedState() == FixedState.SYSTEM_FIXED) {
+        for (Item it : elevatedSoftLockedItems) {
+          if (it.isOnTheBoard() && it.getFixedState() == FixedState.SYSTEM_FIXED) {
             it.setFixedState(FixedState.UNFIXED);
           }
         }

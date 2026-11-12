@@ -108,7 +108,7 @@ class CourtyardEscapeProbeTest {
   }
 
   @Test
-  @DisplayName("AutorouteEngine.isLegalViaPlacementPossible respects shape containment")
+  @DisplayName("AutorouteEngine.probeLegalViaPlacement respects shape containment")
   void testLegalViaPlacementPossibleContainment() throws IOException {
     RoutingBoard board = DsnTestFixtures.loadBoard("Issue508-DAC2020_bm01.dsn");
     app.freerouting.autoroute.maze.AutorouteEngine engine =
@@ -119,12 +119,11 @@ class CourtyardEscapeProbeTest {
         new IntBox(
             new app.freerouting.geometry.planar.IntPoint(0, 0),
             new app.freerouting.geometry.planar.IntPoint(10, 10));
-    assertFalse(
-        engine.isLegalViaPlacementPossible(tinyBox), "No via can be placed in a 10x10 unit box");
+    assertFalse(engine.probeLegalViaPlacement(tinyBox), "No via can be placed in a 10x10 unit box");
 
     // Board bounding box must contain legal vias
     assertTrue(
-        engine.isLegalViaPlacementPossible(board.boundingBox),
+        engine.probeLegalViaPlacement(board.boundingBox),
         "Whole board must accommodate legal vias");
   }
 

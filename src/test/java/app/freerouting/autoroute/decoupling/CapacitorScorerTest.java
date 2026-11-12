@@ -11,6 +11,7 @@ import app.freerouting.geometry.planar.IntBox;
 import app.freerouting.geometry.planar.IntPoint;
 import java.util.List;
 import java.util.Set;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class CapacitorScorerTest {
@@ -218,5 +219,91 @@ class CapacitorScorerTest {
     // Island candidate receives +25 points and FILTERED_ISLAND reason code
     assertTrue(ReasonCode.FILTERED_ISLAND.isSet(islandState.reasonMask));
     assertEquals(30, islandState.score); // 5 + 25 = 30
+  }
+
+  @Test
+  @DisplayName("isPowerNetName recognises EDA numeric voltages, sub-domains and prefixes")
+  void testIsPowerNetNamePatterns() {
+    // Standard positive voltages
+    assertTrue(CapacitorScorer.isPowerNetName("+1V0"));
+    assertTrue(CapacitorScorer.isPowerNetName("+1V8"));
+    assertTrue(CapacitorScorer.isPowerNetName("+3V3"));
+    assertTrue(CapacitorScorer.isPowerNetName("+3.3V"));
+    assertTrue(CapacitorScorer.isPowerNetName("+5V"));
+    assertTrue(CapacitorScorer.isPowerNetName("+12V"));
+    assertTrue(CapacitorScorer.isPowerNetName("+24V"));
+    assertTrue(CapacitorScorer.isPowerNetName("+48V"));
+
+    // Standard negative voltages
+    assertTrue(CapacitorScorer.isPowerNetName("-5V"));
+    assertTrue(CapacitorScorer.isPowerNetName("-12V"));
+    assertTrue(CapacitorScorer.isPowerNetName("-15V"));
+
+    // Sub-domain rails
+    assertTrue(CapacitorScorer.isPowerNetName("+3.3VA"));
+    assertTrue(CapacitorScorer.isPowerNetName("+3.3VADC"));
+    assertTrue(CapacitorScorer.isPowerNetName("+3.3VDAC"));
+    assertTrue(CapacitorScorer.isPowerNetName("+1V35"));
+    assertTrue(CapacitorScorer.isPowerNetName("+5C"));
+    assertTrue(CapacitorScorer.isPowerNetName("+5F"));
+    assertTrue(CapacitorScorer.isPowerNetName("+5P"));
+    assertTrue(CapacitorScorer.isPowerNetName("+5VP"));
+    assertTrue(CapacitorScorer.isPowerNetName("+7.5V"));
+    assertTrue(CapacitorScorer.isPowerNetName("+9VA"));
+    assertTrue(CapacitorScorer.isPowerNetName("-5VA"));
+    assertTrue(CapacitorScorer.isPowerNetName("-12VA"));
+    assertTrue(CapacitorScorer.isPowerNetName("PWR_3V3"));
+    assertTrue(CapacitorScorer.isPowerNetName("PWR_5V"));
+
+    // Traditional EDA power rails
+    assertTrue(CapacitorScorer.isPowerNetName("VCC"));
+    assertTrue(CapacitorScorer.isPowerNetName("VDD"));
+    assertTrue(CapacitorScorer.isPowerNetName("VDDA"));
+    assertTrue(CapacitorScorer.isPowerNetName("VCCQ"));
+    assertTrue(CapacitorScorer.isPowerNetName("VBUS"));
+    assertTrue(CapacitorScorer.isPowerNetName("VMEM"));
+    assertTrue(CapacitorScorer.isPowerNetName("VPP"));
+    assertTrue(CapacitorScorer.isPowerNetName("VEE"));
+    assertTrue(CapacitorScorer.isPowerNetName("+BATT"));
+    assertTrue(CapacitorScorer.isPowerNetName("-BATT"));
+    assertTrue(CapacitorScorer.isPowerNetName("VDC"));
+    assertTrue(CapacitorScorer.isPowerNetName("+VDC"));
+    assertTrue(CapacitorScorer.isPowerNetName("-VDC"));
+    assertTrue(CapacitorScorer.isPowerNetName("Vdrive"));
+    assertTrue(CapacitorScorer.isPowerNetName("HT"));
+    assertTrue(CapacitorScorer.isPowerNetName("VD"));
+    assertTrue(CapacitorScorer.isPowerNetName("VS"));
+    assertTrue(CapacitorScorer.isPowerNetName("V-+"));
+    assertTrue(CapacitorScorer.isPowerNetName("V--"));
+
+    // Hierarchical net paths
+    assertTrue(CapacitorScorer.isPowerNetName("/MCU/+3V3"));
+    assertTrue(CapacitorScorer.isPowerNetName("/POWER/VDD"));
+
+    // Non-power / Excluded nets
+    assertFalse(CapacitorScorer.isPowerNetName("GND"));
+    assertFalse(CapacitorScorer.isPowerNetName("PWR_GND"));
+    assertFalse(CapacitorScorer.isPowerNetName("GNDPWR"));
+    assertFalse(CapacitorScorer.isPowerNetName("VSS"));
+    assertFalse(CapacitorScorer.isPowerNetName("VSSA"));
+    assertFalse(CapacitorScorer.isPowerNetName("V-0"));
+    assertFalse(CapacitorScorer.isPowerNetName("V-GND"));
+    assertFalse(CapacitorScorer.isPowerNetName("V-PE"));
+    assertFalse(CapacitorScorer.isPowerNetName("Earth"));
+    assertFalse(CapacitorScorer.isPowerNetName("Earth_Clean"));
+    assertFalse(CapacitorScorer.isPowerNetName("Earth_Protective"));
+    assertFalse(CapacitorScorer.isPowerNetName("CLK"));
+    assertFalse(CapacitorScorer.isPowerNetName("RESET"));
+    assertFalse(CapacitorScorer.isPowerNetName("DATA0"));
+    assertFalse(CapacitorScorer.isPowerNetName("SPI_MOSI"));
+    assertFalse(CapacitorScorer.isPowerNetName("USB_D+"));
+    assertFalse(CapacitorScorer.isPowerNetName("USB_D-"));
+    assertFalse(CapacitorScorer.isPowerNetName("PWR_FLAG"));
+    assertFalse(CapacitorScorer.isPowerNetName("+VSW"));
+    assertFalse(CapacitorScorer.isPowerNetName("-VSW"));
+    assertFalse(CapacitorScorer.isPowerNetName("LINE"));
+    assertFalse(CapacitorScorer.isPowerNetName("NEUT"));
+    assertFalse(CapacitorScorer.isPowerNetName("PRI_HI"));
+    assertFalse(CapacitorScorer.isPowerNetName("PRI_LO"));
   }
 }

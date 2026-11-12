@@ -127,11 +127,17 @@ final class AutorouteConnectionRouter {
               ? Math.min(router.settings.getPlaneViaCosts(), signalViaCosts)
               : signalViaCosts;
 
+      boolean isDecouplingActive =
+          router.settings != null
+              && router.settings.decoupling != null
+              && Boolean.TRUE.equals(router.settings.decoupling.enabled);
+
       AutorouteControl autorouteControl =
           new AutorouteControl(
               router.board, routeNetNo, router.settings, currentViaCosts, router.getTraceCosts());
       autorouteControl.ripupAllowed = true;
-      autorouteControl.ripupPassNo = ripupPassNo;
+      autorouteControl.ripupPassNo = isDecouplingActive ? ripupPassNo : 1;
+      autorouteControl.filterNonFeederIslandTargets = isDecouplingActive && ripupPassNo <= 1;
       autorouteControl.ripupCosts = router.getStartRipupCosts() * ripupPassNo;
       autorouteControl.netsNotToRip =
           routedFirst
@@ -350,11 +356,17 @@ final class AutorouteConnectionRouter {
       return null;
     }
 
+    boolean isDecouplingActive =
+        router.settings != null
+            && router.settings.decoupling != null
+            && Boolean.TRUE.equals(router.settings.decoupling.enabled);
+
     AutorouteControl neckControl =
         new AutorouteControl(
             router.board, routeNetNo, router.settings, viaCosts, router.getTraceCosts());
     neckControl.ripupAllowed = true;
-    neckControl.ripupPassNo = ripupPassNo;
+    neckControl.ripupPassNo = isDecouplingActive ? ripupPassNo : 1;
+    neckControl.filterNonFeederIslandTargets = isDecouplingActive && ripupPassNo <= 1;
     neckControl.ripupCosts = router.getStartRipupCosts() * ripupPassNo;
     neckControl.netsNotToRip = originalControl.netsNotToRip;
     neckControl.removeUnconnectedVias = router.isRemoveUnconnectedVias();

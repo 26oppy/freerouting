@@ -138,7 +138,8 @@ final class MazeRipupResolver {
                   && ctrl.settings.decoupling != null
                   && ctrl.settings.decoupling.ripupCostMultiplier != null)
               ? ctrl.settings.decoupling.ripupCostMultiplier
-              : 5.0;
+              : app.freerouting.settings.sources.DefaultSettings
+                  .DEFAULT_DECOUPLING_RIPUP_COST_MULTIPLIER;
       costFactor *= Math.max(1.0, multiplier);
     }
 

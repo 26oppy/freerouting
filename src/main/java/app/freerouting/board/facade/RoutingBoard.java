@@ -1140,7 +1140,8 @@ public class RoutingBoard extends BasicBoard implements Serializable {
                   && routerSettings.decoupling != null
                   && routerSettings.decoupling.mutualInductanceBiasWeight != null)
               ? routerSettings.decoupling.mutualInductanceBiasWeight
-              : 0.2;
+              : app.freerouting.settings.sources.DefaultSettings
+                  .DEFAULT_DECOUPLING_MUTUAL_INDUCTANCE_BIAS_WEIGHT;
       ctrlSettings.directionalViaBiasWeight = biasWeight;
     }
     ctrlSettings.removeUnconnectedVias = false;

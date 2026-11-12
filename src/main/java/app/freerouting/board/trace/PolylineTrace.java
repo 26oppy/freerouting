@@ -365,6 +365,10 @@ public class PolylineTrace extends Trace implements Serializable {
     if (this.lines.lines.length < 3) {
       board.removeItem(this);
     }
+    // Bitwise AND is intentional: if an unprotected general trace is merged with a decoupling
+    // strap (e.g. after soft-lock elevation is lifted), the combined trace must not elevate the
+    // entire general net segment into high-cost decoupling protection (verified by
+    // DecouplingItemFlagsTest).
     this.setDecouplingFlags((byte) (this.getDecouplingFlags() & otherTrace.getDecouplingFlags()));
     board.removeItem(otherTrace);
     if (board instanceof RoutingBoard routingBoard) {
@@ -490,6 +494,10 @@ public class PolylineTrace extends Trace implements Serializable {
     if (this.lines.lines.length < 3) {
       board.removeItem(this);
     }
+    // Bitwise AND is intentional: if an unprotected general trace is merged with a decoupling
+    // strap (e.g. after soft-lock elevation is lifted), the combined trace must not elevate the
+    // entire general net segment into high-cost decoupling protection (verified by
+    // DecouplingItemFlagsTest).
     this.setDecouplingFlags((byte) (this.getDecouplingFlags() & otherTrace.getDecouplingFlags()));
     board.removeItem(otherTrace);
     if (board instanceof RoutingBoard routingBoard) {
