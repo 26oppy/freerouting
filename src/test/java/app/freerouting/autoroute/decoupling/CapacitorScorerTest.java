@@ -243,23 +243,32 @@ class CapacitorScorerTest {
     assertTrue(CapacitorScorer.isPowerNetName("+3.3VA"));
     assertTrue(CapacitorScorer.isPowerNetName("+3.3VADC"));
     assertTrue(CapacitorScorer.isPowerNetName("+3.3VDAC"));
+    assertTrue(CapacitorScorer.isPowerNetName("+3.3VP"));
     assertTrue(CapacitorScorer.isPowerNetName("+1V35"));
     assertTrue(CapacitorScorer.isPowerNetName("+5C"));
     assertTrue(CapacitorScorer.isPowerNetName("+5F"));
     assertTrue(CapacitorScorer.isPowerNetName("+5P"));
+    assertTrue(CapacitorScorer.isPowerNetName("+5VD"));
+    assertTrue(CapacitorScorer.isPowerNetName("+5VL"));
     assertTrue(CapacitorScorer.isPowerNetName("+5VP"));
     assertTrue(CapacitorScorer.isPowerNetName("+7.5V"));
     assertTrue(CapacitorScorer.isPowerNetName("+9VA"));
+    assertTrue(CapacitorScorer.isPowerNetName("-2V5"));
+    assertTrue(CapacitorScorer.isPowerNetName("-3V3"));
     assertTrue(CapacitorScorer.isPowerNetName("-5VA"));
     assertTrue(CapacitorScorer.isPowerNetName("-12VA"));
     assertTrue(CapacitorScorer.isPowerNetName("PWR_3V3"));
     assertTrue(CapacitorScorer.isPowerNetName("PWR_5V"));
 
     // Traditional EDA power rails
+    assertTrue(CapacitorScorer.isPowerNetName("VAA"));
+    assertTrue(CapacitorScorer.isPowerNetName("VAC"));
     assertTrue(CapacitorScorer.isPowerNetName("VCC"));
     assertTrue(CapacitorScorer.isPowerNetName("VDD"));
     assertTrue(CapacitorScorer.isPowerNetName("VDDA"));
+    assertTrue(CapacitorScorer.isPowerNetName("VDDF"));
     assertTrue(CapacitorScorer.isPowerNetName("VCCQ"));
+    assertTrue(CapacitorScorer.isPowerNetName("VCOM"));
     assertTrue(CapacitorScorer.isPowerNetName("VBUS"));
     assertTrue(CapacitorScorer.isPowerNetName("VMEM"));
     assertTrue(CapacitorScorer.isPowerNetName("VPP"));
@@ -284,6 +293,8 @@ class CapacitorScorerTest {
     assertFalse(CapacitorScorer.isPowerNetName("GND"));
     assertFalse(CapacitorScorer.isPowerNetName("PWR_GND"));
     assertFalse(CapacitorScorer.isPowerNetName("GNDPWR"));
+    assertFalse(CapacitorScorer.isPowerNetName("GNDREF"));
+    assertFalse(CapacitorScorer.isPowerNetName("GNDS"));
     assertFalse(CapacitorScorer.isPowerNetName("VSS"));
     assertFalse(CapacitorScorer.isPowerNetName("VSSA"));
     assertFalse(CapacitorScorer.isPowerNetName("V-0"));
@@ -305,5 +316,6 @@ class CapacitorScorerTest {
     assertFalse(CapacitorScorer.isPowerNetName("NEUT"));
     assertFalse(CapacitorScorer.isPowerNetName("PRI_HI"));
     assertFalse(CapacitorScorer.isPowerNetName("PRI_LO"));
+    assertFalse(CapacitorScorer.isPowerNetName("PRI_MID"));
   }
 }
