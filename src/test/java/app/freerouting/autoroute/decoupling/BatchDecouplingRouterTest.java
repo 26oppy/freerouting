@@ -776,7 +776,7 @@ class BatchDecouplingRouterTest {
             pin2.getComponentId(),
             pin1.getComponentId(),
             1.0,
-            10.0,
+            50.0,
             mmResolution);
 
     assertNotNull(outcome);

@@ -72,11 +72,22 @@ public class MazeSearchEngine {
   /** The destination door found by the expanding algorithm. */
   private ExpandableObject destinationDoor;
 
+  private final Set<Item> destinationItems;
+
   private int sectionNoOfDestinationDoor;
   private int doorExpansionCount = 0;
 
   /** Creates a new instance of MazeSearchEngine. */
   MazeSearchEngine(AutorouteEngine autorouteEngine, AutorouteControl ctrl) {
+    this(autorouteEngine, ctrl, null);
+  }
+
+  MazeSearchEngine(
+      AutorouteEngine autorouteEngine, AutorouteControl ctrl, Set<Item> destinationItems) {
+    this.destinationItems =
+        (destinationItems != null && !destinationItems.isEmpty())
+            ? Set.copyOf(destinationItems)
+            : null;
     this.autorouteEngine = autorouteEngine;
     this.ctrl = ctrl;
     this.fanoutDiagnostics = new MazeFanoutDiagnostics(ctrl);
@@ -141,7 +152,7 @@ public class MazeSearchEngine {
       Set<Item> destinationItems,
       AutorouteEngine autorouteDatabase,
       AutorouteControl ctrl) {
-    MazeSearchEngine newInstance = new MazeSearchEngine(autorouteDatabase, ctrl);
+    MazeSearchEngine newInstance = new MazeSearchEngine(autorouteDatabase, ctrl, destinationItems);
     MazeSearchEngine result;
     if (newInstance.init(startItems, destinationItems)) {
       result = newInstance;
@@ -366,7 +377,8 @@ public class MazeSearchEngine {
     }
 
     if (listElement.door instanceof TargetItemExpansionDoor currentDoor) {
-      if (currentDoor.isDestinationDoor()) {
+      if (currentDoor.isDestinationDoor()
+          && (this.destinationItems == null || this.destinationItems.contains(currentDoor.item))) {
         // The destination is reached.
         this.destinationDoor = currentDoor;
         this.sectionNoOfDestinationDoor = listElement.sectionNoOfDoor;
@@ -692,6 +704,11 @@ public class MazeSearchEngine {
     }
     boolean result = false;
     for (TargetItemExpansionDoor toDoor : listElement.nextRoom.getTargetDoors()) {
+      if (toDoor.isDestinationDoor()
+          && this.destinationItems != null
+          && !this.destinationItems.contains(toDoor.item)) {
+        continue;
+      }
       if (toDoor.item != null
           && toDoor.item.isFilteredIslandNonFeeder()
           && ctrl.filterNonFeederIslandTargets) {
@@ -1123,7 +1140,9 @@ public class MazeSearchEngine {
         if (this.autorouteEngine.isStopRequested()) {
           return false;
         }
-        if (currentDoor.isDestinationDoor()) {
+        if (currentDoor.isDestinationDoor()
+            && (this.destinationItems == null
+                || this.destinationItems.contains(currentDoor.item))) {
           expansionDoorsDestination++;
           continue;
         }
