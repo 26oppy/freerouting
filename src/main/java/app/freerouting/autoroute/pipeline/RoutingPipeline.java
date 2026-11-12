@@ -140,7 +140,9 @@ public final class RoutingPipeline {
             && (this.job.routerSettings.autorouter.maxPasses == null
                 || this.job.routerSettings.autorouter.maxPasses >= 0);
 
-    if (routerEnabled || this.job.routerSettings.isFanoutEnabled()) {
+    if (routerEnabled
+        || this.job.routerSettings.isFanoutEnabled()
+        || this.job.routerSettings.isDecouplingEnabled()) {
       this.job.stage = RoutingStage.ROUTING;
     }
 
@@ -172,7 +174,8 @@ public final class RoutingPipeline {
       if (RoutingSupervisor.explores(this.job.routerSettings)) {
         this.autorouter = fallback.explore(this.job, this.autorouter);
       }
-    } else if (this.job.routerSettings.isFanoutEnabled()
+    } else if ((this.job.routerSettings.isFanoutEnabled()
+            || this.job.routerSettings.isDecouplingEnabled())
         && !this.job.thread.isStopAutoRouterRequested()) {
       Integer originalMaxPasses = this.job.routerSettings.autorouter.maxPasses;
       try {

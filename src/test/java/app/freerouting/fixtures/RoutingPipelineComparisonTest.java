@@ -1,7 +1,10 @@
 package app.freerouting.fixtures;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import app.freerouting.autoroute.pipeline.RoutingPipeline;
@@ -13,12 +16,14 @@ import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.drc.DesignRulesChecker;
 import app.freerouting.gui.workspace.ports.WorkspacePort;
 import app.freerouting.gui.workspace.progress.GuiRoutingJobWorker;
+import app.freerouting.gui.workspace.progress.RouteCompletion;
 import app.freerouting.gui.workspace.session.RunGeneration;
 import app.freerouting.management.HeadlessBoardManager;
 import app.freerouting.settings.sources.TestingSettings;
 import java.util.Collection;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /** Compares the GUI and headless adapters using the shared routing pipeline. */
 class RoutingPipelineComparisonTest extends RoutingFixtureTest {
@@ -73,6 +78,35 @@ class RoutingPipelineComparisonTest extends RoutingFixtureTest {
     Collection<?> headlessViolations =
         new DesignRulesChecker(headlessJob.board, null).getAllClearanceViolations();
     assertEquals(guiViolations.size(), headlessViolations.size());
+  }
+
+  @Test
+  void decouplingOnlyRoutingStageExecutesSuccessfully() {
+    TestingSettings settings = new TestingSettings();
+    settings.setEnabled(false);
+    settings.setFanoutEnabled(false);
+    settings.setOptimizerEnabled(false);
+    settings.setDecouplingEnabled(true);
+
+    RoutingJob job = getRoutingJob("Issue508-DAC2020_bm01.dsn", settings);
+    loadBoard(job);
+
+    WorkspacePort workspacePort = mock(WorkspacePort.class);
+    when(workspacePort.routingBoard()).thenReturn(job.board);
+    when(workspacePort.locale()).thenReturn(Locale.ENGLISH);
+    when(workspacePort.displayUnit()).thenReturn(Unit.UM);
+
+    TestGuiRoutingJobWorker worker = new TestGuiRoutingJobWorker(workspacePort, job);
+    worker.run();
+
+    assertNotNull(job.resultPhaseMetrics);
+    assertNotNull(job.resultPhaseMetrics.decoupling);
+    assertTrue(job.resultPhaseMetrics.decoupling.candidatesTotal >= 0);
+
+    ArgumentCaptor<RouteCompletion> completionCaptor =
+        ArgumentCaptor.forClass(RouteCompletion.class);
+    verify(workspacePort).finishRoute(completionCaptor.capture());
+    assertEquals("Decoupling pre-routing completed.", completionCaptor.getValue().statusMessage());
   }
 
   private static final class TestGuiRoutingJobWorker extends GuiRoutingJobWorker {

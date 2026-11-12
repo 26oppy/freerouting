@@ -40,7 +40,8 @@ public final class CapacitorScorer {
   private static final Pattern RESISTOR_PATTERN = Pattern.compile("(?i)^(R|RN)[0-9_].*");
 
   private static final Pattern POWER_NET_EXCLUDE_PATTERN =
-      Pattern.compile("(?i).*(?:PWR_FLAG|VSW|LINE|NEUT|EARTH|CHASSIS|GND|VSS|V-0|V-PE|PRI_).*");
+      Pattern.compile(
+          "(?i).*(?:PWR_FLAG|VSW|LINE|NEUT|EARTH|CHASSIS|GND|VSS|V-0|V-PE|V-[LN]|PRI_).*");
 
   private static final Pattern POWER_NET_PATTERN =
       Pattern.compile(

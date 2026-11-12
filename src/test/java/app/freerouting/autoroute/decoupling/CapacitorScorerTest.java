@@ -291,6 +291,9 @@ class CapacitorScorerTest {
 
     // Non-power / Excluded nets
     assertFalse(CapacitorScorer.isPowerNetName("GND"));
+    assertFalse(CapacitorScorer.isPowerNetName("GND1"));
+    assertFalse(CapacitorScorer.isPowerNetName("GND2"));
+    assertFalse(CapacitorScorer.isPowerNetName("GND3"));
     assertFalse(CapacitorScorer.isPowerNetName("PWR_GND"));
     assertFalse(CapacitorScorer.isPowerNetName("GNDPWR"));
     assertFalse(CapacitorScorer.isPowerNetName("GNDREF"));
@@ -300,6 +303,9 @@ class CapacitorScorerTest {
     assertFalse(CapacitorScorer.isPowerNetName("V-0"));
     assertFalse(CapacitorScorer.isPowerNetName("V-GND"));
     assertFalse(CapacitorScorer.isPowerNetName("V-PE"));
+    assertFalse(CapacitorScorer.isPowerNetName("V-L"));
+    assertFalse(CapacitorScorer.isPowerNetName("V-N"));
+    assertFalse(CapacitorScorer.isPowerNetName("AC"));
     assertFalse(CapacitorScorer.isPowerNetName("Earth"));
     assertFalse(CapacitorScorer.isPowerNetName("Earth_Clean"));
     assertFalse(CapacitorScorer.isPowerNetName("Earth_Protective"));
