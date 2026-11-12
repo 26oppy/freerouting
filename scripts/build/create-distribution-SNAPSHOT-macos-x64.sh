@@ -35,6 +35,7 @@ echo "> Creating the package"
  --main-jar freerouting-executable.jar \
  --type "$APP_TYPE" --runtime-image "$JAVA_HOME/runtime" --app-version 1.0.0 --license-file ../../LICENSE \
  --icon ../../assets/icon/freerouting_icon_256x256_v3.icns \
- --java-options "-Dlog4j2.disableJndi=true"
+ --java-options "-Dlog4j2.disableJndi=true" \
+ --java-options "--enable-native-access=ALL-UNNAMED"
 
 mv "freerouting-1.0.0.dmg" "freerouting-$APP_VERSION-macos-x64.dmg"

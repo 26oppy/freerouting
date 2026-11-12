@@ -4009,6 +4009,32 @@
     {
       "type": "java.lang.Number",
       "serializable": true
+    },
+    {
+      "type": "app.freerouting.autoroute.accelerator.opencl.PanamaOpenClBindings",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "app.freerouting.autoroute.accelerator.opencl.PanamaOpenClBackend",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "app.freerouting.autoroute.accelerator.NoOpCpuComputeBackend",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "app.freerouting.autoroute.accelerator.AcceleratorDeviceInfo",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "app.freerouting.autoroute.accelerator.GpuFallbackReason",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
     }
   ],
   "resources": [
@@ -4068,6 +4094,9 @@
     },
     {
       "glob": "app/freerouting/**/*.properties"
+    },
+    {
+      "glob": "app/freerouting/autoroute/accelerator/kernels/*"
     }
   ],
   "bundles": [
@@ -4076,6 +4105,14 @@
     },
     {
       "name": "app.freerouting.Freerouting"
+    }
+  ],
+  "foreign": [
+    {
+      "classes": [
+        "app.freerouting.autoroute.accelerator.opencl.PanamaOpenClBindings",
+        "app.freerouting.autoroute.accelerator.opencl.PanamaOpenClBackend"
+      ]
     }
   ]
 }

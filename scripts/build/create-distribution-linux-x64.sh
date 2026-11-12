@@ -37,7 +37,8 @@ echo "> Creating the package"
  --main-jar freerouting-executable.jar \
  --type "$APP_TYPE" --runtime-image "$JAVA_HOME/runtime" --app-version "$APP_VERSION" \
  --icon ../../assets/icon/freerouting_icon_256x256_v3.png \
- --java-options "-Dlog4j2.disableJndi=true"
+ --java-options "-Dlog4j2.disableJndi=true" \
+ --java-options "--enable-native-access=ALL-UNNAMED"
 
 echo "> Composing the distribution file"
 mv "freerouting" "freerouting-$APP_VERSION-linux-x64"

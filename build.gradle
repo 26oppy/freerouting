@@ -260,6 +260,7 @@ def buildRevision = providers.environmentVariable('BUILD_REVISION')
 
 def manifestAttributes = [
         'Automatic-Module-Name' : 'app.freerouting',
+        'Enable-Native-Access'  : 'ALL-UNNAMED',
         'Built-By'              : System.properties['user.name'],
         'Created-By'            : "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
         'Build-Date'            : project.buildDate,
@@ -399,14 +400,13 @@ tasks.register('run', JavaExec) {
 
     mainClass = project.mainClassName
 
-    // arguments to pass to the application
-    //    args 'appArg1'
-    // jvmArgs 'arg1'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
 
 tasks.register('runCli', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'app.freerouting.cli.FreeroutingCli'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -449,7 +449,7 @@ tasks.withType(Test).configureEach { Test task ->
 
     // Attach Mockito as a Java agent so that the inline-mock-maker can function
     // on Java 21+ without the JVM's self-attach restriction warning.
-    jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}"
+    jvmArgs "-javaagent:${configurations.mockitoAgent.asPath}", '--enable-native-access=ALL-UNNAMED'
 
     // Default logging configuration for test runs:
     //   - No log file is written (file logging is disabled).
@@ -570,7 +570,8 @@ graalvmNative {
                 '--no-fallback',
                 '-H:+ReportExceptionStackTraces',
                 '-march=compatibility',
-                '--enable-url-protocols=https,http'
+                '--enable-url-protocols=https,http',
+                '--enable-native-access=ALL-UNNAMED'
             )
         }
     }
