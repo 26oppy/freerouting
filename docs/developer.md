@@ -337,6 +337,30 @@ Recommended guardrails:
 - Avoid direct auto-publish on generation alone to reduce risk from contract-breaking changes.
 - Apply the same PR-first approach for C# and C++ scaffolds (generate, test in SDK repo, review, then publish).
 
+## Hardware Acceleration (GPU/iGPU OpenCL via Panama FFM)
+
+Freerouting incorporates optional GPU/iGPU acceleration for dense BGA escape routing using the Java 25 Panama Foreign Function & Memory (FFM) API (`java.lang.foreign.*`).
+
+### Architecture & Zero-Dependency Bindings
+
+- **Pure Java 25 FFM Downcalls:** OpenCL runtime entry points (`clGetPlatformIDs`, `clGetDeviceIDs`, `clCreateContext`, `clCreateCommandQueue`, `clCreateProgramWithSource`, `clBuildProgram`, `clCreateKernel`, `clCreateBuffer`, `clEnqueueNDRangeKernel`, `clEnqueueReadBuffer`, etc.) are resolved dynamically via Panama FFM downcall handles (`PanamaOpenClBindings`).
+- **Zero Native Wrapper Dependencies:** No external third-party JNI or JNA libraries (such as JOCL or JavaCL) are bundled. The JVM directly binds to system OpenCL drivers (`OpenCL.dll` on Windows, `libOpenCL.so.1` on Linux, and `OpenCL.framework` on macOS).
+- **Graceful CPU Fallback:** If no compatible OpenCL 1.2 runtime or device is found, or if initialization fails, Freerouting logs a diagnostic warning and falls back immediately to the standard host CPU sequential fanout maze routing with zero loss of functionality.
+
+### JVM Native Access Configuration
+
+Java 25 enforces native access restrictions for foreign downcalls. The JVM flag `--enable-native-access=ALL-UNNAMED` is configured across all build and runtime entry points:
+- `applicationDefaultJvmArgs` in `build.gradle` for `./gradlew run`.
+- `manifest` of `executableJar` via `Enable-Native-Access: ALL-UNNAMED`.
+- Gradle test tasks (`tasks.withType(Test)`) for headless CI test execution.
+- `jpackage` bundling scripts for desktop distributions.
+
+### GraalVM Native Image Reachability
+
+Downcall descriptors, restricted native method handles, and JNI entry points are declared in:
+`src/main/resources/META-INF/native-image/app.freerouting/reachability-metadata.json`
+This ensures Ahead-Of-Time (AOT) compilation with GraalVM Native Image preserves Panama downcall linkages without reflection errors.
+
 ## Source formatting and cleanup
 
 - Freerouting follows Google coding conventions from Google Java Style, enforced via Spotless and Checkstyle.

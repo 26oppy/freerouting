@@ -40,7 +40,7 @@ flowchart TD
         IO["**io.specctra**\nDSN / SES reader-writer"]
         BOARD["**board.model/facade/state/actions/trace + searchtree + optimize**\nLive board model · search trees · optimization"]
         RULES["**rules**\nNets · clearances"]
-        AR["**autoroute.pipeline + maze + expansion + drill + path + decoupling + plane**\nRouting stages · maze · expansion · path · decoupling · plane"]
+        AR["**autoroute.pipeline + maze + expansion + drill + path + decoupling + plane + fanout + accelerator**\nRouting stages · maze · expansion · path · decoupling · plane · BGA fanout · OpenCL"]
         DRC["**drc**\nDesign-rule checking"]
         GEO["**geometry.planar**\nShapes · points · math"]
     end
@@ -333,6 +333,23 @@ High-performance topological plane connectivity analysis and fracture detection.
 
 - `FastPlaneConnectivityGrid` — Flat `long[]` bitset ($<32\text{ KB}$ RAM) with adaptive cell resolution. Replaces slow $O(N \cdot V^2)$ 2D polygon clipping (`Area.subtract`) with sub-millisecond dilated span rasterization and queue-based flood fill. Evaluates plane reachability on signal layers (`--router.plane_as_obstacle=false`), detects severed topological islands caused by foreign trace cuts, and enables `BatchAutorouter` to route DRC-clean physical bridge traces connecting disconnected plane pins across all CAD formats (Altium, EAGLE, KiCad).
 
+### `app.freerouting.autoroute.fanout`
+
+BGA footprint analysis and SMD pin fanout preprocessing.
+
+- `BgaFootprintDetector` — Deterministic classification of dense Ball Grid Array packages ($\ge \text{gpu\_min\_bga\_pins}$, pitch $\le 1.27\text{ mm}$), Chebyshev concentric ring peeling, and pin quadrant assignments.
+- `BgaBufferMarshaller` — Marshals board geometry and spatial obstacles into pitch-harmonic normalized $(u, v)$ congestion raster grids for accelerator execution.
+- `BgaEscapeCommitter` — Authoritative continuous host DRC verification (`RoutingBoard.checkTraceSegment`, search-tree clearances) and transactional board insertion for GPU-negotiated escape paths and landing vias.
+
+### `app.freerouting.autoroute.accelerator`
+
+Hardware-agnostic hardware acceleration service provider interface (SPI) and OpenCL 1.2 execution engine.
+
+- `AcceleratorDevice`, `AcceleratorService`, `AcceleratorBufferMarshal` — Device abstraction, capability querying, and memory buffer contracts.
+- `PanamaOpenClBindings` — Pure Java 25 Foreign Function & Memory (FFM) API (JEP 454) downcalls to native OpenCL runtime (`OpenCL.dll`, `libOpenCL.so`, `OpenCL.framework`) with zero external native wrapper dependencies.
+- `OpenClAcceleratorDevice` & `SafeResourceReaper` — Robust platform/device lifecycle, command queues, JNI/native pointer tracking, and leak-free resource release.
+- `OpenClBgaWavefrontSolver` — Parallel SIMD wavefront escape solver with 16-bit clamped atomic congestion negotiation and dogbone via placement across concentric BGA rings.
+
 ### `app.freerouting.autoroute`
 
 Remaining autoroute support types and routing diagnostics. The implementation families are kept in
@@ -473,6 +490,8 @@ Several implementation areas live one level below the top-level package grouping
 - `app.freerouting.api.v1`, `app.freerouting.api.dto`, `app.freerouting.api.security`, and `app.freerouting.api.dev` contain the public controllers, payloads, authentication, and mocked endpoints; start with [JobControllerV1.java](../src/main/java/app/freerouting/api/v1/JobControllerV1.java), [BoardFilePayload.java](../src/main/java/app/freerouting/api/dto/BoardFilePayload.java), and [ApiKeyValidationService.java](../src/main/java/app/freerouting/api/security/ApiKeyValidationService.java).
 - `app.freerouting.autoroute.events` contains routing event callbacks; start with [BoardUpdatedEvent.java](../src/main/java/app/freerouting/autoroute/events/BoardUpdatedEvent.java).
 - `app.freerouting.autoroute.pipeline` contains the shared routing sequencer; start with [RoutingPipeline.java](../src/main/java/app/freerouting/autoroute/pipeline/RoutingPipeline.java).
+- `app.freerouting.autoroute.fanout` contains BGA classification and DRC escape committing; start with [BgaFootprintDetector.java](../src/main/java/app/freerouting/autoroute/fanout/BgaFootprintDetector.java).
+- `app.freerouting.autoroute.accelerator` contains the hardware-agnostic accelerator SPI and Panama OpenCL binding; start with [AcceleratorService.java](../src/main/java/app/freerouting/autoroute/accelerator/AcceleratorService.java).
 - `app.freerouting.board.searchtree` contains board spatial indexes; start with [SearchTreeManager.java](../src/main/java/app/freerouting/board/searchtree/SearchTreeManager.java).
 - `app.freerouting.board.facade` keeps board services behind the stable `BasicBoard` and `RoutingBoard`
   façades: item storage/connectivity/snapshots, routing operations/search, and routing undo/redo.
