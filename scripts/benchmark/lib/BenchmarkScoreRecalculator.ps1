@@ -50,10 +50,10 @@ function Invoke-BenchmarkScoreRecalculator {
 
         $process = Start-Process -FilePath $resolvedJava -ArgumentList @(
             "-jar",
-            $jarPath,
+            "`"$jarPath`"",
             "--calculate-benchmark-scores",
-            "--input=$JsonPath",
-            "--output=$ScoresPath"
+            "--input=`"$JsonPath`"",
+            "--output=`"$ScoresPath`""
         ) -NoNewWindow -Wait -PassThru
 
         if ($process.ExitCode -ne 0) {
