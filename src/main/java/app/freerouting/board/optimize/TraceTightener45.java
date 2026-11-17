@@ -16,7 +16,10 @@ import app.freerouting.geometry.planar.Polyline;
 import app.freerouting.geometry.planar.Side;
 import app.freerouting.geometry.planar.TileShape;
 import app.freerouting.geometry.planar.Vector;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 
 class TraceTightener45 extends TraceTightener {
 
@@ -39,9 +42,233 @@ class TraceTightener45 extends TraceTightener {
       prevResult = newResult;
       Polyline tmp1 = reduceCorners(prevResult);
       Polyline tmp2 = smoothenCorners(tmp1);
-      newResult = repositionLines(tmp2);
+      Polyline tmp3 = collapseDogEars(tmp2);
+      newResult = repositionLines(tmp3);
     }
     return newResult;
+  }
+
+  /**
+   * Tries to remove dog-ears and unnecessary zig-zag detours by replacing 2- or 3-segment internal
+   * subpaths with a direct 1- or 2-segment connection when obstacle-free and shorter.
+   */
+  private Polyline collapseDogEars(Polyline polyline) {
+    Point[] corners = polyline.corners();
+    if (corners.length < 5) {
+      return polyline;
+    }
+
+    boolean changed = false;
+    List<Point> cornerList = new ArrayList<>(Arrays.asList(corners));
+    Polyline currentPoly = polyline;
+
+    boolean passChanged = true;
+    while (passChanged) {
+      passChanged = false;
+
+      // 1. Check 3-segment internal windows (corners i to i+3): can we replace with 1 or 2
+      // segments?
+      for (int i = 0; i + 3 < cornerList.size(); i++) {
+        if (!(cornerList.get(i) instanceof IntPoint ci)
+            || !(cornerList.get(i + 1) instanceof IntPoint c1)
+            || !(cornerList.get(i + 2) instanceof IntPoint c2)
+            || !(cornerList.get(i + 3) instanceof IntPoint ci3)) {
+          continue;
+        }
+        if (currentClipShape != null
+            && (currentClipShape.isOutside(ci)
+                || currentClipShape.isOutside(c1)
+                || currentClipShape.isOutside(c2)
+                || currentClipShape.isOutside(ci3))) {
+          continue;
+        }
+
+        // Try direct 1-segment shortcut between ci and ci3
+        if (isAngleAllowed(ci, ci3)) {
+          List<Point> candList = new ArrayList<>(cornerList);
+          candList.remove(i + 2);
+          candList.remove(i + 1);
+          Polyline candPoly = new Polyline(candList.toArray(Point[]::new));
+          if (candPoly.isMultipleOf45Degree()
+              && candPoly.lines.length == candList.size() + 2
+              && polylineLength(candPoly) + 1.0 < polylineLength(currentPoly)
+              && isCandidatePolylineClear(candPoly)) {
+            cornerList = candList;
+            currentPoly = candPoly;
+            passChanged = true;
+            changed = true;
+            if (board.changedArea != null) {
+              board.changedArea.join(ci.toFloat(), currentLayer);
+              board.changedArea.join(ci3.toFloat(), currentLayer);
+            }
+            break;
+          }
+        }
+
+        // Try 2-segment shortcut between ci and ci3
+        double oldLen = dist(ci, c1) + dist(c1, c2) + dist(c2, ci3);
+        IntPoint newCorner1 = fortyfiveDegreeCorner(ci, ci3, true);
+        IntPoint newCorner2 = fortyfiveDegreeCorner(ci, ci3, false);
+        for (IntPoint cand : new IntPoint[] {newCorner1, newCorner2}) {
+          if (cand.equals(ci) || cand.equals(ci3)) {
+            continue;
+          }
+          if (currentClipShape != null && currentClipShape.isOutside(cand)) {
+            continue;
+          }
+          double newLen = dist(ci, cand) + dist(cand, ci3);
+          if (newLen + 1.0 < oldLen) {
+            List<Point> candList = new ArrayList<>(cornerList);
+            candList.set(i + 1, cand);
+            candList.remove(i + 2);
+            Polyline candPoly = new Polyline(candList.toArray(Point[]::new));
+            if (candPoly.isMultipleOf45Degree()
+                && candPoly.lines.length == candList.size() + 2
+                && polylineLength(candPoly) + 1.0 < polylineLength(currentPoly)
+                && isCandidatePolylineClear(candPoly)) {
+              cornerList = candList;
+              currentPoly = candPoly;
+              passChanged = true;
+              changed = true;
+              if (board.changedArea != null) {
+                board.changedArea.join(ci.toFloat(), currentLayer);
+                board.changedArea.join(cand.toFloat(), currentLayer);
+                board.changedArea.join(ci3.toFloat(), currentLayer);
+              }
+              break;
+            }
+          }
+        }
+        if (passChanged) {
+          break;
+        }
+      }
+
+      if (passChanged) {
+        continue;
+      }
+
+      // 2. Check 2-segment internal windows (corners i to i+2): can we replace with a single
+      // segment?
+      for (int i = 0; i + 2 < cornerList.size(); i++) {
+        if (!(cornerList.get(i) instanceof IntPoint ci)
+            || !(cornerList.get(i + 1) instanceof IntPoint c1)
+            || !(cornerList.get(i + 2) instanceof IntPoint ci2)) {
+          continue;
+        }
+        if (currentClipShape != null
+            && (currentClipShape.isOutside(ci)
+                || currentClipShape.isOutside(c1)
+                || currentClipShape.isOutside(ci2))) {
+          continue;
+        }
+
+        if (isAngleAllowed(ci, ci2)) {
+          double oldLen = dist(ci, c1) + dist(c1, ci2);
+          double newLen = dist(ci, ci2);
+          if (newLen + 1.0 < oldLen) {
+            List<Point> candList = new ArrayList<>(cornerList);
+            candList.remove(i + 1);
+            Polyline candPoly = new Polyline(candList.toArray(Point[]::new));
+            if (candPoly.isMultipleOf45Degree()
+                && candPoly.lines.length == candList.size() + 2
+                && polylineLength(candPoly) + 1.0 < polylineLength(currentPoly)
+                && isCandidatePolylineClear(candPoly)) {
+              cornerList = candList;
+              currentPoly = candPoly;
+              passChanged = true;
+              changed = true;
+              if (board.changedArea != null) {
+                board.changedArea.join(ci.toFloat(), currentLayer);
+                board.changedArea.join(ci2.toFloat(), currentLayer);
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!changed) {
+      return polyline;
+    }
+    return currentPoly;
+  }
+
+  private boolean isCandidatePolylineClear(Polyline polyline) {
+    TileShape[] shapes = polyline.offsetShapes(currentHalfWidth);
+    if (shapes == null || shapes.length == 0) {
+      return false;
+    }
+    for (TileShape shape : shapes) {
+      if (!board.checkTraceShape(
+          shape, currentLayer, currentNetNumbers, currentClearanceClassIndex, this.contactPins)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean isAngleAllowed(IntPoint p1, IntPoint p2) {
+    int dx = Math.abs(p2.x - p1.x);
+    int dy = Math.abs(p2.y - p1.y);
+    return (dx == 0 || dy == 0 || dx == dy) && (dx != 0 || dy != 0);
+  }
+
+  private static double dist(Point p1, Point p2) {
+    return p1.toFloat().distance(p2.toFloat());
+  }
+
+  private static double polylineLength(Polyline polyline) {
+    double len = 0;
+    Point[] c = polyline.corners();
+    for (int i = 0; i < c.length - 1; i++) {
+      len += dist(c[i], c[i + 1]);
+    }
+    return len;
+  }
+
+  private static IntPoint fortyfiveDegreeCorner(
+      IntPoint fromPoint, IntPoint toPoint, boolean horizontalFirst) {
+    int absDx = Math.abs(toPoint.x - fromPoint.x);
+    int absDy = Math.abs(toPoint.y - fromPoint.y);
+    int x;
+    int y;
+
+    if (absDx <= absDy) {
+      if (horizontalFirst) {
+        x = toPoint.x;
+        if (toPoint.y >= fromPoint.y) {
+          y = fromPoint.y + absDx;
+        } else {
+          y = fromPoint.y - absDx;
+        }
+      } else {
+        x = fromPoint.x;
+        if (toPoint.y > fromPoint.y) {
+          y = toPoint.y - absDx;
+        } else {
+          y = toPoint.y + absDx;
+        }
+      }
+    } else {
+      if (horizontalFirst) {
+        y = fromPoint.y;
+        if (toPoint.x > fromPoint.x) {
+          x = toPoint.x - absDy;
+        } else {
+          x = toPoint.x + absDy;
+        }
+      } else {
+        y = toPoint.y;
+        if (toPoint.x > fromPoint.x) {
+          x = fromPoint.x + absDy;
+        } else {
+          x = fromPoint.x - absDy;
+        }
+      }
+    }
+    return new IntPoint(x, y);
   }
 
   AngleRestriction getAngleRestriction() {
