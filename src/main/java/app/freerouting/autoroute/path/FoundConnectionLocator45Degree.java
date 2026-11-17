@@ -168,17 +168,25 @@ public class FoundConnectionLocator45Degree extends FoundConnectionLocator {
               + this.currentFromPoint);
     }
     if (!shrinkedRoomShape.isEmpty()) {
-      // enter the shrunk room shape by a 45-degree angle first
-      FloatPoint nearestRoomPoint = shrinkedRoomShape.nearestPointApprox(this.currentFromPoint);
-      boolean horizontalFirst =
-          calcHorizontalFirstFromDoor(
-              currentFromInfo.door, this.currentFromPoint, nearestRoomPoint);
-      nearestRoomPoint = roundToInteger(nearestRoomPoint);
-      result.add(
-          calculateAdditionalCorner(
-              this.currentFromPoint, nearestRoomPoint, horizontalFirst, this.angleRestriction));
-      result.add(nearestRoomPoint);
-      this.currentFromPoint = nearestRoomPoint;
+      if (!shrinkedRoomShape.contains(this.currentFromPoint)) {
+        // enter the shrunk room shape by a 45-degree angle first
+        FloatPoint nearestRoomPoint = shrinkedRoomShape.nearestPointApprox(this.currentFromPoint);
+        nearestRoomPoint = roundToInteger(nearestRoomPoint);
+        if (!nearestRoomPoint.round().equals(this.currentFromPoint.round())) {
+          boolean horizontalFirst =
+              calcHorizontalFirstFromDoor(
+                  currentFromInfo.door, this.currentFromPoint, nearestRoomPoint);
+          FloatPoint addCorner =
+              calculateAdditionalCorner(
+                  this.currentFromPoint, nearestRoomPoint, horizontalFirst, this.angleRestriction);
+          if (!addCorner.round().equals(this.currentFromPoint.round())
+              && !addCorner.round().equals(nearestRoomPoint.round())) {
+            result.add(addCorner);
+          }
+          result.add(nearestRoomPoint);
+          this.currentFromPoint = nearestRoomPoint;
+        }
+      }
     } else {
       shrinkedRoomShape = roomShape;
     }
@@ -194,8 +202,13 @@ public class FoundConnectionLocator45Degree extends FoundConnectionLocator {
             calculateAdditionalCorner(
                 this.currentFromPoint, nearestPoint, false, this.angleRestriction);
       }
-      result.add(addCorner);
-      result.add(nearestPoint);
+      if (!addCorner.round().equals(this.currentFromPoint.round())
+          && !addCorner.round().equals(nearestPoint.round())) {
+        result.add(addCorner);
+      }
+      if (!nearestPoint.round().equals(this.currentFromPoint.round())) {
+        result.add(nearestPoint);
+      }
       ++this.currentToDoorIndex;
       if (this.ctrl.netNumber == 33 || this.ctrl.netNumber == 66 || this.ctrl.netNumber == 67) {
         FRLogger.trace(
@@ -279,10 +292,16 @@ public class FoundConnectionLocator45Degree extends FoundConnectionLocator {
     nearestToDoorPoint = roundToInteger(nearestToDoorPoint);
     boolean horizontalFirst =
         calcHorizontalFirstToDoor(currentToInfo.door, this.currentFromPoint, nearestToDoorPoint);
-    result.add(
+    FloatPoint addCorner =
         calculateAdditionalCorner(
-            this.currentFromPoint, nearestToDoorPoint, horizontalFirst, this.angleRestriction));
-    result.add(nearestToDoorPoint);
+            this.currentFromPoint, nearestToDoorPoint, horizontalFirst, this.angleRestriction);
+    if (!addCorner.round().equals(this.currentFromPoint.round())
+        && !addCorner.round().equals(nearestToDoorPoint.round())) {
+      result.add(addCorner);
+    }
+    if (!nearestToDoorPoint.round().equals(this.currentFromPoint.round())) {
+      result.add(nearestToDoorPoint);
+    }
     ++this.currentToDoorIndex;
     if (this.ctrl.netNumber == 33 || this.ctrl.netNumber == 66 || this.ctrl.netNumber == 67) {
       FRLogger.trace(
