@@ -75,4 +75,47 @@ class KiCadDesignRulesRoutingTest extends RoutingFixtureTest {
     }
     assertTrue(highVoltageTraces > 0, "the HighVoltage net must have been routed");
   }
+
+  @Test
+  void routesWithCreepageOnlyConstraintEnforced() {
+    TestingSettings testingSettings = new TestingSettings();
+    testingSettings.setMaxPasses(2);
+    testingSettings.setOptimizerEnabled(false);
+    testingSettings.setJobTimeoutString("00:02:00");
+    RoutingJob job = getRoutingJob("Issue110-RelayModule.dsn", testingSettings);
+    job.kicadDesignRules =
+        KiCadDesignRules.parse(
+            """
+            (version 1)
+            (rule "mains_isolation_creepage_only"
+              (condition "A.NetClass == 'HighVoltage' && B.NetClass != 'HighVoltage'")
+              (constraint creepage (min 3mm)))
+            (rule "fuse_1_poles"
+              (condition "A.NetName == 'Net-(FU1-*' && B.NetName == 'Net-(FU1-*'")
+              (constraint clearance (min 1.5mm)))
+            """,
+            "creepage_only.kicad_dru");
+
+    runRoutingJob(job);
+
+    Net highVoltage = job.board.rules.nets.get("Net-(FU2-Pad1)", 1);
+    Net ground = job.board.rules.nets.get("GND", 1);
+    int expected =
+        (int) Math.ceil(job.board.communication.physicalToBoard(3000.0, Unit.UM)) / 2 * 2;
+    int highVoltageTraces = 0;
+    for (Item item : job.board.getItems()) {
+      if (item instanceof Trace trace && trace.containsNet(highVoltage.netNumber)) {
+        highVoltageTraces++;
+        assertTrue(
+            job.board.rules.clearanceMatrix.getValue(
+                    trace.clearanceClassIndex(),
+                    ground.getNetClass().getTraceClearanceClass(),
+                    trace.getLayer(),
+                    false)
+                >= expected,
+            "a HighVoltage trace must keep the 3 mm creepage constraint from GND");
+      }
+    }
+    assertTrue(highVoltageTraces > 0, "the HighVoltage net must have been routed");
+  }
 }

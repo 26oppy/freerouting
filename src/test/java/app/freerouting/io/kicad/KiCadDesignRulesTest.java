@@ -89,8 +89,10 @@ class KiCadDesignRulesTest {
     assertNull(list.get(1).condition());
     // a value without unit is read as millimetres, which is never less strict than KiCad
     assertEquals(300.0, list.get(2).clearanceUm(), 1e-9);
+    assertEquals(25400.0, list.get(2).creepageUm(), 1e-9);
+    assertEquals(25400.0, list.get(2).effectiveClearanceUm(), 1e-9);
     assertTrue(list.get(2).warnings().getFirst().contains("no unit"));
-    assertEquals(List.of("creepage 25.40 mm"), list.get(2).otherConstraints());
+    assertEquals(List.of(), list.get(2).otherConstraints());
   }
 
   @Test
@@ -151,6 +153,73 @@ class KiCadDesignRulesTest {
     // both relays, K2 through its variant image, keep 7 mm to the other footprints
     assertEquals(mm(board, 7.0), value(matrix, pin(board, "K1", "1"), pin(board, "VD4", "1")));
     assertEquals(mm(board, 7.0), value(matrix, pin(board, "K2", "1"), pin(board, "VD4", "1")));
+  }
+
+  @Test
+  void creepageOnlyRuleIsAppliedAsClearanceLowerBound() throws IOException {
+    BasicBoard board = loadBoard();
+    KiCadDesignRules rules =
+        KiCadDesignRules.parse(
+            """
+            (version 1)
+            (rule "mains_creepage_only"
+              (condition "A.NetClass == 'HighVoltage' && B.NetClass != 'HighVoltage'")
+              (constraint creepage (min 8mm)))
+            """,
+            "creepage_only.kicad_dru");
+    assertEquals(1, rules.rules().size());
+    assertNull(rules.rules().getFirst().clearanceUm());
+    assertEquals(8000.0, rules.rules().getFirst().creepageUm(), 1e-9);
+    assertEquals(8000.0, rules.rules().getFirst().effectiveClearanceUm(), 1e-9);
+
+    KiCadDesignRulesTranslator.Result result = KiCadDesignRulesTranslator.apply(board, rules);
+    assertEquals(1, result.translatedRules());
+    ClearanceMatrix matrix = board.rules.clearanceMatrix;
+    assertEquals(mm(board, 8.0), value(matrix, pin(board, "K1", "1"), pin(board, "K2", "2")));
+
+    assertTrue(
+        result.warnings().stream()
+            .anyMatch(
+                w ->
+                    w.contains("constraint creepage")
+                        && w.contains("applied as flat-surface clearance lower bound")
+                        && w.contains(
+                            "milled slots / NPTH cutouts require KiCad DRC verification")));
+  }
+
+  @Test
+  void creepageAndClearanceTakesTheLargerValue() throws IOException {
+    BasicBoard board = loadBoard();
+    KiCadDesignRules rules =
+        KiCadDesignRules.parse(
+            """
+            (version 1)
+            (rule "larger_creepage"
+              (condition "A.NetClass == 'HighVoltage' && B.NetClass != 'HighVoltage'")
+              (constraint clearance (min 2mm))
+              (constraint creepage (min 8mm)))
+            (rule "larger_clearance"
+              (condition "A.NetName == 'Net-(FU1-*' && B.NetName == 'Net-(FU1-*'")
+              (constraint clearance (min 5mm))
+              (constraint creepage (min 3mm)))
+            """,
+            "dual_constraints.kicad_dru");
+    var ruleList = rules.rules();
+    assertEquals(2, ruleList.size());
+    // Rule 1: creepage (8mm) > clearance (2mm)
+    assertEquals(2000.0, ruleList.get(0).clearanceUm(), 1e-9);
+    assertEquals(8000.0, ruleList.get(0).creepageUm(), 1e-9);
+    assertEquals(8000.0, ruleList.get(0).effectiveClearanceUm(), 1e-9);
+
+    // Rule 2: clearance (5mm) > creepage (3mm)
+    assertEquals(5000.0, ruleList.get(1).clearanceUm(), 1e-9);
+    assertEquals(3000.0, ruleList.get(1).creepageUm(), 1e-9);
+    assertEquals(5000.0, ruleList.get(1).effectiveClearanceUm(), 1e-9);
+
+    KiCadDesignRulesTranslator.apply(board, rules);
+    ClearanceMatrix matrix = board.rules.clearanceMatrix;
+    assertEquals(mm(board, 8.0), value(matrix, pin(board, "K1", "1"), pin(board, "K2", "2")));
+    assertEquals(mm(board, 5.0), traceValue(board, "Net-(FU1-Pad1)", "Net-(FU1-Pad2)"));
   }
 
   private static String libraryId(BasicBoard board, String reference) {
