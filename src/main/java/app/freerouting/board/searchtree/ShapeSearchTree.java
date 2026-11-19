@@ -11,6 +11,7 @@ import app.freerouting.board.model.structure.AngleRestriction;
 import app.freerouting.board.model.structure.BoardOutline;
 import app.freerouting.board.model.structure.Unit;
 import app.freerouting.board.trace.PolylineTrace;
+import app.freerouting.core.library.PadOval;
 import app.freerouting.datastructures.ArrayStack;
 import app.freerouting.datastructures.MinAreaTree;
 import app.freerouting.datastructures.Signum;
@@ -45,6 +46,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.locks.Lock;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Elementary geometric search functions making direct use of the MinAreaTree in the package
@@ -54,12 +56,8 @@ public class ShapeSearchTree extends MinAreaTree {
 
   private static final int DRILL_HOLE_CLEARANCE_MARGIN = 10;
 
-  /** Reusable traversal stack for complete-shape queries, isolated per caller thread. */
-  protected final ThreadLocal<ArrayStack<TreeNode>> completeShapeStack =
-      ThreadLocal.withInitial(() -> new ArrayStack<>(10000));
-
   /** Reusable result list for spatial overlap queries, isolated per caller thread. */
-  private final ThreadLocal<List<Leaf>> queryLeafBuffer =
+  private static final ThreadLocal<List<Leaf>> QUERY_LEAF_BUFFER =
       ThreadLocal.withInitial(() -> new ArrayList<>(128));
 
   /**
@@ -470,7 +468,7 @@ public class ShapeSearchTree extends MinAreaTree {
     boolean is45Degree = shape instanceof IntOctagon;
     Lock lock = readLock();
     lock.lock();
-    List<Leaf> leaves = queryLeafBuffer.get();
+    List<Leaf> leaves = QUERY_LEAF_BUFFER.get();
     try {
       leaves.clear();
       this.collectOverlapsUnlocked(bounds, leaves);
@@ -515,12 +513,18 @@ public class ShapeSearchTree extends MinAreaTree {
    * shape of area and keeping the objects with a point in that shape. But the tree is traversed
    * once for the bounding shape of area, then once for each point, instead of once for each tree
    * shape of area. points must depend on nothing but its argument.
+   *
+   * <p>An object for which byShape is true is kept instead when one of its tree shapes on layer
+   * overlaps a tree shape of area with a positive area, wherever its points are.
    */
   public Set<SearchTreeObject> overlappingObjectsWithPointIn(
-      Item area, int layer, Function<SearchTreeObject, Point[]> points) {
+      Item area,
+      int layer,
+      Function<SearchTreeObject, Point[]> points,
+      Predicate<SearchTreeObject> byShape) {
     Lock lock = readLock();
     lock.lock();
-    List<Leaf> leaves = queryLeafBuffer.get();
+    List<Leaf> leaves = QUERY_LEAF_BUFFER.get();
     try {
       Leaf[] areaLeaves = area.getSearchTreeEntries(this);
       if (areaLeaves == null) {
@@ -547,6 +551,22 @@ public class ShapeSearchTree extends MinAreaTree {
         int shapeIndex = currentLeaf.shapeIndexInObject;
         if ((layer >= 0 && currentObject.shapeLayer(shapeIndex) != layer)
             || result.contains(currentObject)) {
+          continue;
+        }
+        if (byShape.test(currentObject)) {
+          TileShape objectShape = currentObject.getTreeShape(this, shapeIndex);
+          pointLeaves.clear();
+          this.collectOverlapsUnlocked(currentLeaf.boundingShape, pointLeaves);
+          for (Leaf areaLeaf : pointLeaves) {
+            if (areaLeaf.object == area
+                && area.getTreeShape(this, areaLeaf.shapeIndexInObject)
+                        .intersection(objectShape)
+                        .dimension()
+                    == 2) {
+              result.add(currentObject);
+              break;
+            }
+          }
           continue;
         }
         Point[] objectPoints = points.apply(currentObject);
@@ -650,7 +670,7 @@ public class ShapeSearchTree extends MinAreaTree {
       FRLogger.warn("ShapeSearchTree.overlaps: shape not bounded");
       return;
     }
-    List<Leaf> tmpList = queryLeafBuffer.get();
+    List<Leaf> tmpList = QUERY_LEAF_BUFFER.get();
     tmpList.clear();
     boolean is45Degree = shape instanceof IntOctagon;
     try {
@@ -846,7 +866,7 @@ public class ShapeSearchTree extends MinAreaTree {
     // a factor less than sqr2 has evtl. be added because
     // enlarging is not symmetric.
     RegularTileShape offsetBounds = (RegularTileShape) bounds.offset(maxClearance);
-    List<Leaf> tmpList = queryLeafBuffer.get();
+    List<Leaf> tmpList = QUERY_LEAF_BUFFER.get();
     tmpList.clear();
     // sort the found items by its clearances to clearanceClassIndex on layer layer
     // Entries never compare equal (see EntrySortedByClearance), so sorting a list gives the
@@ -1002,7 +1022,12 @@ public class ShapeSearchTree extends MinAreaTree {
       int grow =
           this.clearanceCompensationValue(drillItem.clearanceClassIndex(), layer)
               + drillHoleClearanceDelta(drillItem, shape, layer);
-      result = ExactCopper.of(shape, grow);
+      PadOval oval =
+          drillItem instanceof Pin pin && shape == drillItem.getShape(index)
+              ? pin.getPlacedOval(index)
+              : null;
+      // A round or oval pad's shape is the bounding polygon of its copper; measure the copper.
+      result = oval != null ? ExactCopper.ofOval(oval, grow) : ExactCopper.of(shape, grow);
     }
     if (treeShape != null) {
       if (cache == null || cache.length != drillItem.tileShapeCount()) {
@@ -1218,21 +1243,24 @@ public class ShapeSearchTree extends MinAreaTree {
     // in a deterministic order. The non-deterministic order of tree traversal
     // causes different room partitioning.
     List<Leaf> overlappingLeaves = new ArrayList<>();
-    ArrayStack<TreeNode> stack = completeShapeStack.get();
-    stack.reset();
-    stack.push(this.root);
-    TreeNode currentNode;
     int roomLayer = room.getLayer();
+    ArrayStack<TreeNode> stack = acquireScratchStack();
+    try {
+      stack.push(this.root);
+      TreeNode currentNode;
 
-    while ((currentNode = stack.pop()) != null) {
-      if (currentNode.boundingShape.intersects(boundingShape)) {
-        if (currentNode instanceof Leaf leaf) {
-          overlappingLeaves.add(leaf);
-        } else {
-          stack.push(((InnerNode) currentNode).firstChild);
-          stack.push(((InnerNode) currentNode).secondChild);
+      while ((currentNode = stack.pop()) != null) {
+        if (currentNode.boundingShape.intersects(boundingShape)) {
+          if (currentNode instanceof Leaf leaf) {
+            overlappingLeaves.add(leaf);
+          } else {
+            stack.push(((InnerNode) currentNode).firstChild);
+            stack.push(((InnerNode) currentNode).secondChild);
+          }
         }
       }
+    } finally {
+      releaseScratchStack(stack);
     }
 
     // Sort obstacles to ensure deterministic room partitioning.
@@ -1244,7 +1272,7 @@ public class ShapeSearchTree extends MinAreaTree {
     for (Leaf currentLeaf : overlappingLeaves) {
       SearchTreeObject currentObject = (SearchTreeObject) currentLeaf.object;
       int shapeIndex = currentLeaf.shapeIndexInObject;
-      if (currentObject.isTraceObstacle(netNumber)
+      if (currentObject.isTraceObstacle(netNumber, shapeIndex)
           && currentObject.shapeLayer(shapeIndex) == roomLayer
           && currentObject != ignoreObject) {
 
@@ -1609,7 +1637,8 @@ public class ShapeSearchTree extends MinAreaTree {
             this.clearanceCompensationValue(boardOutline.clearanceClassIndex(), layerIndex);
         for (int lineIndex = 0; lineIndex < lineCount; lineIndex++) {
           TileShape lineShape = boardOutline.lineShape(lineIndex, halfWidth + cmpValue);
-          for (TileShape slice : lineShape.splitIntoSlices(boardOutline.lineSlices(lineIndex))) {
+          for (TileShape slice :
+              boardOutline.splitLine(lineIndex, lineShape, halfWidth + cmpValue)) {
             result[currentNo] = slice;
             ++currentNo;
           }

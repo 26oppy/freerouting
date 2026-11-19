@@ -705,7 +705,7 @@ public class GuiRoutingJobWorker extends InteractiveActionThread {
         }
       }
     } catch (Exception e) {
-      routingJob.logError(e.getLocalizedMessage(), e);
+      routingJob.logError(e.getMessage(), e);
     }
 
     if (this.isStopRequested()) {

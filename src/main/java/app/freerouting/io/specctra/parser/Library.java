@@ -1,7 +1,9 @@
 package app.freerouting.io.specctra.parser;
 
 import app.freerouting.board.facade.RoutingBoard;
+import app.freerouting.board.model.structure.Unit;
 import app.freerouting.core.library.Packages;
+import app.freerouting.core.library.PadOval;
 import app.freerouting.core.library.Padstack;
 import app.freerouting.core.library.Padstacks;
 import app.freerouting.geometry.planar.Area;
@@ -122,6 +124,20 @@ public class Library extends ScopeKeyword {
       LayerStructure layerStructure,
       CoordinateTransform coordinateTransform,
       Padstacks boardPadstacks) {
+    return readPadstackScope(scanner, layerStructure, coordinateTransform, boardPadstacks, null);
+  }
+
+  /**
+   * Reads a padstack scope. If {@code kicadDsnUnit} is not null, the file was written by KiCad in
+   * that unit, and the rounded-rectangle pads of its legacy exporter are corrected (see {@link
+   * KiCadRoundRectPad}).
+   */
+  public static boolean readPadstackScope(
+      IJFlexScanner scanner,
+      LayerStructure layerStructure,
+      CoordinateTransform coordinateTransform,
+      Padstacks boardPadstacks,
+      Unit kicadDsnUnit) {
     String padstackName;
     boolean isDrilllable = true;
     boolean placedAbsolute = false;
@@ -154,6 +170,11 @@ public class Library extends ScopeKeyword {
           if (nextToken == Keyword.SHAPE) {
             Shape currentShape = Shape.readScope(scanner, layerStructure);
             if (currentShape != null) {
+              if (kicadDsnUnit != null) {
+                currentShape =
+                    KiCadRoundRectPad.correct(
+                        padstackName, currentShape, kicadDsnUnit, coordinateTransform);
+              }
               shapeList.add(currentShape);
             }
             // overread the closing bracket and unknown scopes.
@@ -218,6 +239,8 @@ public class Library extends ScopeKeyword {
       layerPieces.add(new java.util.ArrayList<>());
     }
 
+    // The exact copper of round and oval pads, by the piece that bounds it.
+    java.util.Map<ConvexShape, PadOval> ovalOfPiece = new java.util.IdentityHashMap<>();
     for (Shape padShape : shapeList) {
       app.freerouting.geometry.planar.Shape currentShape =
           padShape.transformToBoardRel(coordinateTransform);
@@ -225,6 +248,12 @@ public class Library extends ScopeKeyword {
 
       if (currentShape instanceof ConvexShape shape1) {
         pieces.add(shape1);
+        if (padShape instanceof PolygonPath path) {
+          PadOval oval = path.padOvalRel(coordinateTransform);
+          if (oval != null) {
+            ovalOfPiece.put(shape1, oval);
+          }
+        }
       } else {
         TileShape[] convexPieces = null;
         if (currentShape instanceof PolygonShape shape) {
@@ -311,6 +340,8 @@ public class Library extends ScopeKeyword {
 
     ConvexShape[] padstackShapes = new ConvexShape[layerStructure.layers.length];
     ConvexShape[][] auxiliaryShapes = new ConvexShape[layerStructure.layers.length][];
+    PadOval[] ovals = new PadOval[layerStructure.layers.length];
+    boolean hasOvals = false;
     boolean hasNonConvex = false;
 
     for (int l = 0; l < layerStructure.layers.length; l++) {
@@ -320,6 +351,8 @@ public class Library extends ScopeKeyword {
       }
       if (pieces.size() == 1) {
         padstackShapes[l] = pieces.get(0);
+        ovals[l] = ovalOfPiece.get(pieces.get(0));
+        hasOvals |= ovals[l] != null;
       } else {
         hasNonConvex = true;
         FRLogger.warn(
@@ -373,6 +406,9 @@ public class Library extends ScopeKeyword {
     if (hasNonConvex) {
       padstack.hasNonConvexGeometry = true;
     }
+    if (hasOvals) {
+      padstack.setOvals(ovals);
+    }
     return true;
   }
 
@@ -408,7 +444,8 @@ public class Library extends ScopeKeyword {
               scopeParameter.scanner,
               scopeParameter.layerStructure,
               scopeParameter.coordinateTransform,
-              board.library.padstacks)) {
+              board.library.padstacks,
+              isKiCad(scopeParameter) ? scopeParameter.unit : null)) {
             return false;
           }
         } else if (nextToken == Keyword.IMAGE) {
@@ -532,6 +569,11 @@ public class Library extends ScopeKeyword {
           currentPackage.isFront);
     }
     return true;
+  }
+
+  private static boolean isKiCad(ReadScopeParameter scopeParameter) {
+    return scopeParameter.hostCad != null
+        && scopeParameter.hostCad.toLowerCase(java.util.Locale.ROOT).contains("kicad");
   }
 
   private void generateMissingKeepoutNames(

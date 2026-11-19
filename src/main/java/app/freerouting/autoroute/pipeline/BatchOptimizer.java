@@ -17,9 +17,8 @@ import app.freerouting.core.scoring.BoardStatistics;
 import app.freerouting.datastructures.UndoableObjects;
 import app.freerouting.geometry.planar.FloatPoint;
 import app.freerouting.logger.FRLogger;
+import app.freerouting.settings.OptimizerSettings;
 import app.freerouting.settings.sources.DefaultSettings;
-import com.sun.management.ThreadMXBean;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -120,36 +119,6 @@ public final class BatchOptimizer extends NamedAlgorithm {
     return true;
   }
 
-  private static float sampleCurrentThreadCpuSeconds() {
-    try {
-      ThreadMXBean threadMxBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-      long cpuNanos = threadMxBean.getThreadCpuTime(Thread.currentThread().threadId());
-      return cpuNanos < 0 ? -1f : cpuNanos / 1_000_000_000.0f;
-    } catch (Throwable t) {
-      return -1f;
-    }
-  }
-
-  private static float sampleCurrentThreadAllocatedMb() {
-    try {
-      ThreadMXBean threadMxBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-      threadMxBean.setThreadAllocatedMemoryEnabled(true);
-      long allocatedBytes = threadMxBean.getThreadAllocatedBytes(Thread.currentThread().threadId());
-      return allocatedBytes < 0 ? -1f : allocatedBytes / (1024.0f * 1024.0f);
-    } catch (Throwable t) {
-      return -1f;
-    }
-  }
-
-  private static float sampleHeapUsageMb() {
-    try {
-      long heapUsed = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed();
-      return heapUsed / (1024.0f * 1024.0f);
-    } catch (Throwable t) {
-      return 0f;
-    }
-  }
-
   /**
    * Evaluates whether optimization can be safely bypassed before starting the batch loop.
    *
@@ -217,16 +186,22 @@ public final class BatchOptimizer extends NamedAlgorithm {
   /**
    * Checks if all vias on the board are mandatory layer transitions between SMD pins on different
    * layers, with no alternative routing possible.
+   *
+   * <p>Fixed vias are skipped, since the optimizer cannot remove them anyway. When every via is
+   * fixed, no via has been examined and this returns false: the vias say nothing about whether the
+   * traces can still be improved.
    */
   public static boolean areAllViasMandatoryLayerTransitions(RoutingBoard routingBoard) {
     Collection<Via> vias = routingBoard.getVias();
     if (vias.isEmpty()) {
       return false;
     }
+    int examinedViaCount = 0;
     for (Via via : vias) {
       if (via.isUserFixed()) {
         continue;
       }
+      examinedViaCount++;
       if (via.netCount() == 0) {
         return false;
       }
@@ -267,7 +242,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
         return false;
       }
     }
-    return true;
+    return examinedViaCount > 0;
   }
 
   /** Optimize the route on the board. */
@@ -305,7 +280,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
       phase.durationSeconds = 0.0f;
       phase.cpuSeconds = 0.0f;
       phase.totalAllocatedGb = 0.0f;
-      phase.peakHeapMb = sampleHeapUsageMb();
+      phase.peakHeapMb = AutorouteRuntimeMetrics.currentHeapUsageMb();
       phase.after =
           RoutingResultManifest.PhaseSnapshot.fromBoardStatistics(
               initialStats, job.routerSettings, "current");
@@ -335,9 +310,9 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
     // Capture start-of-session resource usage baselines
     long sessionStartMs = System.currentTimeMillis();
-    final float cpuSecondsStart = sampleCurrentThreadCpuSeconds();
-    final float allocMbStart = sampleCurrentThreadAllocatedMb();
-    float peakHeapMb = sampleHeapUsageMb();
+    final float cpuSecondsStart = AutorouteRuntimeMetrics.currentThreadCpuSeconds();
+    final float allocMbStart = AutorouteRuntimeMetrics.currentThreadAllocatedMb();
+    float peakHeapMb = AutorouteRuntimeMetrics.currentHeapUsageMb();
     workerCpuNanos.set(0);
     workerAllocBytes.set(0);
 
@@ -380,6 +355,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
     double scoreImprovement = -1;
     int currentPass = 0;
+    int passesWithoutGainInARow = 0;
     while ((this.settings.optimizer.maxPasses == null
             || currentPass < this.settings.optimizer.maxPasses)
         && (this.settings.optimizer.maxItems == null
@@ -400,7 +376,7 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
       boolean withPreferredDirections = currentPass % 2 != 0; // to create more variations
       optRoutePass(currentPass, withPreferredDirections);
-      peakHeapMb = Math.max(peakHeapMb, sampleHeapUsageMb());
+      peakHeapMb = Math.max(peakHeapMb, AutorouteRuntimeMetrics.currentHeapUsageMb());
 
       if (this.isTimedOut) {
         break;
@@ -434,9 +410,13 @@ public final class BatchOptimizer extends NamedAlgorithm {
         restoreIncumbentBoard();
       }
 
+      float effectiveScoreAfterPass = rejectionReason == null ? scoreAfterPass : this.bestScore;
+      boolean effectiveConnectionsOpen =
+          rejectionReason == null
+              ? passStats.connections.incompleteCount > 0
+              : this.bestIncompleteCount > 0;
       StopRuleView stopRuleView =
-          stopRuleScores(
-              scoreBeforePass, scoreAfterPass, passStats.connections.incompleteCount > 0);
+          stopRuleScores(scoreBeforePass, effectiveScoreAfterPass, effectiveConnectionsOpen);
       double passImprovementPercent = scoreImprovementPercent(scoreBeforePass, scoreAfterPass);
       String passOutcome =
           scoreAfterPass > scoreBeforePass
@@ -459,11 +439,28 @@ public final class BatchOptimizer extends NamedAlgorithm {
               passStats.connections.incompleteCount,
               passStats.clearanceViolations.totalCount));
 
-      if (this.useIncreasedRipupCosts && scoreAfterPass <= scoreBeforePass) {
-        this.useIncreasedRipupCosts = false;
-        // Keep the optimizer going to try with normal ripup costs
+      boolean passHadGain = hasPassGain(rejectionReason, scoreBeforePass, scoreAfterPass);
+
+      if (this.useIncreasedRipupCosts && !passHadGain) {
+        ++passesWithoutGainInARow;
+        this.useIncreasedRipupCosts =
+            increasedRipupCostsAfterPassWithoutGain(job.routerSettings.optimizer);
+        // Keep the optimizer going: with normal ripup costs, or with the increased ones and the
+        // other preferred directions of the next pass. With the increased costs kept, a second
+        // pass in a row without gain has tried both directions from the same incumbent: the next
+        // passes would only repeat them, so the stop rule applies.
+        if (shouldStopAfterConsecutivePassesWithoutGain(
+            job.routerSettings.optimizer, passesWithoutGainInARow)) {
+          job.logInfo(
+              String.format(
+                  Locale.US,
+                  "Stopping optimizer after %d consecutive passes without gain with increased ripup costs.",
+                  passesWithoutGainInARow));
+          break;
+        }
         scoreImprovement = -1;
       } else {
+        passesWithoutGainInARow = 0;
         scoreImprovement = stopRuleView.percent();
       }
 
@@ -518,19 +515,17 @@ public final class BatchOptimizer extends NamedAlgorithm {
 
     // Session summary
     double sessionDurationSeconds = (System.currentTimeMillis() - sessionStartMs) / 1000.0;
-    float cpuSecondsEnd = sampleCurrentThreadCpuSeconds();
-    float allocMbEnd = sampleCurrentThreadAllocatedMb();
-    float cpuSecondsMain =
-        cpuSecondsStart >= 0f && cpuSecondsEnd >= cpuSecondsStart
-            ? cpuSecondsEnd - cpuSecondsStart
-            : Math.max(0f, cpuSecondsEnd);
-    float allocMbMain =
-        allocMbStart >= 0f && allocMbEnd >= allocMbStart
-            ? allocMbEnd - allocMbStart
-            : Math.max(0f, allocMbEnd);
-    float cpuSecondsUsed = cpuSecondsMain + (workerCpuNanos.get() / 1_000_000_000.0f);
-    float allocMbUsed = allocMbMain + (workerAllocBytes.get() / (1024.0f * 1024.0f));
-    peakHeapMb = Math.max(peakHeapMb, sampleHeapUsageMb());
+    float cpuSecondsEnd = AutorouteRuntimeMetrics.currentThreadCpuSeconds();
+    float allocMbEnd = AutorouteRuntimeMetrics.currentThreadAllocatedMb();
+    boolean cpuSupported = cpuSecondsStart >= 0f && cpuSecondsEnd >= cpuSecondsStart;
+    boolean allocSupported = allocMbStart >= 0f && allocMbEnd >= allocMbStart;
+    float cpuSecondsMain = cpuSupported ? cpuSecondsEnd - cpuSecondsStart : 0f;
+    float allocMbMain = allocSupported ? allocMbEnd - allocMbStart : 0f;
+    long workerCpu = workerCpuNanos.get();
+    long workerAlloc = workerAllocBytes.get();
+    float cpuSecondsUsed = cpuSecondsMain + (workerCpu / 1_000_000_000.0f);
+    float allocMbUsed = allocMbMain + (workerAlloc / (1024.0f * 1024.0f));
+    peakHeapMb = Math.max(peakHeapMb, AutorouteRuntimeMetrics.currentHeapUsageMb());
     phase.durationSeconds = (float) sessionDurationSeconds;
     phase.cpuSeconds = cpuSecondsUsed;
     phase.totalAllocatedGb = allocMbUsed / 1024.0f;
@@ -548,12 +543,18 @@ public final class BatchOptimizer extends NamedAlgorithm {
         this.isTimedOut
             ? "completed with timeout:"
             : (this.thread.isStopRequested() ? "interrupted:" : "completed:");
+    String cpuSummary =
+        AutorouteRuntimeMetrics.formatOptionalMetric(
+            (!cpuSupported && workerCpu == 0L) ? -1f : cpuSecondsUsed, "%.2f");
+    String allocSummary =
+        AutorouteRuntimeMetrics.formatOptionalMetric(
+            (!allocSupported && workerAlloc == 0L) ? -1f : allocMbUsed / 1024.0f, "%.2f");
     job.logInfo(
         String.format(
             Locale.US,
             "Optimization stage %s. Baseline router score: %.2f, baseline optimizer score: %.2f, "
                 + "final router score: %.2f, final optimizer score: %.2f, completed in %.2f "
-                + "seconds, using %.2f total CPU seconds, %.2f GB total allocated, and %.1f MB "
+                + "seconds, using %s total CPU seconds, %s GB total allocated, and %.1f MB "
                 + "peak heap usage.",
             completionStatus,
             initialRouterScore,
@@ -561,8 +562,8 @@ public final class BatchOptimizer extends NamedAlgorithm {
             finalRouterScore,
             finalOptimizerScore,
             sessionDurationSeconds,
-            cpuSecondsUsed,
-            allocMbUsed / 1024.0f,
+            cpuSummary,
+            allocSummary,
             peakHeapMb));
   }
 
@@ -1258,15 +1259,8 @@ public final class BatchOptimizer extends NamedAlgorithm {
         return new CandidateResult(new ItemRouteResult(itemId), null, null, 0, 0);
       }
 
-      long cpuStart = -1;
-      long allocStart = -1;
-      ThreadMXBean mxBean = null;
-      try {
-        mxBean = (ThreadMXBean) ManagementFactory.getThreadMXBean();
-        cpuStart = mxBean.getThreadCpuTime(Thread.currentThread().threadId());
-        allocStart = mxBean.getThreadAllocatedBytes(Thread.currentThread().threadId());
-      } catch (Throwable ignored) {
-      }
+      long cpuStart = AutorouteRuntimeMetrics.currentThreadCpuNanos();
+      long allocStart = AutorouteRuntimeMetrics.currentThreadAllocatedBytes();
 
       WorkerBoardState workerBoardState = workerBoardStates.get();
       RoutingBoard workerBoard = workerBoardState.acquire(baselineBoard);
@@ -1302,18 +1296,17 @@ public final class BatchOptimizer extends NamedAlgorithm {
                 baselineMetrics);
 
         long cpuUsed = 0;
+        if (cpuStart >= 0) {
+          long cpuEnd = AutorouteRuntimeMetrics.currentThreadCpuNanos();
+          if (cpuEnd >= cpuStart) {
+            cpuUsed = cpuEnd - cpuStart;
+          }
+        }
         long allocUsed = 0;
-        if (mxBean != null) {
-          try {
-            long cpuEnd = mxBean.getThreadCpuTime(Thread.currentThread().threadId());
-            if (cpuStart >= 0 && cpuEnd >= cpuStart) {
-              cpuUsed = cpuEnd - cpuStart;
-            }
-            long allocEnd = mxBean.getThreadAllocatedBytes(Thread.currentThread().threadId());
-            if (allocStart >= 0 && allocEnd >= allocStart) {
-              allocUsed = allocEnd - allocStart;
-            }
-          } catch (Throwable ignored) {
+        if (allocStart >= 0) {
+          long allocEnd = AutorouteRuntimeMetrics.currentThreadAllocatedBytes();
+          if (allocEnd >= allocStart) {
+            allocUsed = allocEnd - allocStart;
           }
         }
 
@@ -1466,5 +1459,48 @@ public final class BatchOptimizer extends NamedAlgorithm {
     FloatPoint getCurrentPosition() {
       return minItemCoor;
     }
+  }
+
+  /**
+   * Whether the increased ripup costs of the start are still used after a pass that did not improve
+   * the board. By default they are dropped, and the optimizer goes on with the normal ripup costs;
+   * {@code optimizer.keep_increased_ripup_costs} keeps them.
+   */
+  static boolean increasedRipupCostsAfterPassWithoutGain(OptimizerSettings optimizerSettings) {
+    return optimizerSettings != null
+        && Boolean.TRUE.equals(optimizerSettings.keepIncreasedRipupCosts);
+  }
+
+  /**
+   * Whether the optimizer goes on, whatever the stop rule says, after a pass with the increased
+   * ripup costs that did not improve the board. By default it always does, once, with the normal
+   * ripup costs. With {@code optimizer.keep_increased_ripup_costs}, it does after the first such
+   * pass, to try the other preferred directions, but not after a second one in a row: each pass
+   * restarts from the same incumbent, so the next ones would only repeat the last two.
+   */
+  static boolean continueAfterPassWithoutGain(
+      OptimizerSettings optimizerSettings, int passesWithoutGainInARow) {
+    return !increasedRipupCostsAfterPassWithoutGain(optimizerSettings)
+        || passesWithoutGainInARow < 2;
+  }
+
+  /**
+   * Evaluates whether an optimizer pass produced an accepted improvement. A pass has gain only if
+   * the candidate was not vetoed and its optimizer score improved over the score before the pass.
+   */
+  static boolean hasPassGain(String rejectionReason, float scoreBeforePass, float scoreAfterPass) {
+    return rejectionReason == null && scoreAfterPass > scoreBeforePass;
+  }
+
+  /**
+   * Decides whether the optimizer should stop after evaluating consecutive passes without gain.
+   *
+   * @param optimizerSettings router optimizer settings
+   * @param passesWithoutGainInARow consecutive passes without gain
+   * @return true if the optimizer should stop immediately due to consecutive passes without gain
+   */
+  static boolean shouldStopAfterConsecutivePassesWithoutGain(
+      OptimizerSettings optimizerSettings, int passesWithoutGainInARow) {
+    return !continueAfterPassWithoutGain(optimizerSettings, passesWithoutGainInARow);
   }
 }

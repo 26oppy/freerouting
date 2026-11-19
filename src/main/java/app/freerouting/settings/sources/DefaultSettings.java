@@ -160,7 +160,7 @@ public class DefaultSettings implements SettingsSource {
   public static final float DEFAULT_ROUTER_UNROUTED_CONNECTION_WEIGHT = 1000.0F;
 
   public static final String DEFAULT_FALLBACK_STRATEGIES =
-      "direct-first,fanout-retry,short-escape,open-escape,no-fanout";
+      "direct-first,fanout-retry,short-escape,open-escape,no-fanout,continue-auto-neck";
   public static final String DEFAULT_EXPLORE_FALLBACK_STRATEGIES = "short-escape,open-escape";
   public static final double DEFAULT_SMD_NET_VIA_COST_FACTOR = 0.1;
 
@@ -300,6 +300,7 @@ public class DefaultSettings implements SettingsSource {
     settings.optimizer.boardUpdateStrategy = BoardUpdateStrategy.GLOBAL_OPTIMAL;
     settings.optimizer.itemSelectionStrategy = ItemSelectionStrategy.SEQUENTIAL;
     settings.optimizer.additionalRipupCostFactorAtStart = 10;
+    settings.optimizer.keepIncreasedRipupCosts = false;
     settings.optimizer.traceRipupCostFactor = 0.6f;
     settings.optimizer.maxAutoroutePasses = 6;
     settings.optimizer.enablePreflightGuards = true;

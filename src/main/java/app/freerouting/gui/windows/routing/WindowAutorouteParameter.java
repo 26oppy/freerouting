@@ -21,7 +21,8 @@ import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.beans.PropertyChangeListener;
+import app.freerouting.settings.PropertyChangeEvent;
+import app.freerouting.settings.PropertyChangeListener;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -731,7 +732,7 @@ public class WindowAutorouteParameter extends BoardSavableSubWindow {
   }
 
   /** Handle property change events from RouterSettings to update GUI controls. */
-  private void onSettingsChanged(java.beans.PropertyChangeEvent evt) {
+  private void onSettingsChanged(PropertyChangeEvent evt) {
     if (!javax.swing.SwingUtilities.isEventDispatchThread()) {
       javax.swing.SwingUtilities.invokeLater(() -> onSettingsChanged(evt));
       return;

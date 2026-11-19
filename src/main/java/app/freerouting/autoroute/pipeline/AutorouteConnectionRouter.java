@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.TreeSet;
 
 /** Executes one autoroute connection, including necked retry and strict-DRC recovery. */
 final class AutorouteConnectionRouter {
@@ -66,6 +67,20 @@ final class AutorouteConnectionRouter {
         destinations.add(otherPin);
       }
     }
+  }
+
+  /**
+   * Returns the items of {@code items} that are not fractured conduction areas, or {@code items}
+   * itself when nothing else is left.
+   */
+  static Set<Item> withoutFracturedAreas(Set<Item> items) {
+    Set<Item> filtered = new TreeSet<>();
+    for (Item it : items) {
+      if (!(it instanceof ConductionArea ca && ca.isFractured())) {
+        filtered.add(it);
+      }
+    }
+    return filtered.isEmpty() ? items : filtered;
   }
 
   private Set<Item> planeEscapeObstacles(
@@ -155,15 +170,14 @@ final class AutorouteConnectionRouter {
       Set<Item> routeDestSet;
       Set<Item> planeEscapeObstacles = Set.of();
       if (containsPlane) {
-        for (Item currentItem : connectedSet) {
-          if (currentItem instanceof ConductionArea) {
-            return new AutorouteAttemptResult(AutorouteAttemptState.CONNECTED_TO_PLANE);
-          }
+        if (ConductionArea.coversAllPlanesOfNet(connectedSet, unconnectedSet, routeNetNo)) {
+          return new AutorouteAttemptResult(AutorouteAttemptState.CONNECTED_TO_PLANE);
         }
         routeStartSet = connectedSet;
         routeDestSet = unconnectedSet;
         if (planeOnly) {
           Set<Item> planes = router.board.powerLayerPlanes(unconnectedSet);
+          planes.removeIf(p -> p instanceof ConductionArea ca && ca.isFractured());
           if (!planes.isEmpty()) {
             addSharablePads(item, routeNetNo, planes);
             routeDestSet = planes;
@@ -175,7 +189,12 @@ final class AutorouteConnectionRouter {
         routeStartSet = unconnectedSet;
         routeDestSet = connectedSet;
       }
-
+      // A fractured area belongs to the connected set through one island only, but its shape still
+      // spans the others. As a start or destination it would let the search end on an island the
+      // net does not reach, without a connection being made. This holds for any net that owns a
+      // conduction area, not only for nets routed as planes.
+      routeStartSet = withoutFracturedAreas(routeStartSet);
+      routeDestSet = withoutFracturedAreas(routeDestSet);
       router.setAirLine(AutorouteAirlineCalculator.calculateAirline(routeStartSet, routeDestSet));
 
       double maxMilliseconds = 100000 * Math.pow(2, ripupPassNo - 1);

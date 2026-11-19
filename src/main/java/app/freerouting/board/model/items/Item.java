@@ -428,6 +428,19 @@ public abstract class Item
           continue;
         }
         boolean isObstacle = currentItem.isObstacle(this);
+        // The stretch of the outline next to an edge pin does not block the traces of its nets.
+        if (isObstacle
+            && this instanceof Trace edgeTrace
+            && currentItem instanceof BoardOutline outline
+            && outline.exemptsTrace(currentEntry.shapeIndexInObject, edgeTrace.netNumbers)) {
+          isObstacle = false;
+        }
+        if (isObstacle
+            && this instanceof BoardOutline outline
+            && currentItem instanceof Trace edgeTrace
+            && outline.exemptsTrace(i, edgeTrace.netNumbers)) {
+          isObstacle = false;
+        }
         if (isObstacle && this instanceof Trace thisTrace && currentItem instanceof Trace) {
           // Look, if both traces are connected to the same tie pin or partner pins of the same
           // net-tie cluster. In this case they are allowed to overlap without sharing a net.
@@ -825,7 +838,7 @@ public abstract class Item
   }
 
   /** Recursive part of get_connected_set. */
-  private void getConnectedSetRecu(Set<Item> result, int netNumber, boolean stopAtPlane) {
+  void getConnectedSetRecu(Set<Item> result, int netNumber, boolean stopAtPlane) {
     Collection<Item> contactList = normalContactsForWalk();
     if (contactList == null) {
       return;
